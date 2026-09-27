@@ -10,12 +10,14 @@ match.device = 0x0ff6
 display.driver = nvidia-470
 display.server = x11
 display.kernel_modules = nvidia nvidia-modeset nvidia-drm
-# KMS az nvidia-drm-en keresztül (tesztelendő; kikapcsolás a boot menüben: nvidia-drm.modeset=0)
+# KMS az nvidia-drm-en keresztül — ZBookon mérve (2026-09-27): modeset=Y, GL 4.6, Vulkan 1.2.175.
+# KMS nélkül (nvidia-drm.modeset=0) is teljes gyorsítás; a KMS kell a root nélküli Xorg-hoz.
 display.module_options = nvidia-drm:modeset=1
 display.xorg_driver = nvidia
 display.xorg_module_path = /usr/lib/x86_64-linux-gnu/nvidia/xorg
-# az NVIDIA Xorg-driver root-jogú indítása a biztos kiindulópont (tesztelendő: fusion.xorg.root=auto)
-display.xorg_root_rights = yes
+# root-jog nélküli Xorg — ZBookon mérve (2026-09-27): az Xorg a fusion felhasználóként fut,
+# a renderer a Quadro K1100M. Tartalék a boot menüben: „mérés: Xorg root-joggal”.
+display.xorg_root_rights = auto
 gl.max = 4.6
 vulkan.max = 1.2
 requires_sole_adapter = yes

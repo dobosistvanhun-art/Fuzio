@@ -40,7 +40,7 @@ A letöltés ~250 MB (NVIDIA csomagok), a gazdagép apt-jától független.
          `Profil: nvidia-kepler-470`,
          `Driver: betöltve (nvidia nvidia-modeset nvidia-drm)`,
          `Paraméter: nvidia_drm.modeset=Y`,
-         `Xorg: driver=nvidia root=yes`
+         `Xorg: driver=nvidia root=auto` (`ps -o user= -C Xorg` → `fusion`)
    - [ ] `glxinfo -B` →
          `OpenGL renderer string: Quadro K1100M/PCIe/SSE2`,
          `OpenGL core profile version string: 4.6.0 NVIDIA 470.256.02`
@@ -50,19 +50,17 @@ A letöltés ~250 MB (NVIDIA csomagok), a gazdagép apt-jától független.
 
 A fenti kimenetek fotója vagy szövege elég visszajelzésnek.
 
-## C) Mérések a nyitott döntésekhez (a ZBookon)
+## C) Mérések — eredmények (ZBook, 2026-09-27)
 
-Két beállítás tesztadat nélkül nincs véglegesítve. Mindkettőhöz kész bejegyzés van a
-boot menüben (nyilakkal kiválasztható, nem kell a parancssort szerkeszteni):
-
-| Próba | Boot menü bejegyzés | Mit nézz |
+| Próba | Eredmény | Döntés |
 | --- | --- | --- |
-| C1 — KMS nélkül | **FusionOS — mérés: KMS nélkül** | elindul-e a Desktop; `sudo cat /sys/module/nvidia_drm/parameters/modeset` → `N`; `glxinfo -B \| grep renderer` |
-| C2 — Xorg root nélkül | **FusionOS — mérés: Xorg root-jog nélkül** | elindul-e a Desktop; `ps -o user= -C Xorg` → `fusion` vagy `root`; `glxinfo -B \| grep renderer` |
+| C1 — KMS nélkül (`nvidia-drm.modeset=0`) | a Desktop fut, Quadro K1100M, teljes gyorsítás | alapértelmezés marad a `modeset=1` (a root nélküli Xorg-hoz kell) |
+| C2 — Xorg root-jog nélkül | az Xorg `fusion` felhasználóként fut, Quadro K1100M | alapértelmezés: `root=auto` (root nélkül) |
 
-Minden próbánál először: `cat /proc/cmdline` — a sor végén ott kell lennie a próba elemének.
+A boot menüben megmaradnak a tartalék bejegyzések: **mérés: KMS nélkül**,
+**tartalék: Xorg root-joggal**, **szöveges konzol**.
 
-Ha valamelyik próbánál a Desktop nem jön fel: **Ctrl+Alt+F2** → belépés (`fusion`/`fusion`),
+Ha a Desktop nem jön fel: **Ctrl+Alt+F2** → belépés (`fusion`/`fusion`),
 és a napló: `tail -n 30 ~/.local/share/fusion/session.log` és
 `grep EE /var/log/Xorg.0.log ~/.local/share/xorg/Xorg.0.log`.
 

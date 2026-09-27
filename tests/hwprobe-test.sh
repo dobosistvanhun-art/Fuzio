@@ -175,7 +175,7 @@ X="$TMP/apply-zbook-m2/hardware"
 conf_check "xorg: NVIDIA driver"         "$X/xorg-display.conf" 'Driver "nvidia"'
 conf_check "xorg: BusID decimális"       "$X/xorg-display.conf" 'BusID "PCI:1@0:0:0"'
 conf_check "xorg: NVIDIA modulútvonal"   "$X/xorg-display.conf" 'ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"'
-conf_check "xorg: root-jog a profilból"  "$X/Xwrapper.config"   'needs_root_rights=yes'
+conf_check "xorg: root-jog a profilból (auto)" "$X/Xwrapper.config" 'needs_root_rights=auto'
 conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-hardware-options.conf" 'options nvidia_drm modeset=1'
 X="$TMP/apply-zbook-m1/hardware"
 conf_check "xorg: driver nélkül nincs Device szakasz" "$X/xorg-display.conf" 'Section "Device"' nincs
@@ -184,10 +184,10 @@ X="$TMP/apply-vbox/hardware"
 conf_check "xorg: VMSVGA -> modesetting" "$X/xorg-display.conf" 'Driver "modesetting"'
 conf_check "xorg: VMSVGA root=auto"      "$X/Xwrapper.config"   'needs_root_rights=auto'
 # kernel parancssori felülírás: nvidia-drm.modeset=0 és fusion.xorg.root=auto
-CMDLINE_FILE="$TMP/cmdline"; echo "quiet nvidia_drm.modeset=0 fusion.xorg.root=auto fusion.slot=A" > "$CMDLINE_FILE"
+CMDLINE_FILE="$TMP/cmdline"; echo "quiet nvidia_drm.modeset=0 fusion.xorg.root=yes fusion.slot=A" > "$CMDLINE_FILE"
 apply_check zbook-cmdline "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
 conf_check "parancssor: modprobe.d-ben nincs modeset" "$TMP/apply-zbook-cmdline/modprobe.d/fusion-hardware-options.conf" 'modeset' nincs
-conf_check "parancssor: fusion.xorg.root=auto" "$TMP/apply-zbook-cmdline/hardware/Xwrapper.config" 'needs_root_rights=auto'
+conf_check "parancssor: fusion.xorg.root=yes" "$TMP/apply-zbook-cmdline/hardware/Xwrapper.config" 'needs_root_rights=yes'
 CMDLINE_FILE=""
 
 # az nvidia-drm-et egy udev-szabály előbb, paraméter nélkül töltötte be (a ZBookon mért eset):

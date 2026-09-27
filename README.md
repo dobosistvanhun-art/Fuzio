@@ -4,8 +4,8 @@ Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendsz
 A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M2 — grafikus felület, NVIDIA 470.**
-Az M0 (build-környezet, EFI-boot) és az M1 (bootolható alaprendszer) lezárva.
+**Állapot: M2 lezárva — grafikus felület, NVIDIA 470** (ZBook: OpenGL 4.6, Vulkan 1.2.175).
+Az M0 (build-környezet, EFI-boot) és az M1 (bootolható alaprendszer) is lezárva.
 
 ## Mit tud az M2
 
@@ -23,7 +23,7 @@ Az M0 (build-környezet, EFI-boot) és az M1 (bootolható alaprendszer) lezárva
   FUSION_DATA-ra kerülnek, magyar nyelv, hálózat, tiszta leállítás.
 
 A boot menüben a FusionOS és a diagnosztika mellett fejlesztői **mérési bejegyzések** is
-vannak (KMS nélkül, Xorg root-jog nélkül, szöveges konzol) — `build.conf`: `BOOT_MEASURE_ENTRIES`.
+vannak (KMS nélkül, Xorg root-joggal, szöveges konzol) — `build.conf`: `BOOT_MEASURE_ENTRIES`.
 
 A kézi ellenőrzés és a nyitott döntésekhez tartozó mérések: `docs/M2-ellenorzes.md`.
 
@@ -113,7 +113,7 @@ a kódban nincs gép- vagy hipervizor-specifikus ág. Új hardver = új profilf�
 
 | Profil | Illeszkedik | Driver |
 | --- | --- | --- |
-| `nvidia-kepler-470` | 10de:0ff6 (Quadro K1100M) | nvidia 470 (+ nvidia-drm modeset=1), Xorg: nvidia |
+| `nvidia-kepler-470` | 10de:0ff6 (Quadro K1100M) | nvidia 470 (+ nvidia-drm modeset=1), Xorg: nvidia, root nélkül |
 | `vmware-svga` | 15ad:0405 (VirtualBox VMSVGA) | vmwgfx, Xorg: modesetting |
 | `virtualbox-vga` | 80ee:beef | vboxvideo |
 | `intel-kms` | 8086:* | i915 |
@@ -149,8 +149,8 @@ docs/         ellenőrzőlisták
 
 ## Ismert korlátok (M2)
 
-- Nyitott, mérésre váró döntések (`docs/M2-ellenorzes.md`, C): `nvidia-drm.modeset` (most: 1),
-  az Xorg root-joga NVIDIA-n (most: yes).
+- Mért döntések (ZBook, 2026-09-27): `nvidia-drm.modeset=1`, Xorg root-jog nélkül
+  (`docs/M2-ellenorzes.md`, C). Tartalék bejegyzések a boot menüben.
 - A JWM ideiglenes; a Fusion Shell az M6-ban jön. Nincs Wi-Fi (később).
 - NVIDIA csomagforrás: a `470-server` sorozat (a sima `-470` a noble-updates-ben már a
   535-ös driverre mutató átmeneti csomag, az nem támogatja a Keplert).
