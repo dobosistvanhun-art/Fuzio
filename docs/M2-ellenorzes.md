@@ -39,6 +39,7 @@ A letöltés ~250 MB (NVIDIA csomagok), a gazdagép apt-jától független.
    - [ ] a terminálban (`fusion-hwinfo`):
          `Profil: nvidia-kepler-470`,
          `Driver: betöltve (nvidia nvidia-modeset nvidia-drm)`,
+         `Paraméter: nvidia_drm.modeset=Y`,
          `Xorg: driver=nvidia root=yes`
    - [ ] `glxinfo -B` →
          `OpenGL renderer string: Quadro K1100M/PCIe/SSE2`,

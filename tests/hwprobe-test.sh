@@ -113,15 +113,28 @@ exit 1
 EOS
 cat > "$FAKEBIN/modprobe" <<'EOS'
 #!/bin/sh
-m=$1
+# ál-modprobe: a betöltött modult és paramétereit a hamis sysfs-be írja (module/<név>/parameters)
+if [ "$1" = "-r" ]; then
+    echo "-r $2" >> "$FAKE_LOG"; rm -rf "$FUSION_SYSFS/module/$(echo "$2" | tr - _)"; exit 0
+fi
+m=$1; shift
 case " $FAKE_BROKEN " in *" $m "*) exit 1 ;; esac
-echo "$*" >> "$FAKE_LOG"; exit 0
+echo "$m${*:+ $*}" >> "$FAKE_LOG"
+d="$FUSION_SYSFS/module/$(echo "$m" | tr - _)"
+[ -d "$d" ] && exit 0          # már betöltve: a paraméterek nem változnak (mint a valóságban)
+mkdir -p "$d/parameters"
+for kv in "$@"; do
+    v=${kv#*=}; case "$v" in 1) v=Y ;; 0) v=N ;; esac
+    echo "$v" > "$d/parameters/${kv%%=*}"
+done
+exit 0
 EOS
 chmod +x "$FAKEBIN/modinfo" "$FAKEBIN/modprobe"
 
 # apply_check <név> <sysfs> <FAKE_MODS> <FAKE_BROKEN> <várt állapot> <várt betöltött modulok>
 apply_check() {
     run="$TMP/apply-$1"; log="$TMP/apply-$1.log"; : > "$log"
+    [ "${KEEP_MODULES:-}" = 1 ] || rm -rf "$2/module"
     FUSION_MODINFO="$FAKEBIN/modinfo" FUSION_MODPROBE="$FAKEBIN/modprobe" \
         FAKE_MODS="$3" FAKE_BROKEN="$4" FAKE_LOG="$log" FUSION_CMDLINE="${CMDLINE_FILE:-/dev/null}" FUSION_MODPROBE_D="$run/modprobe.d" FUSION_BIND_WAIT=0 \
         FUSION_SYSFS="$2" FUSION_RUN="$run" $RUNNER "$PROBE" --apply -q
@@ -163,7 +176,7 @@ conf_check "xorg: NVIDIA driver"         "$X/xorg-display.conf" 'Driver "nvidia"
 conf_check "xorg: BusID decimális"       "$X/xorg-display.conf" 'BusID "PCI:1@0:0:0"'
 conf_check "xorg: NVIDIA modulútvonal"   "$X/xorg-display.conf" 'ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"'
 conf_check "xorg: root-jog a profilból"  "$X/Xwrapper.config"   'needs_root_rights=yes'
-conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-display.conf" 'options nvidia_drm modeset=1'
+conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-hardware-options.conf" 'options nvidia_drm modeset=1'
 X="$TMP/apply-zbook-m1/hardware"
 conf_check "xorg: driver nélkül nincs Device szakasz" "$X/xorg-display.conf" 'Section "Device"' nincs
 conf_check "xorg: át nem vett eszköznél nincs Device szakasz" "$TMP/apply-vbox-unbound/hardware/xorg-display.conf" 'Section "Device"' nincs
@@ -173,9 +186,17 @@ conf_check "xorg: VMSVGA root=auto"      "$X/Xwrapper.config"   'needs_root_righ
 # kernel parancssori felülírás: nvidia-drm.modeset=0 és fusion.xorg.root=auto
 CMDLINE_FILE="$TMP/cmdline"; echo "quiet nvidia_drm.modeset=0 fusion.xorg.root=auto fusion.slot=A" > "$CMDLINE_FILE"
 apply_check zbook-cmdline "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
-conf_check "parancssor: modprobe.d-ben nincs modeset" "$TMP/apply-zbook-cmdline/modprobe.d/fusion-display.conf" 'modeset' nincs
+conf_check "parancssor: modprobe.d-ben nincs modeset" "$TMP/apply-zbook-cmdline/modprobe.d/fusion-hardware-options.conf" 'modeset' nincs
 conf_check "parancssor: fusion.xorg.root=auto" "$TMP/apply-zbook-cmdline/hardware/Xwrapper.config" 'needs_root_rights=auto'
 CMDLINE_FILE=""
+
+# az nvidia-drm-et egy udev-szabály előbb, paraméter nélkül töltötte be (a ZBookon mért eset):
+# a Hardware Layer észreveszi (modeset=N), újratölti modeset=1-gyel, és jelenti
+S="$TMP/zbook-discrete"
+rm -rf "$S/module"; mkdir -p "$S/module/nvidia_drm/parameters"; echo N > "$S/module/nvidia_drm/parameters/modeset"
+KEEP_MODULES=1 apply_check zbook-udev-elobb "$S" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm modeset=1 -r nvidia-drm nvidia-drm modeset=1"
+conf_check "újratöltés után modeset=Y" "$S/module/nvidia_drm/parameters/modeset" '^Y$'
+conf_check "a jelentésben a tényleges érték" "$TMP/apply-zbook-udev-elobb/hardware/display.env" "FUSION_DISPLAY_MODULE_PARAMS='nvidia_drm.modeset=Y'"
 
 echo "Eredmény: $PASS sikeres, $FAIL hibás"
 [ "$FAIL" -eq 0 ]

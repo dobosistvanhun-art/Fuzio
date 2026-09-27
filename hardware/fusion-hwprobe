@@ -192,6 +192,7 @@ fi
 #     loaded  — minden modul betöltve
 #     missing — a modul nincs a rendszerben (pl. az NVIDIA driver még nincs telepítve)
 #     failed  — a modul megvan, de nem tölthető be, vagy nem vette át az eszközt
+#     warning — betöltve, de a profil modulparamétere újratöltés után sem érvényesült
 #     skipped — nem kértek betöltést (--apply nélkül)
 # -----------------------------------------------------------------------------
 # modnorm: a modulnevekben a - és _ egyenértékű
@@ -248,6 +249,8 @@ if [ -n "$CHOSEN" ]; then
             # a paraméterek előbb a modprobe.d-be kerülnek: így az udev-szabályok által
             # név szerint betöltött modulok (pl. nvidia-drm) is ezekkel indulnak
             MPD="${FUSION_MODPROBE_D:-/run/modprobe.d}"
+            # a név egyedi legyen: azonos nevű fájlból a kmod csak az /etc-belit olvassa
+            MPD_FILE="fusion-hardware-options.conf"
             if mkdir -p "$MPD" 2>/dev/null; then
                 {
                     echo "# Fusion Hardware Layer — generált fájl (profil: $(profile_get "$CHOSEN" id))"
@@ -255,7 +258,7 @@ if [ -n "$CHOSEN" ]; then
                         o=$(module_opts "$m" "$MODOPTS")
                         [ -n "$o" ] && echo "options $(modnorm "$m") $o"
                     done
-                } > "$MPD/fusion-display.conf"
+                } > "$MPD/$MPD_FILE"
             fi
             for m in $MODS; do
                 # shellcheck disable=SC2046
@@ -269,6 +272,44 @@ if [ -n "$CHOSEN" ]; then
         fi
     fi
 fi
+
+# a profil modulparamétereinek ellenőrzése a betöltés után (/sys/module/…/parameters);
+# ha egy modul paraméter nélkül töltődött be (pl. egy udev-szabály előbb töltötte be),
+# és még senki nem használja, újratöltjük a helyes paraméterekkel
+PARAM_REPORT=""
+param_ok() {  # param_ok <kért érték> <tényleges érték>
+    case "$1:$2" in
+        1:Y|1:y|1:1|Y:Y|y:Y|0:N|0:n|0:0|N:N|n:N) return 0 ;;
+    esac
+    [ "$1" = "$2" ]
+}
+check_params() {  # check_params <modul> -> 0: mind rendben
+    _mod=$(modnorm "$1"); _ok=0
+    for _p in $(module_opts "$1" "$MODOPTS"); do
+        _k=${_p%%=*}; _v=${_p#*=}
+        _f="$SYSFS/module/$_mod/parameters/$_k"
+        [ -r "$_f" ] || continue
+        param_ok "$_v" "$(cat "$_f" 2>/dev/null)" || _ok=1
+    done
+    return $_ok
+}
+if [ "$DRIVER_STATE" = "loaded" ] && [ -n "${MODOPTS:-}" ]; then
+    for m in $MODS; do
+        [ -n "$(module_opts "$m" "$MODOPTS")" ] || continue
+        if ! check_params "$m"; then
+            # shellcheck disable=SC2046
+            $MODPROBE -r "$m" 2>/dev/null && $MODPROBE "$m" $(module_opts "$m" "$MODOPTS") 2>/dev/null
+        fi
+        for _p in $(module_opts "$m" "$MODOPTS"); do
+            _k=${_p%%=*}
+            _f="$SYSFS/module/$(modnorm "$m")/parameters/$_k"
+            _got=$(cat "$_f" 2>/dev/null || echo "?")
+            PARAM_REPORT="$PARAM_REPORT $(modnorm "$m").$_k=$_got"
+        done
+        check_params "$m" || { DRIVER_STATE="warning"; DRIVER_DETAIL="$DRIVER_DETAIL (a paraméter nem érvényesült: $(modnorm "$m"))"; }
+    done
+fi
+PARAM_REPORT=${PARAM_REPORT# }
 
 # a modul betöltődhet úgy is, hogy az eszközt mégsem veszi át (pl. nem támogatott
 # környezet) — ezért ellenőrizzük, hogy az adapterhez kapcsolódott-e driver
@@ -294,7 +335,7 @@ if r=$(cmdline_val fusion.xorg.root); then XORG_ROOT=$r; fi
 case "$XORG_ROOT" in yes|no|auto) ;; *) XORG_ROOT=auto ;; esac
 # a profil Xorg-drivere csak akkor érvényes, ha a kerneldrivere betöltődött
 # (különben az Xorg az általános felismerésre marad: modesetting / fbdev)
-case "$DRIVER_STATE" in loaded|none) ;; *) XORG_DRIVER="" ;; esac
+case "$DRIVER_STATE" in loaded|none|warning) ;; *) XORG_DRIVER="" ;; esac
 
 if [ "$APPLY" -eq 1 ] && mkdir -p "$HW_DIR" 2>/dev/null; then
     {
@@ -343,6 +384,7 @@ if [ -n "$CHOSEN" ]; then
 fi
 [ -n "$MESSAGE" ] && add_env FUSION_DISPLAY_MESSAGE "$MESSAGE"
 add_env FUSION_DISPLAY_DRIVER_STATE "$DRIVER_STATE"
+[ -n "$PARAM_REPORT" ] && add_env FUSION_DISPLAY_MODULE_PARAMS "$PARAM_REPORT"
 add_env FUSION_DISPLAY_XORG_DRIVER "${XORG_DRIVER:-auto}"
 add_env FUSION_DISPLAY_XORG_ROOT "$XORG_ROOT"
 [ -n "$DRIVER_DETAIL" ] && add_env FUSION_DISPLAY_DRIVER_DETAIL "${DRIVER_DETAIL# }"
@@ -385,7 +427,9 @@ case "$DRIVER_STATE" in
     none)    say "  Driver:  nincs külön driver (firmware framebuffer)" ;;
     missing) say "  Driver:  NINCS TELEPÍTVE:${DRIVER_DETAIL} — a firmware framebuffer marad" ;;
     failed)  say "  Driver:  NEM TÖLTHETŐ BE:${DRIVER_DETAIL}" ;;
+    warning) say "  Driver:  betöltve ($MODS), DE:${DRIVER_DETAIL}" ;;
 esac
+[ -n "$PARAM_REPORT" ] && say "  Paraméter: $PARAM_REPORT"
 say "  Xorg:    driver=${XORG_DRIVER:-auto}  root=$XORG_ROOT"
 [ -d "$HW_DIR" ] && printf '%s' "$SUMMARY" > "$HW_DIR/display.summary" 2>/dev/null
 exit 0
