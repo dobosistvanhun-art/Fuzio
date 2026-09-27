@@ -17,6 +17,8 @@ echo "FUSION-M1: LOCALE $(sed -n 's/^LANG=//p' /etc/default/locale) KEYMAP $(sed
 echo "FUSION-M1: GETTY $(systemctl is-active getty@tty1.service)"
 echo "FUSION-M1: FAILED $(systemctl --failed --no-legend --plain | awk '{print $1}' | tr '\n' ' ')"
 echo "FUSION-M1: USER $(getent passwd fusion | cut -d: -f1,6)"
+echo "FUSION-M1: FAILEDCOUNT $(systemctl --failed --no-legend --plain | wc -l)"
+echo "FUSION-M1: ROOTOWNER $(stat -c %U /) UNSAFE $(journalctl -b --no-pager -o cat 2>/dev/null | grep -c 'unsafe path transition')"
 echo "FUSION-M1: MACHINE-ID $( [ -s /etc/machine-id ] && echo ok || echo empty)"
 for u in $(systemctl --failed --no-legend --plain | awk '{print $1}'); do
     echo "FUSION-M1: --- napló: $u"

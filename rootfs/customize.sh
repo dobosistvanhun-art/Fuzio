@@ -59,6 +59,9 @@ echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service \
     fusion-hardware.service fusion-selftest.service >/dev/null 2>&1
 in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.service >/dev/null 2>&1 || true
+# TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et
+# (a biztonsági modellben LATER). E nélkül a boot "Failed to start systemd-tpm2-setup" hibát ír.
+in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.service >/dev/null 2>&1
 ln -sf /run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"
 
 echo "  [customize] csomagkezelő eltávolítása (a FusionOS-en nincs apt)"

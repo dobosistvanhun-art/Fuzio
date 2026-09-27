@@ -96,6 +96,8 @@ step_test() {
         _check "$log" "FUSION-M1: LOCALE hu_HU.UTF-8 KEYMAP hu" "magyar nyelv és billentyűzet" || ok_run=0
         _check "$log" "FUSION-M1: USER fusion:/home/fusion" "fusion felhasználó" || ok_run=0
         _check "$log" "FUSION-M1: MACHINE-ID ok" "machine-id" || ok_run=0
+        _check "$log" "FUSION-M1: ROOTOWNER root UNSAFE 0" "a gyökér a root tulajdona, nincs 'unsafe path' figyelmeztetés" || ok_run=0
+        _check "$log" "FUSION-M1: FAILEDCOUNT 0" "nincs hibás szolgáltatás" || ok_run=0
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else
