@@ -1,8 +1,13 @@
-# M4 — ellenőrzőlista (Fusion Windows Runtime, LightBurn)
+# M4 — ellenőrzőlista (LightBurn + COM3 + GRBL, proof-of-concept)
 
-Az M4 kapuja: a Windows-os LightBurn x64 települ és elindul a FusionOS-en, a licenc
-aktiválható, a COM3 megjelenik (és a lézerre mutat), a lézer csatlakozik, és egy
-keretezés (Frame) lefut.
+**Követelmény:** a Windows-os LightBurn x64 fusson a FusionOS alatt, és a valódi GRBL
+lézervezérlőt USB-n keresztül COM3-ként érje el.
+
+Az M4 kapuja: a LightBurn települ és elindul, a licenc aktiválható, a COM3 megjelenik
+(és a lézerre mutat, `/dev/fusion/laser`), a lézer csatlakozik, és egy keretezés (Frame) lefut.
+
+A futtató réteg ebben a mérföldkőben **kísérleti** (Wine 11.0, WoW64, forrásból fordítva);
+nem a FusionOS végleges architektúrája. Az M4 mérései ennek a kísérletnek az eredményei.
 
 ## Előkészítés (Mint)
 
@@ -16,8 +21,8 @@ build/fusion-build deps --install     # új: git, patch
 build/fusion-build all
 ```
 
-Az `all` most a **Wine-t is lefordítja** forrásból (Wine 11.0, WoW64 mód, a Fusion
-javításával). Ez első alkalommal hosszú — a ZBookon kb. **1 óra** —, utána a
+Az `all` most a kísérleti futtatót, a **Wine-t is lefordítja** forrásból (Wine 11.0,
+WoW64 mód, a kísérleti portjavítással). Ez első alkalommal hosszú — a ZBookon kb. **1 óra** —, utána a
 gyorsítótárból jön. A végén: `kész: …/wine/wine-11.0-db11d0fe-…`.
 
 A LightBurn telepítőjét (Windows, 64 bites `.exe`, lightburnsoftware.com) a pendrive

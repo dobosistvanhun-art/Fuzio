@@ -1,23 +1,29 @@
 # shellcheck shell=bash
-# wine — a Fusion Windows Runtime motorja: Wine, forrásból, rögzített verzióval.
+# wine — KÍSÉRLETI M4-MEGOLDÁS (proof-of-concept), nem a FusionOS végleges architektúrája.
+#
+# Az M4 funkcionális követelménye: a Windows-os LightBurn x64 fusson a FusionOS alatt, és a
+# valódi GRBL lézervezérlőt USB-n, COM3-ként érje el. Ehhez az M4-ben egy kísérleti
+# futtató kell; ez most a Wine, forrásból fordítva. A FusionOS-szintű rész ettől független:
+# a COM3 a Fusion eszközréteg (M3) szerepére mutat (/dev/fusion/laser).
 #
 # Miért forrásból: az új WoW64 mód (egy 64 bites Wine futtat 32 és 64 bites
 # Windows-programot is, 32 bites Linux-könyvtárak nélkül) fordítási opció
-# (--enable-archs=i386,x86_64); a kész csomagok a klasszikus, i386-os felépítést
-# használják. A forrás a WINE_GIT tárolóból jön, a WINE_COMMIT-tal ellenőrizve,
-# a fusionos/fwr/wine-patches/*.patch javításokkal.
+# (--enable-archs=i386,x86_64). A forrás a WINE_GIT tárolóból jön, a WINE_COMMIT-tal
+# ellenőrizve, az fwr/wine-patches/*.patch kísérleti javításokkal.
 #
 # Eldobható mmdebstrap build-chrootban fordul (a rendszerképbe fordító nem kerül);
-# az eredmény: build/cache/wine/<verzió>/ — telepített fa + a diagnosztikai
+# az eredmény: build/cache/wine/<azonosító>/ — telepített fa + a diagnosztikai
 # Windows-programok (fwr-comtest.exe, fwr-gltest.exe). Root kell; első alkalommal
 # hosszú (4 magon ~1 óra), utána a gyorsítótárból jön.
 
 wine_src_dir() { printf '%s/src/wine-%s' "$CACHE_DIR" "$WINE_VERSION"; }
 
-# a build azonosítója: verzió + commit + a javítások és az FWR-eszközök ujjlenyomata
+# a build azonosítója: verzió + commit + a fordítás tényleges bemenetei (javítások,
+# diagnosztikai programok, konfiguráció) — a megjegyzések nem számítanak bele
 wine_build_id() {
     local h
-    h=$(cat "$FUSION_ROOT"/fwr/wine-patches/*.patch "$FUSION_ROOT"/fwr/tools/*.c "$BUILD_DIR/steps/wine.sh" 2>/dev/null \
+    h=$( { cat "$FUSION_ROOT"/fwr/wine-patches/*.patch "$FUSION_ROOT"/fwr/tools/*.c 2>/dev/null
+           printf '%s\n%s\n%s\n' "$WINE_CONFIGURE" "$WINE_BUILD_DEPS" "$WINE_BUILD_REV"; } \
         | sha256sum | cut -c1-8)
     printf 'wine-%s-%s-%s' "$WINE_VERSION" "${WINE_COMMIT:0:8}" "$h"
 }
@@ -45,6 +51,9 @@ WINE_BUILD_DEPS="make,gcc,g++,flex,bison,gettext,pkgconf,gcc-mingw-w64-x86-64,gc
 libunwind-dev,libgnutls28-dev,libfreetype-dev,libfontconfig-dev,libegl-dev,libgl-dev,libvulkan-dev,\
 libdbus-1-dev,libx11-dev,libxext-dev,libxrandr-dev,libxi-dev,libxcursor-dev,libxfixes-dev,\
 libxinerama-dev,libxcomposite-dev,libxrender-dev,libxxf86vm-dev,libxkbfile-dev,binutils"
+
+# a fordítás receptjének változata: ha a fusion-build.sh lépései érdemben változnak, növelni kell
+WINE_BUILD_REV=1
 
 # a Wine konfigurációja: WoW64, csak a FusionOS-ben használt alrendszerek
 WINE_CONFIGURE="--prefix=/usr/lib/fusion/wine --enable-archs=i386,x86_64 --disable-tests \

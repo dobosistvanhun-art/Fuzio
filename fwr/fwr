@@ -1,10 +1,14 @@
 #!/bin/sh
 # =============================================================================
-#  Fusion Windows Runtime — fwr
+#  Fusion Windows Runtime — fwr   (M4 proof-of-concept)
 #
-#  Windows-programok futtatása a FusionOS-en. A motor a rendszerképben lévő,
-#  rögzített verziójú Wine (új WoW64 mód); a felhasználó nem Wine-t lát, hanem
-#  programonkénti futtatókörnyezetet, amelyet egy profil ír le:
+#  Az M4 követelménye: a Windows-os LightBurn x64 fusson a FusionOS alatt, és a valódi
+#  GRBL lézervezérlőt USB-n, COM3-ként érje el.
+#
+#  KÍSÉRLETI MEGVALÓSÍTÁS: a jelenlegi motor a rendszerképben lévő, rögzített verziójú
+#  Wine (új WoW64 mód). Ez az M4 proof-of-concept futtatója, nem a FusionOS végleges
+#  architektúrája. A felhasználó nem Wine-t lát, hanem programonkénti
+#  futtatókörnyezetet, amelyet egy profil ír le:
 #
 #    /usr/lib/fusion/fwr/profiles/<id>.fwr   (id, name, exe, windows, port.COMn,
 #                                             drive.X, dlloverrides)

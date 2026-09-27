@@ -152,7 +152,7 @@ step_test() {
             _check "$log" "FUSION-M3: GONE" "kihúzáskor a név eltűnik" || ok_run=0
             _check "$log" "FUSION-M3: BACK ttyUSB" "visszadugás után ugyanazzal a névvel visszatér" || ok_run=0
             _check "$log" "FUSION-M3: REOPEN fusion ok" "visszadugás után is megnyitható" || ok_run=0
-            # M4: Fusion Windows Runtime — a Windows-program csak a COM3-at látja, és azon át ír a lézer-eszközre
+            # M4 PoC (kísérleti futtató): a Windows-program csak a COM3-at látja, és azon át ír a lézer-eszközre
             _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
             _check "$log" "FUSION-M4:   *SERIALCOMM: COM3\s*\$" "a SERIALCOMM-ban csak a COM3 (automatikus portkeresés kikapcsolva)" || ok_run=0
             _check "$log" "FUSION-M4:   *COM3: megnyitva, 115200 8N1" "a Windows-program megnyitja a COM3-at" || ok_run=0

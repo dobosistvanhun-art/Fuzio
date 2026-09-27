@@ -4,28 +4,30 @@ Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendsz
 A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M4 — Fusion Windows Runtime** (Windows-os LightBurn x64 a FusionOS-en).
+**Állapot: M4 — LightBurn + COM3 + GRBL, működő proof-of-concept** (folyamatban).
 Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
-OpenGL 4.6, Vulkan 1.2.175), M3 (eszközréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
+OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
-## Mit tud az M4
+## M4 — cél és a jelenlegi megvalósítás
 
-- **Fusion Windows Runtime** (`fwr`): Windows-programok programonkénti futtatókörnyezetben,
-  profil szerint (`fwr/profiles/*.fwr`); a felhasználó nem Wine-t kezel.
-  - `fwr install lightburn <telepítő.exe>` · `fwr launch lightburn` · `fwr list` · `fwr check`
-  - a környezet a DATA-n: `/data/fwr/<program>/`; a napló: `~/.local/share/fusion/fwr/<program>.log`
-- A motor **Wine 11.0, forrásból, új WoW64 módban** (32 bites Linux-könyvtárak nélkül),
-  rögzített commit-tal (`build.conf`: `WINE_COMMIT`), eldobható build-chrootban fordítva.
-- **COM-portok a Fusion eszközrétegből**: a LightBurn profiljában `COM3 = laser` →
-  `/dev/fusion/laser`. A `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` ebből töltődik ki, így a
-  program a portlistában is látja.
-- **Fusion-javítás a Wine-hoz** (`fwr/wine-patches/`): a `Ports\AutoDetect=N` kapcsoló
-  kikapcsolja a Wine automatikus portkeresését — a program **csak** a profil portjait látja
-  (nem a 32 ttyS-t, és nem a Klipper MCU portját).
-- Meghajtók: `C:` (a környezet) és `P:` = `~/Projektek`; a Linux-fájlrendszer (`Z:`) nem látszik.
-- `fwr check`: a runtime ellenőrzése saját Windows-programokkal (`fwr/tools/`):
-  SERIALCOMM + COM3 megnyitása és írása (GRBL-megjegyzéssel, a gép nem mozdul), OpenGL
-  (WGL → Wine → NVIDIA/Mesa) renderelő és verzió.
+**Követelmény:** a Windows-os LightBurn x64 fusson a FusionOS alatt, és a valódi GRBL
+lézervezérlőt USB-n keresztül **COM3**-ként érje el.
+
+| Réteg | Mi ez | Státusz |
+| --- | --- | --- |
+| USB/hardverréteg (M3) | `/dev/fusion/laser` a lézer szerephez kötve | FusionOS-rész, lezárva |
+| COM3 → `/dev/fusion/laser` | a Windows-program portja a Fusion szerepre mutat | M4-követelmény |
+| `fwr` + profil (`fwr/profiles/lightburn.fwr`) | a program indítása, portok, meghajtók egy helyen | M4 proof-of-concept |
+| **Wine 11.0 (WoW64), forrásból** + `fwr/wine-patches/` | a Windows-program tényleges futtatója | **kísérleti M4-megoldás — nem a FusionOS végleges architektúrája** |
+
+Használat (M4 PoC):
+- `fwr install lightburn <telepítő.exe>` · `fwr launch lightburn` · `fwr list` · `fwr check`
+- a futtatókörnyezet a DATA-n: `/data/fwr/<program>/`; napló: `~/.local/share/fusion/fwr/<program>.log`
+- a program csak a profil COM-portjait látja (a kísérleti Wine-javítás kikapcsolja a Wine
+  automatikus portkeresését), a `SERIALCOMM` ebből töltődik ki
+- meghajtók: `C:` (a környezet) és `P:` = `~/Projektek`; a Linux-fájlrendszer (`Z:`) nem látszik
+- `fwr check`: tesztprogramok (`fwr/tools/`) — SERIALCOMM, COM3 megnyitása és írása
+  (GRBL-megjegyzéssel, a gép nem mozdul), OpenGL-renderelő
 
 Kézi ellenőrzés: `docs/M4-ellenorzes.md`.
 
@@ -96,7 +98,7 @@ Ha a letöltés „Unable to locate package” hibát ad: `sudo apt update`.
 | `deps [--install]` | build-függőségek ellenőrzése / telepítése |
 | `fetch` | Ubuntu 6.8.0-142 kernel + modulok, busybox, konzolfont, NVIDIA 470 csomagok (root nélkül, SHA256-tal) |
 | `drivers` | NVIDIA 470 kernelmodul fordítása a rögzített kernelhez (root; az `all` magától hívja) |
-| `wine` | Wine 11.0 (WoW64) fordítása a Fusion Windows Runtime-hoz (root; első alkalommal ~1 óra; az `all` magától hívja) |
+| `wine` | kísérleti M4-futtató: Wine 11.0 (WoW64) fordítása (root; első alkalommal ~1 óra; az `all` magától hívja) |
 | `rootfs [--force]` | a FusionOS rendszerkép (EROFS) — root kell; az `all` sudo-val hívja, ha a forrás változott |
 | `build` | két initramfs + két UKI (FusionOS, diagnosztika) + ESP |
 | `image` | GPT lemezkép: ESP, A slot (rendszerkép), B (üres), DATA |
@@ -198,7 +200,7 @@ build/        fusion-build, lépések (steps/), konfiguráció (config/)
 rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (overlay/)
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
-fwr/          Fusion Windows Runtime: fwr, profilok, Wine-javítások, diagnosztikai Windows-programok
+fwr/          M4 PoC: fwr, profilok, diagnosztikai Windows-programok; wine-patches/ = kísérleti
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
 tools/        fusion-hardware-discovery.sh (Phase 0)
