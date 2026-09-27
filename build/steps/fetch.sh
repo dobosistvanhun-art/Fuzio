@@ -1,24 +1,60 @@
 # shellcheck shell=bash
 # fetch — a build bemeneteinek letöltése az Ubuntu tárolóból, root nélkül.
 
+# _download <url> <célfájl> <sha256>: letöltés .part fájlba, ellenőrzés, átnevezés
+_download() {
+    local url="$1" file="$2" sum="$3"
+    if have curl; then curl -fsSL --retry 3 -o "$file.part" "$url" || { rm -f "$file.part"; return 1; }
+    elif have wget; then wget -q -O "$file.part" "$url" || { rm -f "$file.part"; return 1; }
+    else warn "nincs curl/wget a közvetlen letöltéshez"; return 1; fi
+    if [ "$(sha256sum "$file.part" | cut -d' ' -f1)" != "$sum" ]; then
+        rm -f "$file.part"; die "${file##*/}: a letöltött csomag ellenőrzőösszege nem egyezik"
+    fi
+    mv "$file.part" "$file"
+}
+
 # _fetch_pool <csomag> <cél>: közvetlen letöltés az Ubuntu archívumból (FETCH_POOL), sha256-tal
 _fetch_pool() {
-    local name="$1" dest="$2" line n path sum file
+    local name="$1" dest="$2" line n path sum
     for line in ${FETCH_POOL:-}; do
         IFS='|' read -r n path sum <<<"$line"
         [ "$n" = "$name" ] || continue
-        file="$dest/${path##*/}"
         info "az apt nem találta — közvetlen letöltés: $UBUNTU_MIRROR/$path"
-        if have curl; then curl -fsSL --retry 3 -o "$file.part" "$UBUNTU_MIRROR/$path" || { rm -f "$file.part"; return 1; }
-        elif have wget; then wget -q -O "$file.part" "$UBUNTU_MIRROR/$path" || { rm -f "$file.part"; return 1; }
-        else warn "nincs curl/wget a közvetlen letöltéshez"; return 1; fi
-        if [ "$(sha256sum "$file.part" | cut -d' ' -f1)" != "$sum" ]; then
-            rm -f "$file.part"; die "$name: a letöltött csomag ellenőrzőösszege nem egyezik"
-        fi
-        mv "$file.part" "$file"; ok "letöltve és ellenőrizve: ${path##*/}"
+        _download "$UBUNTU_MIRROR/$path" "$dest/${path##*/}" "$sum" || return 1
+        ok "letöltve és ellenőrizve: ${path##*/}"
         return 0
     done
     return 1
+}
+
+# nvidia_debs_dir: a rögzített NVIDIA csomagok helye
+nvidia_debs_dir() { printf '%s/nvidia' "$CACHE_DIR"; }
+
+# _fetch_nvidia: a rögzített NVIDIA 470 csomagok (NVIDIA_DEBS) letöltése és ellenőrzése
+_fetch_nvidia() {
+    local dir line n path sum file
+    dir=$(nvidia_debs_dir); mkdir -p "$dir"
+    step "NVIDIA $NVIDIA_VERSION csomagok (rögzített verzió, SHA256)"
+    for line in $NVIDIA_DEBS; do
+        IFS='|' read -r n path sum <<<"$line"
+        file="$dir/${path##*/}"
+        if [ -r "$file" ] && [ "$(sha256sum "$file" | cut -d' ' -f1)" = "$sum" ]; then
+            info "megvan: $n"; continue
+        fi
+        info "letöltés: $n $NVIDIA_PKG_VERSION"
+        _download "$UBUNTU_MIRROR/$path" "$file" "$sum" \
+            || die "nem sikerült letölteni: $UBUNTU_MIRROR/$path"
+    done
+    # régi verziók eltávolítása
+    local keep f
+    for f in "$dir"/*.deb; do
+        keep=0
+        for line in $NVIDIA_DEBS; do
+            path=${line#*|}; path=${path%%|*}
+            [ "${f##*/}" = "${path##*/}" ] && keep=1
+        done
+        [ "$keep" -eq 1 ] || rm -f "$f"
+    done
 }
 
 step_fetch() {
@@ -59,4 +95,7 @@ step_fetch() {
     (cd "$debs" && sha256sum ./*.deb) > "$CACHE_DIR/packages.sha256"
     [ -r "$root/boot/vmlinuz-$KERNEL_ABI" ] || die "a kernel nem található: boot/vmlinuz-$KERNEL_ABI"
     ok "kész: $(find "$debs" -name '*.deb' | wc -l) csomag, kernel $KERNEL_ABI"
+
+    _fetch_nvidia
+    ok "NVIDIA $NVIDIA_VERSION: $(find "$(nvidia_debs_dir)" -name '*.deb' | wc -l) csomag"
 }

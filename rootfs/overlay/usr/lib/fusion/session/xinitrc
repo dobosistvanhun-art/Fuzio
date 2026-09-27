@@ -1,0 +1,9 @@
+#!/bin/sh
+# Fusion Desktop — M2 ideiglenes munkamenet (a Fusion Shell az M6-ban váltja)
+setxkbmap hu 2>/dev/null
+xsetroot -solid '#16202b' -cursor_name left_ptr 2>/dev/null
+xset s off -dpms 2>/dev/null
+[ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
+xterm -geometry 110x32+40+40 -fa 'DejaVu Sans Mono' -fs 11 -title 'FusionOS' \
+      -e sh -c 'fusion-hwinfo; echo; echo "  Grafika: glxinfo -B   |   Vulkan: vulkaninfo --summary   |   NVIDIA: nvidia-smi"; echo; exec bash -l' &
+exec jwm

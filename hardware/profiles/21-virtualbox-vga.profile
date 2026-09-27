@@ -10,3 +10,4 @@ display.server = x11
 display.kernel_modules = vboxvideo
 gl.max = software
 vulkan.max = none
+display.xorg_driver = modesetting

@@ -72,7 +72,7 @@ step_test() {
     need qemu-system-x86_64 timeout
     [ -n "$(_ovmf_code)" ] && [ -n "$(_ovmf_vars)" ] || die "OVMF nem található (sudo apt install ovmf)"
     [ -r "$(rootfs_img)" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
-    local out="$OUT_DIR/test" fails=0 cfg vga bus want log drv ok_run
+    local out="$OUT_DIR/test" fails=0 cfg vga bus want log drv desk ok_run
 
     FUSION_VARIANT="test" step_build
     FUSION_VARIANT="test" step_image
@@ -80,8 +80,11 @@ step_test() {
     for cfg in std-sata vmware-sata std-usb; do
         vga=${cfg%-*}; bus=${cfg#*-}
         case "$vga" in
-            std)    want=generic-kms; drv=none ;;
-            vmware) want=vmware-svga; drv=loaded ;;
+            std)    want=generic-kms; drv=none;   desk=1 ;;
+            # QEMU alatt a vmwgfx nem veszi át az eszközt ("unsupported hypervisor"):
+            # a Hardware Layer ezt "failed"-ként jelzi, grafikus felület itt nincs.
+            # A VMSVGA támogatott környezete a VirtualBox (kézi ellenőrzés).
+            vmware) want=vmware-svga; drv=failed; desk=0 ;;
         esac
         log="$out/qemu-$cfg.log"
         step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)"
@@ -98,11 +101,18 @@ step_test() {
         _check "$log" "FUSION-M1: MACHINE-ID ok" "machine-id" || ok_run=0
         _check "$log" "FUSION-M1: ROOTOWNER root UNSAFE 0" "a gyökér a root tulajdona, nincs 'unsafe path' figyelmeztetés" || ok_run=0
         _check "$log" "FUSION-M1: FAILEDCOUNT 0" "nincs hibás szolgáltatás" || ok_run=0
+        if [ "$desk" -eq 1 ]; then
+            _check "$log" "FUSION-M2: XORG up" "Fusion Desktop: Xorg fut" || ok_run=0
+            _check "$log" "FUSION-M2: GL renderer=[^ ]" "OpenGL renderer" || ok_run=0
+            _check "$log" "FUSION-M2: WM jwm" "ablakkezelő" || ok_run=0
+            _check "$log" "FUSION-M2: XKB hu" "magyar billentyűzet az X-ben" || ok_run=0
+        fi
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else
             warn "SIKERTELEN — napló: $log"
-            grep -a 'FUSION-M1\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
+            grep -a 'FUSION-M[12]\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
             fails=$((fails + 1))
         fi
     done

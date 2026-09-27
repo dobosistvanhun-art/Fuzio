@@ -113,9 +113,9 @@ exit 1
 EOS
 cat > "$FAKEBIN/modprobe" <<'EOS'
 #!/bin/sh
-m=$(eval echo "\$$#")
+m=$1
 case " $FAKE_BROKEN " in *" $m "*) exit 1 ;; esac
-echo "$m" >> "$FAKE_LOG"; exit 0
+echo "$*" >> "$FAKE_LOG"; exit 0
 EOS
 chmod +x "$FAKEBIN/modinfo" "$FAKEBIN/modprobe"
 
@@ -123,7 +123,7 @@ chmod +x "$FAKEBIN/modinfo" "$FAKEBIN/modprobe"
 apply_check() {
     run="$TMP/apply-$1"; log="$TMP/apply-$1.log"; : > "$log"
     FUSION_MODINFO="$FAKEBIN/modinfo" FUSION_MODPROBE="$FAKEBIN/modprobe" \
-        FAKE_MODS="$3" FAKE_BROKEN="$4" FAKE_LOG="$log" \
+        FAKE_MODS="$3" FAKE_BROKEN="$4" FAKE_LOG="$log" FUSION_CMDLINE="${CMDLINE_FILE:-/dev/null}" FUSION_MODPROBE_D="$run/modprobe.d" FUSION_BIND_WAIT=0 \
         FUSION_SYSFS="$2" FUSION_RUN="$run" $RUNNER "$PROBE" --apply -q
     st=$(sed -n "s/^FUSION_DISPLAY_DRIVER_STATE='\(.*\)'$/\1/p" "$run/hardware/display.env")
     loaded=$(tr '\n' ' ' < "$log" | sed 's/ $//')
@@ -136,13 +136,46 @@ apply_check() {
 # ZBook M1-ben: az NVIDIA driver még nincs telepítve -> missing, semmi nem töltődik be
 apply_check zbook-m1 "$TMP/zbook-discrete" "i915 vmwgfx" "" missing ""
 # ZBook M2-től: minden NVIDIA modul megvan -> loaded, sorrendben
-apply_check zbook-m2 "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
-# VirtualBox VMSVGA -> vmwgfx betöltve
-apply_check vbox "$TMP/vbox-vmsvga" "vmwgfx" "" loaded "vmwgfx"
+apply_check zbook-m2 "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm modeset=1"
+# VirtualBox VMSVGA -> vmwgfx betöltve, az eszközt átvette
+S="$TMP/vbox-bound"
+mkpci "$S" 0000:00:02.0 0x030000 0x15ad 0x0405 1 vmwgfx
+apply_check vbox "$S" "vmwgfx" "" loaded "vmwgfx"
+# QEMU -vga vmware: a vmwgfx betöltődik, de az eszközt nem veszi át -> failed
+apply_check vbox-unbound "$TMP/vbox-vmsvga" "vmwgfx" "" failed "vmwgfx"
 # a modul megvan, de nem tölthető be -> failed
 apply_check vbox-broken "$TMP/vbox-vmsvga" "vmwgfx" "vmwgfx" failed ""
 # firmware framebuffer: nincs modul -> none
 apply_check fw "$TMP/no-pci-display" "" "" none ""
+
+# conf_check <leírás> <fájl> <minta> [nincs]: a generált fájlban van (vagy nincs) a minta
+conf_check() {
+    if grep -q -- "$3" "$2" 2>/dev/null; then found=1; else found=0; fi
+    if { [ "${4:-}" = nincs ] && [ $found -eq 0 ]; } || { [ "${4:-}" != nincs ] && [ $found -eq 1 ]; }; then
+        PASS=$((PASS + 1)); echo "  OK    $1"
+    else
+        FAIL=$((FAIL + 1)); echo "  HIBA  $1  ($3 ${4:-})"; sed 's/^/        /' "$2" 2>/dev/null
+    fi
+}
+# Xorg beállítás a profilból (M2)
+X="$TMP/apply-zbook-m2/hardware"
+conf_check "xorg: NVIDIA driver"         "$X/xorg-display.conf" 'Driver "nvidia"'
+conf_check "xorg: BusID decimális"       "$X/xorg-display.conf" 'BusID "PCI:1@0:0:0"'
+conf_check "xorg: NVIDIA modulútvonal"   "$X/xorg-display.conf" 'ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"'
+conf_check "xorg: root-jog a profilból"  "$X/Xwrapper.config"   'needs_root_rights=yes'
+conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-display.conf" 'options nvidia_drm modeset=1'
+X="$TMP/apply-zbook-m1/hardware"
+conf_check "xorg: driver nélkül nincs Device szakasz" "$X/xorg-display.conf" 'Section "Device"' nincs
+conf_check "xorg: át nem vett eszköznél nincs Device szakasz" "$TMP/apply-vbox-unbound/hardware/xorg-display.conf" 'Section "Device"' nincs
+X="$TMP/apply-vbox/hardware"
+conf_check "xorg: VMSVGA -> modesetting" "$X/xorg-display.conf" 'Driver "modesetting"'
+conf_check "xorg: VMSVGA root=auto"      "$X/Xwrapper.config"   'needs_root_rights=auto'
+# kernel parancssori felülírás: nvidia-drm.modeset=0 és fusion.xorg.root=auto
+CMDLINE_FILE="$TMP/cmdline"; echo "quiet nvidia_drm.modeset=0 fusion.xorg.root=auto fusion.slot=A" > "$CMDLINE_FILE"
+apply_check zbook-cmdline "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
+conf_check "parancssor: modprobe.d-ben nincs modeset" "$TMP/apply-zbook-cmdline/modprobe.d/fusion-display.conf" 'modeset' nincs
+conf_check "parancssor: fusion.xorg.root=auto" "$TMP/apply-zbook-cmdline/hardware/Xwrapper.config" 'needs_root_rights=auto'
+CMDLINE_FILE=""
 
 echo "Eredmény: $PASS sikeres, $FAIL hibás"
 [ "$FAIL" -eq 0 ]

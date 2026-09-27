@@ -1,4 +1,4 @@
-# FusionOS M1 rendszerkép — csomaglista (Ubuntu 24.04 noble, minbase fölé)
+# FusionOS rendszerkép — csomaglista (Ubuntu 24.04 noble, minbase fölé)
 # Egy sor = egy csomag. A # utáni rész megjegyzés.
 
 # init, eszközkezelés, munkamenetek
@@ -27,8 +27,32 @@ kbd
 tzdata
 
 # kezelés és hibakeresés a fejlesztés alatt
+procps
 sudo
 less
 nano
 pciutils
 usbutils
+
+# grafikus szerver (M2: X11 — a Wayland a 470-es NVIDIA driverrel nem járható út)
+xserver-xorg-core
+xserver-xorg-legacy
+xserver-xorg-input-libinput
+xserver-xorg-video-fbdev
+xinit
+xauth
+x11-xserver-utils
+x11-xkb-utils
+x11-utils
+# Mesa: szoftveres / virtuális GPU-k (VirtualBox, QEMU); az NVIDIA a saját GL-jét hozza
+libgl1-mesa-dri
+libglx-mesa0
+libegl-mesa0
+libvulkan1
+# M2 ideiglenes asztal (a Fusion Shell az M6-ban váltja): ablakkezelő, terminál, betűk
+jwm
+xterm
+fonts-dejavu-core
+# ellenőrzés: glxinfo, vulkaninfo
+mesa-utils
+vulkan-tools

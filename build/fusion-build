@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  FusionOS build — M0
+#  FusionOS build
 #
 #  Használat:  build/fusion-build <parancs> [opciók]
 #
 #  Parancsok:
 #    deps [--install]   build-függőségek ellenőrzése (--install: telepítés apt-tal)
-#    fetch              kernel, busybox, modulok, betűkészlet letöltése (root nélkül)
+#    fetch              kernel, busybox, modulok, betűkészlet, NVIDIA 470 csomagok letöltése (root nélkül)
+#    drivers            NVIDIA 470 kernelmodul fordítása a rögzített kernelhez — root kell (sudo)
 #    rootfs [--force]   a FusionOS rendszerkép (EROFS) építése — root kell (sudo)
 #    build              initramfs-ek + UKI-k (FusionOS + diagnosztika) + ESP-fa
 #    image              GPT lemezkép (VirtualBox / QEMU)
@@ -28,8 +29,8 @@ for s in "$BUILD_DIR"/steps/*.sh; do
     . "$s"
 done
 
-DEPS_CMDS=(apt-get dpkg-deb sha256sum cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
-DEPS_PKGS="systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
+DEPS_CMDS=(apt-get dpkg-deb sha256sum curl strip cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
+DEPS_PKGS="curl binutils systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
 DEPS_OPT_PKGS="qemu-system-x86 ovmf"
 
 step_deps() {
@@ -62,12 +63,13 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
     deps)     step_deps "$@" ;;
     fetch)    step_fetch ;;
+    drivers)  if [ "$(id -u)" -eq 0 ]; then step_drivers; else sudo "$BUILD_DIR/fusion-build" drivers; fi ;;
     rootfs)   if [ "$(id -u)" -eq 0 ]; then step_rootfs; else ensure_rootfs "$@"; fi ;;
     build)    step_build ;;
     image)    step_image ;;

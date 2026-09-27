@@ -10,3 +10,4 @@ display.server = x11
 display.kernel_modules = i915
 gl.max = mesa
 vulkan.max = mesa
+display.xorg_driver = modesetting

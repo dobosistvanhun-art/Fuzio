@@ -1,5 +1,6 @@
 
-  FusionOS — fejlesztői konzol (M1)
-  Hardverprofil:  fusion-hwinfo
+  FusionOS — fejlesztői konzol (M2)
+  Hardverprofil:  fusion-hwinfo      Grafika: glxinfo -B, vulkaninfo --summary
+  Fusion Desktop újraindítása a tty1-en:  fusion-session
   A rendszer csak olvasható; a változások a FUSION_DATA partícióra kerülnek.
 

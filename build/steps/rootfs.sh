@@ -12,7 +12,8 @@ rootfs_img() { printf '%s/%s' "$OUT_DIR" "$ROOTFS_IMG_NAME"; }
 rootfs_stale() {
     local img; img=$(rootfs_img)
     [ -r "$img" ] || return 0
-    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" \
+    nvidia_ko_ready || return 0
+    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" \
               -newer "$img" -type f -print -quit 2>/dev/null)" ]
 }
 
@@ -40,14 +41,30 @@ step_rootfs() {
     mkdir -p "$OUT_DIR"
     rm -rf "$work"; mkdir -p "$work"
 
+    # a gyári kernelmodulok (NVIDIA) a rögzített kernelhez — ha hiányoznak, most fordulnak
+    nvidia_ko_ready || step_drivers
+
+    # a rögzített NVIDIA csomagok helyi .deb fájlként (a forráscsomag nem kerül a képbe)
+    local -a nvinc=()
+    local line n path
+    for line in $NVIDIA_DEBS; do
+        IFS='|' read -r n path _ <<<"$line"
+        [ "$n" = "$NVIDIA_SOURCE_PKG" ] && continue
+        [ -r "$(nvidia_debs_dir)/${path##*/}" ] || die "hiányzik: ${path##*/} — előbb: build/fusion-build fetch"
+        nvinc+=("--include=$(nvidia_debs_dir)/${path##*/}")
+    done
+
     pkgs=$(sed -e 's/#.*//' -e "s/@KERNEL_ABI@/$KERNEL_ABI/" "$FUSION_ROOT/rootfs/packages.list" | tr -s ' \n' ',' | sed 's/^,//; s/,$//')
 
     step "Rendszerkép: Ubuntu 24.04 (noble) minbase + FusionOS csomagok"
     info "tükör: $ROOTFS_MIRROR"
-    export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE
+    FUSION_NVIDIA_KO=$(nvidia_ko_dir)
+    export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \
+        --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
         --include="$pkgs" \
+        "${nvinc[@]}" \
         --dpkgopt='path-exclude=/usr/share/doc/*' \
         --dpkgopt='path-include=/usr/share/doc/*/copyright' \
         --dpkgopt='path-exclude=/usr/share/man/*' \
@@ -56,6 +73,17 @@ step_rootfs() {
         --dpkgopt='path-exclude=/usr/share/locale/*' \
         --dpkgopt='path-include=/usr/share/locale/hu/*' \
         --dpkgopt='path-include=/usr/share/locale/locale.alias' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvoptix.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-rtcore.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-ngx.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-cbl.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/nvidia/wine/*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-compiler.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-opencl.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so*' \
+        --dpkgopt='path-exclude=/usr/lib/x86_64-linux-gnu/libcuda.so*' \
+        --dpkgopt='path-exclude=/usr/share/initramfs-tools/*' \
         --essential-hook='echo "keyboard-configuration keyboard-configuration/layoutcode string hu" | chroot "$1" debconf-set-selections' \
         --essential-hook='echo "keyboard-configuration keyboard-configuration/modelcode string pc105" | chroot "$1" debconf-set-selections' \
         --essential-hook='echo "console-setup console-setup/charmap47 select UTF-8" | chroot "$1" debconf-set-selections' \

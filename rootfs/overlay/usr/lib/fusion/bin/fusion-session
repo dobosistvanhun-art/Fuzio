@@ -1,0 +1,18 @@
+#!/bin/sh
+# FusionOS — a Fusion Desktop (grafikus munkamenet) indítása.
+# M2: X11 + ideiglenes ablakkezelő (jwm); a Fusion Shell az M6-ban váltja.
+# Az Xorg eszközbeállítását a Fusion Hardware Layer adja a hardverprofilból
+# (/run/fusion/hardware/xorg-display.conf, Xwrapper.config).
+LOGDIR="$HOME/.local/share/fusion"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/session.log"
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.old"
+vt="${XDG_VTNR:-1}"
+{
+    echo "Fusion Desktop — $(date '+%F %T')"
+    cat /run/fusion/hardware/display.summary 2>/dev/null
+} > "$LOG"
+startx /usr/lib/fusion/session/xinitrc -- ":0" "vt$vt" -keeptty -nolisten tcp >> "$LOG" 2>&1
+rc=$?
+echo "kilépési kód: $rc" >> "$LOG"
+exit $rc

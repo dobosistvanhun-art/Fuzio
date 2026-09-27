@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 sorokat.
+# FusionOS boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 / FUSION-M2 sorokat.
 # (Type=exec szolgáltatásként fut, így a boot befejeződhet, és itt megvárhatjuk.)
 systemctl is-system-running --wait >/dev/null 2>&1
 state=$(systemctl is-system-running 2>/dev/null)
@@ -24,5 +24,27 @@ for u in $(systemctl --failed --no-legend --plain | awk '{print $1}'); do
     echo "FUSION-M1: --- napló: $u"
     journalctl -b -u "$u" --no-pager -o cat 2>/dev/null | tail -n 15 | sed 's/^/FUSION-M1:   /'
 done
+# --- M2: Fusion Desktop (Xorg, GL, Vulkan, ablakkezelő) ---
+xrun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority "$@"; }
+i=0
+while [ $i -lt 120 ] && ! xrun xdpyinfo >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
+if xrun xdpyinfo >/dev/null 2>&1; then
+    xlog=/var/log/Xorg.0.log; [ -r "$xlog" ] || xlog=/home/fusion/.local/share/xorg/Xorg.0.log
+    ddx=$(grep -o '(II) [A-Za-z]*(0):' "$xlog" 2>/dev/null | head -n 1 | sed 's/(II) //; s/(0)://')
+    echo "FUSION-M2: XORG up ddx=${ddx:-?} user=$(ps -o user= -C Xorg 2>/dev/null | head -n 1) wait=${i}s"
+    glx=$(xrun glxinfo -B 2>/dev/null)
+    echo "FUSION-M2: GL renderer=$(printf '%s\n' "$glx" | sed -n 's/^OpenGL renderer string: //p') version=$(printf '%s\n' "$glx" | sed -n 's/^OpenGL core profile version string: //p' | cut -d' ' -f1)"
+    vk=$(xrun vulkaninfo --summary 2>/dev/null)
+    vkdev=$(printf '%s\n' "$vk" | sed -n 's/^[[:space:]]*deviceName[[:space:]]*= //p' | head -n 1)
+    vkapi=$(printf '%s\n' "$vk" | sed -n 's/^[[:space:]]*apiVersion[[:space:]]*= //p' | head -n 1)
+    echo "FUSION-M2: VULKAN ${vkdev:-none} api=${vkapi:-none}"
+    wm=$(pgrep -x -u fusion jwm >/dev/null && echo jwm || echo none)
+    echo "FUSION-M2: WM $wm"
+    echo "FUSION-M2: XKB $(xrun setxkbmap -query 2>/dev/null | sed -n 's/^layout:[[:space:]]*//p')"
+else
+    echo "FUSION-M2: XORG down"
+    tail -n 25 /home/fusion/.local/share/fusion/session.log 2>/dev/null | sed 's/^/FUSION-M2:   /'
+    grep -a '(EE)' /var/log/Xorg.0.log /home/fusion/.local/share/xorg/Xorg.0.log 2>/dev/null | tail -n 15 | sed 's/^/FUSION-M2:   /'
+fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

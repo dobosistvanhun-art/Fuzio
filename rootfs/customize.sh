@@ -6,7 +6,7 @@
 # =============================================================================
 set -euo pipefail
 R="$1"
-: "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}"
+: "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] FusionOS fájlok"
@@ -18,7 +18,25 @@ rm -rf "$R/usr/lib/fusion/hardware/profiles"
 cp -r "$FUSION_ROOT/hardware/profiles" "$R/usr/lib/fusion/hardware/profiles"
 chown -R root:root "$R/usr/lib/fusion"
 ln -sf /usr/lib/fusion/bin/fusion-hwinfo "$R/usr/bin/fusion-hwinfo"
+ln -sf /usr/lib/fusion/bin/fusion-session "$R/usr/bin/fusion-session"
 mkdir -p "$R/data"
+
+echo "  [customize] NVIDIA kernelmodulok ($KERNEL_ABI)"
+kdir="$R/usr/lib/modules/$KERNEL_ABI"
+[ -d "$kdir" ] || { echo "  [customize] HIBA: nincs $kdir"; exit 1; }
+mkdir -p "$kdir/updates/nvidia"
+for m in $NVIDIA_MODULES; do
+    install -m 0644 "$FUSION_NVIDIA_KO/$m.ko" "$kdir/updates/nvidia/$m.ko"
+done
+in_root depmod -a "$KERNEL_ABI"
+in_root modinfo -k "$KERNEL_ABI" -F version nvidia >/dev/null \
+    || { echo "  [customize] HIBA: az nvidia modul nem látható a depmod után"; exit 1; }
+
+echo "  [customize] grafikus szerver (a Fusion Hardware Layer beállításaival)"
+# az Xorg eszköz- és jogosultság-beállítása a bootkor a hardverprofilból készül
+ln -sf /run/fusion/hardware/xorg-display.conf "$R/etc/X11/xorg.conf.d/10-fusion-display.conf"
+ln -sf /run/fusion/hardware/Xwrapper.config "$R/etc/X11/Xwrapper.config"
+chmod 0755 "$R/usr/lib/fusion/bin/"* "$R/usr/lib/fusion/session/xinitrc"
 
 echo "  [customize] os-release"
 cat > "$R/usr/lib/os-release" <<EOF
@@ -62,6 +80,8 @@ in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.serv
 # TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et
 # (a biztonsági modellben LATER). E nélkül a boot "Failed to start systemd-tpm2-setup" hibát ír.
 in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.service >/dev/null 2>&1
+# NVIDIA: a persistenced (CUDA-szerverekhez) nem kell; az udev-szabály enélkül hiányzó egységet kérne
+in_root systemctl mask nvidia-persistenced.service >/dev/null 2>&1
 ln -sf /run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"
 
 echo "  [customize] csomagkezelő eltávolítása (a FusionOS-en nincs apt)"

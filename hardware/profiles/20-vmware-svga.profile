@@ -11,3 +11,4 @@ display.server = x11
 display.kernel_modules = vmwgfx
 gl.max = software
 vulkan.max = none
+display.xorg_driver = modesetting
