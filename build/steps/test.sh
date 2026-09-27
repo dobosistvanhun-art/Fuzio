@@ -8,9 +8,8 @@
 # Diagnosztika (a boot menü második bejegyzése):
 #   std    + USB   -> az M0 ellenőrző képernyő
 #
-# Minden FusionOS-futásnál: systemd "running", EROFS gyökér csak olvashatóan,
-# /etc és /var overlay, /data ext4, A slot, getty, nincs hibás szolgáltatás,
-# magyar locale.
+# Minden FusionOS-futásnál: systemd "running", gyökér-overlay, /usr csak olvasható
+# (EROFS), /data ext4, A slot, getty, nincs hibás szolgáltatás, magyar locale.
 
 _ovmf_code() {
     local f
@@ -89,8 +88,8 @@ step_test() {
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
         ok_run=1
         _check "$log" "FUSION-M1: SYSTEM UP state=running" "systemd fut, hibátlanul" || ok_run=0
-        _check "$log" "FUSION-M1: ROOT erofs ro" "EROFS gyökér, csak olvasható" || ok_run=0
-        _check "$log" "FUSION-M1: MOUNTS etc=overlay var=overlay data=ext4" "/etc, /var overlay és /data" || ok_run=0
+        _check "$log" "FUSION-M1: ROOT overlay usr=erofs ro" "gyökér-overlay, /usr csak olvasható (EROFS)" || ok_run=0
+        _check "$log" "FUSION-M1: MOUNTS data=ext4" "/data" || ok_run=0
         _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
         _check "$log" "FUSION-M1: DISPLAY_PROFILE=$want STATUS=ok DRIVER=$drv" "hardverprofil és driver" || ok_run=0
         _check "$log" "FUSION-M1: GETTY active" "bejelentkezési képernyő" || ok_run=0

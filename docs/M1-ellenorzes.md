@@ -29,7 +29,7 @@ A végén: `kész: … rootfs.erofs — ~99 MiB tömörítve`.
    ```
    újraindulás és belépés után: `cat ~/proba.txt` → `helló`
 4. Csak olvasható rendszer: `sudo touch /usr/proba` → `Read-only file system` (ez a helyes)
-5. Kilépés: `sudo poweroff`
+5. Kilépés: `sudo poweroff` — a leállításkor nem lehet `[FAILED]` sor
 
 Ha a VirtualBoxban a login helyett fekete a képernyő: a VM újraindításakor a boot menüben
 válaszd a **FusionOS diagnosztika** bejegyzést, és szólj — a vmwgfx driver a gyanús.

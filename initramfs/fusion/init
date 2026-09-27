@@ -6,9 +6,13 @@
 #  2. a slot kiválasztása (kernel parancssor: fusion.slot=A|B)
 #  3. a slot rendszerképének (EROFS) csatolása csak olvashatóan
 #  4. a FUSION_DATA partíció csatolása (írható állapot)
-#  5. /etc és /var: overlay (alul a rendszerkép, felül a DATA)
-#     /home: a DATA-ról; az első indításkor a rendszerképből töltődik fel
+#  5. gyökér = overlay: alul a rendszerkép, felül a DATA (/etc, /var, /home ...
+#     írható, és megmarad); a /usr közvetlenül a rendszerkép, csak olvasható
 #  6. átadás a rendszernek (switch_root -> systemd)
+#
+#  Miért egyetlen gyökér-overlay? A gyökeret és a /usr-t a systemd soha nem
+#  próbálja leválasztani, így leállításkor nincs "Failed unmounting" hiba, és a
+#  DATA partíciót a legvégén, tisztán zárja le (data.mount: DefaultDependencies=no).
 #
 #  A partíciókat GPT-név szerint keresi (FUSION_A, FUSION_B, FUSION_DATA),
 #  nem eszköznév szerint. Hiba esetén mentőhéjat ad, érthető üzenettel.
@@ -71,28 +75,26 @@ done
 [ -n "$DATADEV" ] || rescue "A FUSION_DATA partíció nem található."
 
 # 3. rendszerkép (EROFS, csak olvasható)
-mkdir -p /newroot
-mount -t erofs -o ro "$ROOTDEV" /newroot 2>/dev/null \
+mkdir -p /lower /data /newroot
+mount -t erofs -o ro "$ROOTDEV" /lower 2>/dev/null \
     || rescue "A(z) $SLOT slot rendszerképe ($ROOTDEV) nem csatolható. Üres vagy sérült a slot?"
-[ -x /newroot/sbin/init ] || rescue "A(z) $SLOT slot rendszerképében nincs /sbin/init."
+[ -x /lower/sbin/init ] || rescue "A(z) $SLOT slot rendszerképében nincs /sbin/init."
 
 # 4. adatpartíció
-mount -t ext4 -o rw,noatime "$DATADEV" /newroot/data 2>/dev/null \
+mount -t ext4 -o rw,noatime "$DATADEV" /data 2>/dev/null \
     || rescue "A FUSION_DATA partíció ($DATADEV) nem csatolható."
 
-# 5. írható rétegek
-D=/newroot/data
-mkdir -p "$D/overlay/etc/upper" "$D/overlay/etc/work" "$D/overlay/var/upper" "$D/overlay/var/work" "$D/home"
-mount -t overlay overlay -o "lowerdir=/newroot/etc,upperdir=$D/overlay/etc/upper,workdir=$D/overlay/etc/work" /newroot/etc \
-    || rescue "Az /etc réteg nem hozható létre."
-mount -t overlay overlay -o "lowerdir=/newroot/var,upperdir=$D/overlay/var/upper,workdir=$D/overlay/var/work" /newroot/var \
-    || rescue "A /var réteg nem hozható létre."
-if [ ! -e "$D/home/.fusion-seeded" ]; then
-    cp -a /newroot/home/. "$D/home/" 2>/dev/null
-    : > "$D/home/.fusion-seeded"
-    msg "első indítás: a /home feltöltve a rendszerképből"
+# 5. gyökér-overlay + csak olvasható /usr
+mkdir -p /data/overlay/root/upper /data/overlay/root/work
+mount -t overlay overlay \
+    -o "lowerdir=/lower,upperdir=/data/overlay/root/upper,workdir=/data/overlay/root/work" /newroot \
+    || rescue "A gyökér-réteg (overlay) nem hozható létre."
+if ! mount -o bind /lower/usr /newroot/usr || ! mount -o remount,bind,ro /newroot/usr; then
+    rescue "A /usr nem csatolható a rendszerképből."
 fi
-mount -o bind "$D/home" /newroot/home || rescue "A /home nem csatolható."
+mount -o move /data /newroot/data || rescue "A /data nem helyezhető át."
+# az overlay és a /usr saját hivatkozást tart a rendszerképre; a segédcsatolás mehet
+umount -l /lower
 
 # állapot a rendszernek
 mkdir -p /run/fusion

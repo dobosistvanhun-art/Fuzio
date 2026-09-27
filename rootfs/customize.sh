@@ -10,11 +10,13 @@ R="$1"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] FusionOS fájlok"
-cp -a "$FUSION_ROOT/rootfs/overlay/." "$R/"
+# a tulajdonos mindig root (a build felhasználójáé NE kerüljön a képbe)
+cp -a --no-preserve=ownership "$FUSION_ROOT/rootfs/overlay/." "$R/"
 mkdir -p "$R/usr/lib/fusion/hardware"
 install -m 0755 "$FUSION_ROOT/hardware/fusion-hwprobe" "$R/usr/lib/fusion/hardware/fusion-hwprobe"
 rm -rf "$R/usr/lib/fusion/hardware/profiles"
 cp -r "$FUSION_ROOT/hardware/profiles" "$R/usr/lib/fusion/hardware/profiles"
+chown -R root:root "$R/usr/lib/fusion"
 ln -sf /usr/lib/fusion/bin/fusion-hwinfo "$R/usr/bin/fusion-hwinfo"
 mkdir -p "$R/data"
 

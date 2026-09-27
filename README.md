@@ -14,8 +14,10 @@ Az M0 (build-környezet, EFI-boot pendrive-ról és VirtualBoxból) lezárva.
   - **FusionOS diagnosztika**: az M0 ellenőrző képernyője (hardver, partíciók). Nem ír semmit.
 - A FusionOS az **A slot** rendszerképéről indul: minimális Ubuntu 24.04 alap,
   **csak olvasható, tömörített EROFS** (~100 MB), systemd-vel, bejelentkezésig.
-- Minden változás a **FUSION_DATA** partícióra kerül:
-  `/etc` és `/var` overlay-réteg, `/home` a DATA-ról. Újraindítás után megmarad.
+- Minden változás a **FUSION_DATA** partícióra kerül: a gyökér egyetlen overlay
+  (alul a rendszerkép, felül a DATA), így az `/etc`, a `/var` és a `/home` írható, és
+  újraindítás után megmarad. A `/usr` közvetlenül a rendszerkép: **csak olvasható**.
+- Tiszta leállítás: a DATA fájlrendszert a rendszer a legvégén zárja le.
 - Magyar nyelv (hu_HU.UTF-8), magyar billentyűzet, Europe/Budapest időzóna.
 - Vezetékes hálózat DHCP-vel (systemd-networkd).
 - A **Fusion Hardware Layer** a bootnál kiválasztja a grafikus profilt, és a profil
@@ -62,8 +64,8 @@ UEFI → systemd-boot (ESP) → UKI: kernel 6.8.0-142 + fusion-init (initramfs)
     2. slot a kernel parancssorából: fusion.slot=A
     3. FUSION_A (GPT-név szerint) → EROFS, csak olvasható → /
     4. FUSION_DATA → /data (ext4)
-    5. /etc, /var: overlay (alul a rendszerkép, felül /data/overlay/…)
-       /home: /data/home (első indításkor feltöltve a rendszerképből)
+    5. gyökér = overlay (alul a rendszerkép, felül /data/overlay/root)
+       /usr  = a rendszerkép /usr-je, csak olvasható
     6. switch_root → systemd
   systemd → fusion-hardware.service (Hardware Layer) → getty (bejelentkezés)
 ```
@@ -77,7 +79,7 @@ Hiba esetén a fusion-init érthető magyar üzenettel és mentőhéjjal áll me
 | FUSION_ESP | 512 MiB | 512 MiB | systemd-boot, UKI-k |
 | FUSION_A | 4 GiB | 4 GiB | rendszerkép (EROFS, ~100 MB) |
 | FUSION_B | 4 GiB | 4 GiB | üres (A/B frissítés: M7) |
-| FUSION_DATA | a maradék | 1 GiB | /etc, /var réteg, /home |
+| FUSION_DATA | a maradék | 1 GiB | a gyökér írható rétege (/etc, /var, /home …) |
 
 ## A pendrive-író biztonsága
 
@@ -113,7 +115,7 @@ Tesztek: `sh tests/hwprobe-test.sh` (16 eset, hamis sysfs-sel és modulkezelőve
 
 QEMU + OVMF, KVM nélkül is (lassabb). A FusionOS-t háromféleképp indítja
 (std VGA + SATA, VMware SVGA + SATA, std VGA + USB-pendrive), és a soros konzolon ellenőrzi:
-systemd „running”, EROFS gyökér csak olvashatóan, /etc és /var overlay, /data ext4, A slot,
+systemd „running”, gyökér-overlay, /usr csak olvasható (EROFS), /data ext4, A slot,
 hardverprofil és driver, getty, magyar locale és billentyűzet, `fusion` felhasználó,
 machine-id, nincs hibás szolgáltatás. Ezen felül a diagnosztikai bejegyzést is elindítja.
 
@@ -136,6 +138,6 @@ docs/         ellenőrzőlisták
 
 - Nincs grafikus felület és NVIDIA driver (M2); nincs Wi-Fi (később).
 - A DATA fájlrendszer-ellenőrzése (fsck) még nincs az initramfs-ben.
-- Az /etc és /var overlay felső rétege egy rendszerképhez tartozik; a frissítéskori
-  állapotkezelést az M7 (A/B frissítés) rendezi.
+- A gyökér-overlay felső rétege egy rendszerképhez tartozik; a frissítéskori
+  állapotkezelést (mi marad meg, mi áll vissza) az M7 (A/B frissítés) rendezi.
 - `loader.conf`: `editor yes` — fejlesztői beállítás, később kikapcsol.
