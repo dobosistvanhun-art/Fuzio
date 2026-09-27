@@ -22,6 +22,9 @@ Az M0 (build-környezet, EFI-boot) és az M1 (bootolható alaprendszer) lezárva
 - Az M1 alaprendszere változatlan: csak olvasható EROFS rendszerkép, a változások a
   FUSION_DATA-ra kerülnek, magyar nyelv, hálózat, tiszta leállítás.
 
+A boot menüben a FusionOS és a diagnosztika mellett fejlesztői **mérési bejegyzések** is
+vannak (KMS nélkül, Xorg root-jog nélkül, szöveges konzol) — `build.conf`: `BOOT_MEASURE_ENTRIES`.
+
 A kézi ellenőrzés és a nyitott döntésekhez tartozó mérések: `docs/M2-ellenorzes.md`.
 
 Fejlesztői bejelentkezés: **fusion / fusion** (sudo joggal). A root zárolva.

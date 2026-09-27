@@ -129,5 +129,16 @@ step_build() {
     cp "$out/$uki" "$esp/EFI/Linux/$uki"
     cp "$out/$diag" "$esp/EFI/Linux/$diag"
     printf 'timeout 5\ndefault %s\nconsole-mode keep\neditor yes\n' "${FUSION_BOOT_DEFAULT:-fusionos-*}" > "$esp/loader/loader.conf"
-    ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika"
+
+    # mérési bejegyzések: ugyanaz az UKI, kiegészített parancssorral
+    # (a systemd-stub Secure Boot nélkül a boot menü által adott parancssort használja)
+    mkdir -p "$esp/loader/entries"
+    local id title extra n=0
+    while IFS='|' read -r id title extra; do
+        [ -n "$id" ] || continue
+        printf 'title %s\nsort-key zz-%s\nefi /EFI/Linux/%s\noptions %s %s\n' \
+            "$title" "$id" "$uki" "$cm_main" "$extra" > "$esp/loader/entries/$id.conf"
+        n=$((n + 1))
+    done <<< "${BOOT_MEASURE_ENTRIES:-}"
+    ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
 }

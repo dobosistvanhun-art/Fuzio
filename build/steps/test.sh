@@ -117,6 +117,20 @@ step_test() {
         fi
     done
 
+    # mérési bejegyzés (loader/entries): a szöveges konzol — a kiegészített parancssor átjut-e
+    FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-konzol.conf" step_build >/dev/null
+    FUSION_VARIANT="test" step_image >/dev/null
+    log="$out/qemu-konzol.log"
+    step "QEMU EFI boot → mérési bejegyzés: szöveges konzol (fusion.desktop=0)"
+    _qemu_run konzol std sata "$log" "FUSION-M1: SYSTEM UP"
+    if _check "$log" "FUSION-M1: CMDLINE .*fusion.desktop=0" "a bejegyzés parancssora átjutott" \
+       && _check "$log" "FUSION-M2: XORG disabled" "Desktop kikapcsolva" \
+       && _check "$log" "FUSION-M1: FAILEDCOUNT 0" "nincs hibás szolgáltatás"; then
+        ok "SIKERES ($RUN_SECS mp)"
+    else
+        warn "SIKERTELEN — napló: $log"; fails=$((fails + 1))
+    fi
+
     # diagnosztika: a boot menü második bejegyzése, alapértelmezettként beállítva
     FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-diag*" step_build >/dev/null
     FUSION_VARIANT="test" step_image >/dev/null

@@ -364,6 +364,10 @@ else
         IFS=$oldifs
         slot=${line%%|*}; r=${line#*|}; r=${r#*|}
         ven=${r%%|*}; r=${r#*|}; dev=${r%%|*}; r=${r#*|}; bvga=${r%%|*}; drv=${r#*|}
+        # a driver a betöltés után is változhat — a kiírás a mostani állapotot mutatja
+        if [ -L "$SYSFS/bus/pci/devices/$slot/driver" ]; then
+            drv=$(basename "$(readlink "$SYSFS/bus/pci/devices/$slot/driver")")
+        fi
         mark=""; [ "$slot" = "$BEST_SLOT" ] && mark="  <- kiválasztva"
         say "  Adapter: $slot  ${ven#0x}:${dev#0x}  boot_vga=$bvga  driver=${drv:--}$mark"
     done

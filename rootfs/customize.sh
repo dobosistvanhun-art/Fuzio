@@ -67,9 +67,11 @@ echo "Europe/Budapest" > "$R/etc/timezone"
 in_root setupcon --save-only --force >/dev/null 2>&1 || echo "  [customize] FIGYELEM: setupcon --save-only nem sikerült"
 
 echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
-in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input fusion
+in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
+# az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell
+in_root runuser -u fusion -- touch /home/fusion/.sudo_as_admin_successful
 : > "$R/etc/machine-id"          # az első indításkor jön létre, a DATA-n marad meg
 rm -f "$R/var/lib/dbus/machine-id"
 

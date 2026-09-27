@@ -43,29 +43,33 @@ A letöltés ~250 MB (NVIDIA csomagok), a gazdagép apt-jától független.
    - [ ] `glxinfo -B` →
          `OpenGL renderer string: Quadro K1100M/PCIe/SSE2`,
          `OpenGL core profile version string: 4.6.0 NVIDIA 470.256.02`
-   - [ ] `vulkaninfo --summary` → `deviceName = Quadro K1100M`, `apiVersion = 1.2.…`
+   - [ ] `vulkaninfo --summary | grep -iE 'devicename|apiversion'` → `Quadro K1100M`, `1.2.…`
    - [ ] `nvidia-smi` → a kártya, a driver 470.256.02
-   - [ ] `cat /sys/module/nvidia_drm/parameters/modeset` → `Y`
+   - [ ] `sudo cat /sys/module/nvidia_drm/parameters/modeset` → `Y`
 
 A fenti kimenetek fotója vagy szövege elég visszajelzésnek.
 
 ## C) Mérések a nyitott döntésekhez (a ZBookon)
 
-Két beállítás tesztadat nélkül nincs véglegesítve. Mindkettő a boot menüben próbálható:
-a **FusionOS** bejegyzésen `e`, a sor **végére** szóközzel az új elem, majd Enter.
-Ez csak arra az egy indításra érvényes.
+Két beállítás tesztadat nélkül nincs véglegesítve. Mindkettőhöz kész bejegyzés van a
+boot menüben (nyilakkal kiválasztható, nem kell a parancssort szerkeszteni):
 
-| Próba | A sor végére | Mit nézz |
+| Próba | Boot menü bejegyzés | Mit nézz |
 | --- | --- | --- |
-| C1 — KMS nélkül | `nvidia-drm.modeset=0` | elindul-e a Desktop; `cat /sys/module/nvidia_drm/parameters/modeset` → `N`; `glxinfo -B` |
-| C2 — Xorg root nélkül | `fusion.xorg.root=auto` | elindul-e a Desktop; `ps -o user= -C Xorg` → `fusion` vagy `root`; `glxinfo -B` |
+| C1 — KMS nélkül | **FusionOS — mérés: KMS nélkül** | elindul-e a Desktop; `sudo cat /sys/module/nvidia_drm/parameters/modeset` → `N`; `glxinfo -B \| grep renderer` |
+| C2 — Xorg root nélkül | **FusionOS — mérés: Xorg root-jog nélkül** | elindul-e a Desktop; `ps -o user= -C Xorg` → `fusion` vagy `root`; `glxinfo -B \| grep renderer` |
+
+Minden próbánál először: `cat /proc/cmdline` — a sor végén ott kell lennie a próba elemének.
 
 Ha valamelyik próbánál a Desktop nem jön fel: **Ctrl+Alt+F2** → belépés (`fusion`/`fusion`),
 és a napló: `tail -n 30 ~/.local/share/fusion/session.log` és
 `grep EE /var/log/Xorg.0.log ~/.local/share/xorg/Xorg.0.log`.
 
+Megjegyzés: a boot menü szerkesztője (`e`) UEFI alatt amerikai kiosztású — magyar
+billentyűzeten az `=` az `ó` billentyű. A kész bejegyzésekkel erre nincs szükség.
+
 ## Hasznos tudnivalók
 
-- A Desktop kikapcsolása egy indításra: a sor végére `fusion.desktop=0` → szöveges konzol.
+- Szöveges konzol a Desktop nélkül: a boot menüben **FusionOS — szöveges konzol**.
 - Ha a Desktop kilép, a tty1-en a konzol marad; újraindítás: `fusion-session`.
 - A többi konzol (Ctrl+Alt+F2 …) jelszót kér.
