@@ -98,4 +98,6 @@ step_fetch() {
 
     _fetch_nvidia
     ok "NVIDIA $NVIDIA_VERSION: $(find "$(nvidia_debs_dir)" -name '*.deb' | wc -l) csomag"
+
+    fetch_wine_source
 }

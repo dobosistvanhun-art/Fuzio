@@ -4,10 +4,32 @@ Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendsz
 A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M3 — eszközréteg** (soros eszközök stabil néven: `/dev/fusion/laser`, `/dev/fusion/printer`).
-Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook: OpenGL 4.6, Vulkan 1.2.175).
+**Állapot: M4 — Fusion Windows Runtime** (Windows-os LightBurn x64 a FusionOS-en).
+Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
+OpenGL 4.6, Vulkan 1.2.175), M3 (eszközréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
-## Mit tud az M3
+## Mit tud az M4
+
+- **Fusion Windows Runtime** (`fwr`): Windows-programok programonkénti futtatókörnyezetben,
+  profil szerint (`fwr/profiles/*.fwr`); a felhasználó nem Wine-t kezel.
+  - `fwr install lightburn <telepítő.exe>` · `fwr launch lightburn` · `fwr list` · `fwr check`
+  - a környezet a DATA-n: `/data/fwr/<program>/`; a napló: `~/.local/share/fusion/fwr/<program>.log`
+- A motor **Wine 11.0, forrásból, új WoW64 módban** (32 bites Linux-könyvtárak nélkül),
+  rögzített commit-tal (`build.conf`: `WINE_COMMIT`), eldobható build-chrootban fordítva.
+- **COM-portok a Fusion eszközrétegből**: a LightBurn profiljában `COM3 = laser` →
+  `/dev/fusion/laser`. A `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` ebből töltődik ki, így a
+  program a portlistában is látja.
+- **Fusion-javítás a Wine-hoz** (`fwr/wine-patches/`): a `Ports\AutoDetect=N` kapcsoló
+  kikapcsolja a Wine automatikus portkeresését — a program **csak** a profil portjait látja
+  (nem a 32 ttyS-t, és nem a Klipper MCU portját).
+- Meghajtók: `C:` (a környezet) és `P:` = `~/Projektek`; a Linux-fájlrendszer (`Z:`) nem látszik.
+- `fwr check`: a runtime ellenőrzése saját Windows-programokkal (`fwr/tools/`):
+  SERIALCOMM + COM3 megnyitása és írása (GRBL-megjegyzéssel, a gép nem mozdul), OpenGL
+  (WGL → Wine → NVIDIA/Mesa) renderelő és verzió.
+
+Kézi ellenőrzés: `docs/M4-ellenorzes.md`.
+
+## Mit tud az M3 (lezárva)
 
 - A **Fusion eszközréteg** (`fusion-devd`) a soros eszközöket szerephez köti, és stabil nevet
   ad nekik a ttyUSB-sorszámtól és a bedugási sorrendtől függetlenül:
@@ -74,13 +96,14 @@ Ha a letöltés „Unable to locate package” hibát ad: `sudo apt update`.
 | `deps [--install]` | build-függőségek ellenőrzése / telepítése |
 | `fetch` | Ubuntu 6.8.0-142 kernel + modulok, busybox, konzolfont, NVIDIA 470 csomagok (root nélkül, SHA256-tal) |
 | `drivers` | NVIDIA 470 kernelmodul fordítása a rögzített kernelhez (root; az `all` magától hívja) |
+| `wine` | Wine 11.0 (WoW64) fordítása a Fusion Windows Runtime-hoz (root; első alkalommal ~1 óra; az `all` magától hívja) |
 | `rootfs [--force]` | a FusionOS rendszerkép (EROFS) — root kell; az `all` sudo-val hívja, ha a forrás változott |
 | `build` | két initramfs + két UKI (FusionOS, diagnosztika) + ESP |
 | `image` | GPT lemezkép: ESP, A slot (rendszerkép), B (üres), DATA |
 | `vdi` | lemezkép → VDI |
 | `vm [--usb]` | FusionOS-dev VM létrehozása / lemezcsere (`--usb`: lézer és nyomtató átadása, Extension Pack kell) |
 | `vm-start` | a VM indítása |
-| `all` | fetch + drivers + rootfs + build + image + vdi |
+| `all` | fetch + drivers + wine + rootfs + build + image + vdi |
 | `test` | automatikus EFI boot-teszt QEMU + OVMF alatt (lásd lent) |
 | `usb <eszköz>` | felírás pendrive-ra / USB-s kártyaolvasóba (root) |
 | `clean` | build/out törlése |
@@ -160,7 +183,9 @@ machine-id, nincs hibás szolgáltatás; std VGA-n a Fusion Desktopot is (Xorg, 
 ablakkezelő, magyar kiosztás az X-ben). Az std + SATA futásban egy emulált USB-soros eszköz
 (FTDI) is van: `/dev/fusion/laser` létrejön, a `fusion` felhasználó root nélkül megnyitja,
 és a teszt a QEMU monitorán át **kihúzza és visszadugja** — a név ugyanúgy visszatér.
-Ezen felül a mérési és a diagnosztikai bejegyzést is elindítja.
+Ugyanebben a futásban az `fwr check` is lefut: a Windows-program csak a COM3-at látja a
+SERIALCOMM-ban, megnyitja, és a kiírt sor megérkezik az emulált eszközre; az OpenGL a Wine-on
+át működik. Ezen felül a mérési és a diagnosztikai bejegyzést is elindítja.
 
 Megjegyzés: QEMU `-vga vmware` alatt a vmwgfx nem veszi át az eszközt („unsupported
 hypervisor”) — a Hardware Layer ezt `failed`-ként jelzi, és ott a teszt grafikus felületet
@@ -173,6 +198,7 @@ build/        fusion-build, lépések (steps/), konfiguráció (config/)
 rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (overlay/)
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
+fwr/          Fusion Windows Runtime: fwr, profilok, Wine-javítások, diagnosztikai Windows-programok
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
 tools/        fusion-hardware-discovery.sh (Phase 0)

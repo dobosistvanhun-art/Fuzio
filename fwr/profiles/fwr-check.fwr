@@ -1,0 +1,6 @@
+# A Fusion Windows Runtime ellenőrző környezete (fwr check): ugyanazok a portok,
+# mint a LightBurné, program nélkül.
+id = fwr-check
+name = FWR-ellenőrzés
+windows = win10
+port.COM3 = laser

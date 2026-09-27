@@ -1,0 +1,236 @@
+#!/bin/sh
+# =============================================================================
+#  Fusion Windows Runtime — fwr
+#
+#  Windows-programok futtatása a FusionOS-en. A motor a rendszerképben lévő,
+#  rögzített verziójú Wine (új WoW64 mód); a felhasználó nem Wine-t lát, hanem
+#  programonkénti futtatókörnyezetet, amelyet egy profil ír le:
+#
+#    /usr/lib/fusion/fwr/profiles/<id>.fwr   (id, name, exe, windows, port.COMn,
+#                                             drive.X, dlloverrides)
+#    /data/fwr/<id>/                          a program környezete (Wine prefix)
+#
+#  A beállításokat (COM-portok, meghajtók, Windows-verzió) mindig a profil
+#  alapján az fwr írja — nem kézi winecfg. A COM-port a Fusion eszközréteg
+#  szerepére mutat (pl. COM3 -> /dev/fusion/laser); a Wine automatikus
+#  portkeresése ki van kapcsolva, így a program csak a profil portjait látja
+#  (HKLM\HARDWARE\DEVICEMAP\SERIALCOMM is ezekből töltődik ki).
+#
+#  Parancsok:
+#    fwr list                          profilok és állapotuk
+#    fwr install <id> <telepítő.exe>   a Windows-telepítő futtatása a környezetben
+#    fwr launch <id> [argumentumok]    a program indítása
+#    fwr run <id> <program.exe> [arg]  tetszőleges program a környezetben (hibakeresés)
+#    fwr check                         a runtime ellenőrzése: COM3 és OpenGL
+#    fwr prepare <id>                  a környezet létrehozása / frissítése
+#
+#  Környezeti változók (teszteléshez): FWR_WINE, FWR_DATA, FWR_PROFILES, FWR_TOOLS
+# =============================================================================
+set -u
+
+FWR_WINE="${FWR_WINE:-/usr/lib/fusion/wine}"
+FWR_DATA="${FWR_DATA:-/data/fwr}"
+FWR_PROFILES="${FWR_PROFILES:-/usr/lib/fusion/fwr/profiles}"
+FWR_TOOLS="${FWR_TOOLS:-/usr/lib/fusion/fwr/tools}"
+FWR_LOGS="${HOME:-/tmp}/.local/share/fusion/fwr"
+WINE="$FWR_WINE/bin/wine"
+WINESERVER="$FWR_WINE/bin/wineserver"
+
+say()  { printf '%s\n' "$*"; }
+fail() { printf 'fwr: %s\n' "$*" >&2; exit 1; }
+
+prof_get() {  # prof_get <fájl> <kulcs>
+    sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1 | sed 's/[[:space:]]*$//'
+}
+prof_keys() {  # prof_keys <fájl> <előtag> -> "kulcs|érték" sorok
+    sed -n "s/^[[:space:]]*$2\.\([A-Za-z0-9]*\)[[:space:]]*=[[:space:]]*\(.*\)$/\1|\2/p" "$1" | sed 's/[[:space:]]*$//'
+}
+profile() {  # profile <id> -> a profilfájl
+    _pf="$FWR_PROFILES/$1.fwr"
+    [ -r "$_pf" ] || fail "ismeretlen program: $1 (lásd: fwr list)"
+    printf '%s' "$_pf"
+}
+
+# C:\Program Files\X\Y.exe -> <prefix>/drive_c/Program Files/X/Y.exe
+win_to_unix() {
+    _p=$(printf '%s' "$2" | sed 's|\\|/|g')
+    case "$_p" in
+        [Cc]:/*) printf '%s/drive_c/%s' "$1" "${_p#??/}" ;;
+        *)       printf '%s' "$_p" ;;
+    esac
+}
+
+wine_env() {  # wine_env <id> <profil>
+    WINEPREFIX="$FWR_DATA/$1"
+    WINEDEBUG="${FWR_DEBUG:-err+all,fixme-all}"
+    # mono/gecko nélkül (a célprogramoknak nem kell), menüelemek nélkül
+    WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d;$(prof_get "$2" dlloverrides)"
+    export WINEPREFIX WINEDEBUG WINEDLLOVERRIDES
+    mkdir -p "$FWR_LOGS"
+    LOG="$FWR_LOGS/$1.log"
+}
+
+wine_build_id() { cat "$FWR_WINE/.fusion-build-id" 2>/dev/null || "$WINE" --version 2>/dev/null; }
+
+# ---------------------------------------------------------------------------
+# prepare: a környezet létrehozása / frissítése a profil alapján
+# ---------------------------------------------------------------------------
+cmd_prepare() {
+    [ $# -ge 1 ] || fail "használat: fwr prepare <id>"
+    id=$1; pf=$(profile "$id")
+    [ -x "$WINE" ] || fail "a Windows runtime nincs telepítve ($WINE)"
+    wine_env "$id" "$pf"
+    mkdir -p "$FWR_DATA" 2>/dev/null
+    [ -w "$FWR_DATA" ] || fail "a $FWR_DATA nem írható"
+    stamp="$WINEPREFIX/.fwr-stamp"
+    want="$(wine_build_id) $(sha256sum "$pf" "$0" | cut -c1-16 | tr '\n' ' ')"
+    if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then return 0; fi
+
+    say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
+    if [ ! -r "$WINEPREFIX/system.reg" ]; then
+        "$WINE" wineboot -i >> "$LOG" 2>&1 || fail "a környezet létrehozása nem sikerült (napló: $LOG)"
+    else
+        "$WINE" wineboot -u >> "$LOG" 2>&1 || true
+    fi
+    "$WINESERVER" -w
+
+    # registry: portok (csak a profil portjai), Windows-verzió
+    # a .reg fájl a környezeten belül (C:), mert a Linux-fájlrendszer (Z:) nem látszik
+    reg="$WINEPREFIX/drive_c/fusion-settings.reg"
+    {
+        echo "REGEDIT4"
+        echo
+        echo "[-HKEY_LOCAL_MACHINE\\Software\\Wine\\Ports]"
+        echo "[HKEY_LOCAL_MACHINE\\Software\\Wine\\Ports]"
+        echo "\"AutoDetect\"=\"N\""
+        prof_keys "$pf" port | while IFS='|' read -r com role; do
+            echo "\"$com\"=\"/dev/fusion/$role\""
+        done
+        echo
+        echo "[HKEY_CURRENT_USER\\Software\\Wine]"
+        echo "\"Version\"=\"$(prof_get "$pf" windows)\""
+    } > "$reg"
+    "$WINE" regedit /S 'C:\fusion-settings.reg' >> "$LOG" 2>&1 \
+        || fail "a beállítások írása nem sikerült (napló: $LOG)"
+    rm -f "$reg"
+
+    # meghajtók: a profil meghajtói; a teljes Linux-fájlrendszer (Z:) nem látszik
+    dd="$WINEPREFIX/dosdevices"
+    rm -f "$dd/z:"
+    prof_keys "$pf" drive | while IFS='|' read -r letter dir; do
+        l=$(printf '%s' "$letter" | tr '[:upper:]' '[:lower:]')
+        case "$dir" in /*) target=$dir ;; *) target="$HOME/$dir" ;; esac
+        mkdir -p "$target"
+        rm -f "$dd/$l:"; ln -s "$target" "$dd/$l:"
+    done
+    "$WINESERVER" -k 2>/dev/null; "$WINESERVER" -w 2>/dev/null
+    echo "$want" > "$stamp"
+    say "fwr: kész."
+}
+
+# a profil portjai mögötti eszközök állapota (felhasználóbarát figyelmeztetés)
+port_report() {
+    prof_keys "$1" port | while IFS='|' read -r com role; do
+        if [ -e "/dev/fusion/$role" ]; then
+            say "  $com -> /dev/fusion/$role ($(basename "$(readlink -f "/dev/fusion/$role")"))"
+        else
+            say "  $com -> /dev/fusion/$role: NINCS CSATLAKOZTATVA (fusion-devices)"
+        fi
+    done
+}
+
+cmd_install() {
+    [ $# -eq 2 ] || fail "használat: fwr install <id> <telepítő.exe>"
+    id=$1; inst=$2; pf=$(profile "$id")
+    [ -r "$inst" ] || fail "nem található: $inst"
+    cmd_prepare "$id"
+    wine_env "$id" "$pf"
+    # a telepítő a környezeten belülre kerül (a Linux-fájlrendszer nem látszik)
+    tmp="$WINEPREFIX/drive_c/fusion-install"
+    rm -rf "$tmp"; mkdir -p "$tmp"; cp "$inst" "$tmp/"
+    name=$(basename "$inst")
+    say "fwr: $(prof_get "$pf" name) telepítése: $name"
+    (cd "$tmp" && "$WINE" "C:\\fusion-install\\$name" >> "$LOG" 2>&1)
+    "$WINESERVER" -w
+    rm -rf "$tmp"
+    exe=$(win_to_unix "$WINEPREFIX" "$(prof_get "$pf" exe)")
+    if [ -f "$exe" ]; then
+        say "fwr: telepítve — indítás: fwr launch $id"
+    else
+        fail "a telepítés után nem található: $(prof_get "$pf" exe) (napló: $LOG)"
+    fi
+}
+
+cmd_launch() {
+    [ $# -ge 1 ] || fail "használat: fwr launch <id> [argumentumok]"
+    id=$1; shift; pf=$(profile "$id")
+    cmd_prepare "$id"
+    wine_env "$id" "$pf"
+    winexe=$(prof_get "$pf" exe)
+    exe=$(win_to_unix "$WINEPREFIX" "$winexe")
+    [ -f "$exe" ] || fail "$(prof_get "$pf" name) nincs telepítve — telepítés: fwr install $id <telepítő.exe>"
+    say "fwr: $(prof_get "$pf" name) indítása"
+    port_report "$pf"
+    printf '\n=== %s indítás: %s\n' "$(date '+%F %T')" "$winexe" >> "$LOG"
+    cd "$(dirname "$exe")" || true
+    "$WINE" "$winexe" "$@" >> "$LOG" 2>&1
+    rc=$?
+    [ $rc -eq 0 ] || say "fwr: $(prof_get "$pf" name) kilépett (kód: $rc) — napló: $LOG"
+    return $rc
+}
+
+cmd_run() {
+    [ $# -ge 2 ] || fail "használat: fwr run <id> <program.exe> [argumentumok]"
+    id=$1; prog=$2; shift 2; pf=$(profile "$id")
+    cmd_prepare "$id" >/dev/null
+    wine_env "$id" "$pf"
+    "$WINE" "$prog" "$@" 2>> "$LOG"
+}
+
+# check: a runtime ellenőrzése a "fwr-check" profillal (COM3 -> lézer, OpenGL)
+cmd_check() {
+    rc=0
+    say "Fusion Windows Runtime — ellenőrzés"
+    say "  Wine:   $("$WINE" --version 2>/dev/null) ($(wine_build_id))"
+    cmd_prepare fwr-check >/dev/null || return 1
+    pf=$(profile fwr-check)
+    port_report "$pf"
+    # a diagnosztikai programok a környezeten belülről (C:\fusion-tools) futnak
+    mkdir -p "$FWR_DATA/fwr-check/drive_c/fusion-tools"
+    cp "$FWR_TOOLS"/*.exe "$FWR_DATA/fwr-check/drive_c/fusion-tools/"
+    # a próbasor GRBL-megjegyzés: a vezérlő figyelmen kívül hagyja (csak "ok"), a gép nem mozdul
+    out=$(cmd_run fwr-check 'C:\fusion-tools\fwr-comtest.exe' COM3 "$(printf '(FUSION-COM-OK)\r')" 2>&1); r=$?
+    printf '%s\n' "$out" | tr -d '\r' | sed 's/^/  /'
+    [ $r -eq 0 ] || rc=1
+    if [ -n "${DISPLAY:-}" ]; then
+        out=$(cmd_run fwr-check 'C:\fusion-tools\fwr-gltest.exe' 2>&1); r=$?
+        printf '%s\n' "$out" | tr -d '\r' | grep '^GL' | sed 's/^/  /'
+        [ $r -eq 0 ] || { say "  GL: HIBA (kód $r)"; rc=1; }
+    else
+        say "  GL: nincs grafikus munkamenet (DISPLAY), kihagyva"
+    fi
+    return $rc
+}
+
+cmd_list() {
+    say "Fusion Windows Runtime — programok"
+    for pf in "$FWR_PROFILES"/*.fwr; do
+        [ -r "$pf" ] || continue
+        id=$(prof_get "$pf" id); [ "$id" = fwr-check ] && continue
+        exe=$(win_to_unix "$FWR_DATA/$id" "$(prof_get "$pf" exe)")
+        if [ -f "$exe" ]; then st="telepítve (fwr launch $id)"; else st="nincs telepítve (fwr install $id <telepítő.exe>)"; fi
+        say "  $(prof_get "$pf" name) [$id]: $st"
+        port_report "$pf"
+    done
+}
+
+cmd=${1:-list}; [ $# -gt 0 ] && shift
+case "$cmd" in
+    list)    cmd_list ;;
+    prepare) cmd_prepare "$@" ;;
+    install) cmd_install "$@" ;;
+    launch)  cmd_launch "$@" ;;
+    run)     cmd_run "$@" ;;
+    check)   cmd_check ;;
+    *)       fail "ismeretlen parancs: $cmd (list, install, launch, run, check, prepare)" ;;
+esac

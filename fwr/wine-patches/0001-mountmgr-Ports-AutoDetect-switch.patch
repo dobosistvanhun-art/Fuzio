@@ -1,0 +1,32 @@
+From 2c0b36d44c9cb542690a21b8f5011b3a39237a82 Mon Sep 17 00:00:00 2001
+From: FusionOS <fusion@localhost>
+Date: Sun, 27 Sep 2026 18:04:21 +0200
+Subject: [PATCH] mountmgr: HKLM\Software\Wine\Ports\AutoDetect=N disables
+ automatic serial/parallel port mapping (FusionOS)
+
+---
+ dlls/mountmgr.sys/device.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/dlls/mountmgr.sys/device.c b/dlls/mountmgr.sys/device.c
+index 733d48a..bb81156 100644
+--- a/dlls/mountmgr.sys/device.c
++++ b/dlls/mountmgr.sys/device.c
+@@ -2033,6 +2033,14 @@ static void create_port_devices( DRIVER_OBJECT *driver, const char *devices )
+         create_port_device( driver, n, unix_path, dosdev, &windows_ports_key );
+     }
+ 
++    /* FusionOS: HKLM\Software\Wine\Ports\AutoDetect = "N" -> only the user-defined
++     * ports above are created; the usual Unix devices (/dev/ttyS*, /dev/ttyUSB*, ...)
++     * are not mapped to further COM/LPT numbers. */
++    size = sizeof(reg_value);
++    if (!RegQueryValueExW( wine_ports_key, L"AutoDetect", NULL, &type, (BYTE *)reg_value, &size ) &&
++        type == REG_SZ && (reg_value[0] == 'N' || reg_value[0] == 'n' || reg_value[0] == '0'))
++        devices = "";
++
+     /* look for ports in the usual places */
+ 
+     for (n = 1; *devices; n++, devices += strlen(devices) + 1)
+-- 
+2.43.0
+

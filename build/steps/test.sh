@@ -54,7 +54,7 @@ _qemu_run() {
     esac
     cp "$(_ovmf_vars)" "$out/vars-$cfg.fd"
     rm -f "$log" "$out/screen-$cfg.ppm"
-    timeout 600 qemu-system-x86_64 \
+    timeout "${QEMU_TIMEOUT:-600}" qemu-system-x86_64 \
         -machine q35,accel="$accel" -m 2048 -smp 2 \
         -drive if=pflash,format=raw,readonly=on,file="$(_ovmf_code)" \
         -drive if=pflash,format=raw,file="$out/vars-$cfg.fd" \
@@ -121,9 +121,9 @@ step_test() {
             ser=1; serinfo=", + USB-soros eszköz"
             # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
             QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV")
-            QEMU_HOTPLUG=1
+            QEMU_HOTPLUG=1; QEMU_TIMEOUT=2400   # a Wine-környezet létrehozása KVM nélkül lassú
         else
-            QEMU_EXTRA=(); QEMU_HOTPLUG=0
+            QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=600
         fi
         step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
@@ -152,16 +152,26 @@ step_test() {
             _check "$log" "FUSION-M3: GONE" "kihúzáskor a név eltűnik" || ok_run=0
             _check "$log" "FUSION-M3: BACK ttyUSB" "visszadugás után ugyanazzal a névvel visszatér" || ok_run=0
             _check "$log" "FUSION-M3: REOPEN fusion ok" "visszadugás után is megnyitható" || ok_run=0
+            # M4: Fusion Windows Runtime — a Windows-program csak a COM3-at látja, és azon át ír a lézer-eszközre
+            _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
+            _check "$log" "FUSION-M4:   *SERIALCOMM: COM3\s*\$" "a SERIALCOMM-ban csak a COM3 (automatikus portkeresés kikapcsolva)" || ok_run=0
+            _check "$log" "FUSION-M4:   *COM3: megnyitva, 115200 8N1" "a Windows-program megnyitja a COM3-at" || ok_run=0
+            _check "$log" "FUSION-M4:   *GL_RENDERER: llvmpipe" "OpenGL a Wine-on át (WGL)" || ok_run=0
+            _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
+            if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
+                warn "hiányzik: a COM3-ra írt sor nem érkezett meg az USB-soros eszközre ($out/serial-$cfg.out)"; ok_run=0
+            fi
         else
             _check "$log" "FUSION-M3: LASER none" "soros eszköz nélkül nincs /dev/fusion/laser" || ok_run=0
+            _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
         fi
         _check "$log" "FUSION-M3: NOGRAB ok" "nincs ModemManager / brltty" || ok_run=0
-        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)' "$log" | sed 's/^/      /' >&2
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else
             warn "SIKERTELEN — napló: $log"
-            grep -a 'FUSION-M[123]\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
+            grep -a 'FUSION-M[1234]\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
             fails=$((fails + 1))
         fi
     done
@@ -171,7 +181,7 @@ step_test() {
     FUSION_VARIANT="test" step_image >/dev/null
     log="$out/qemu-konzol.log"
     step "QEMU EFI boot → mérési bejegyzés: szöveges konzol (fusion.desktop=0)"
-    QEMU_EXTRA=(); QEMU_HOTPLUG=0
+    QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=600
     _qemu_run konzol std sata "$log" "FUSION-M1: SYSTEM UP"
     if _check "$log" "FUSION-M1: CMDLINE .*fusion.desktop=0" "a bejegyzés parancssora átjutott" \
        && _check "$log" "FUSION-M2: XORG disabled" "Desktop kikapcsolva" \
@@ -186,7 +196,7 @@ step_test() {
     FUSION_VARIANT="test" step_image >/dev/null
     log="$out/qemu-diag-usb.log"
     step "QEMU EFI boot → diagnosztika: -vga std, lemez: usb"
-    QEMU_EXTRA=(); QEMU_HOTPLUG=0
+    QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=600
     _qemu_run diag-usb std usb "$log" "FUSION-M0: BOOT OK"
     if _check "$log" "FUSION-M0: BOOT OK" "diagnosztika fut" \
        && _check "$log" "FUSION-M0: PARTITIONS 4/4" "4 partíció"; then

@@ -7,7 +7,7 @@
 set -euo pipefail
 R="$1"
 : "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
-: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}"
+: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] FusionOS fájlok"
@@ -73,6 +73,21 @@ echo "  [customize] grafikus szerver (a Fusion Hardware Layer beállításaival)
 ln -sf /run/fusion/hardware/xorg-display.conf "$R/etc/X11/xorg.conf.d/10-fusion-display.conf"
 ln -sf /run/fusion/hardware/Xwrapper.config "$R/etc/X11/Xwrapper.config"
 chmod 0755 "$R/usr/lib/fusion/bin/"* "$R/usr/lib/fusion/session/xinitrc"
+
+echo "  [customize] Fusion Windows Runtime (Wine $FUSION_WINE_ID)"
+mkdir -p "$R/usr/lib/fusion/wine" "$R/usr/lib/fusion/fwr/tools"
+tar -C "$R/usr/lib/fusion/wine" -xf "$FUSION_WINE_BUILD/wine.tar"
+echo "$FUSION_WINE_ID" > "$R/usr/lib/fusion/wine/.fusion-build-id"
+cp "$FUSION_WINE_BUILD/BUILD-INFO" "$R/usr/lib/fusion/wine/BUILD-INFO"
+install -m 0755 "$FUSION_ROOT/fwr/fwr" "$R/usr/lib/fusion/fwr/fwr"
+rm -rf "$R/usr/lib/fusion/fwr/profiles"; cp -r "$FUSION_ROOT/fwr/profiles" "$R/usr/lib/fusion/fwr/profiles"
+install -m 0644 "$FUSION_WINE_BUILD"/*.exe "$R/usr/lib/fusion/fwr/tools/"
+chown -R root:root "$R/usr/lib/fusion/wine" "$R/usr/lib/fusion/fwr"
+ln -sf /usr/lib/fusion/fwr/fwr "$R/usr/bin/fwr"
+[ -x "$R/usr/lib/fusion/wine/bin/wine" ] || { echo "  [customize] HIBA: nincs wine a képben"; exit 1; }
+# a futtatókörnyezetek helye a DATA-n (az első indításkor jön létre)
+mkdir -p "$R/usr/lib/tmpfiles.d"
+echo "d /data/fwr 0755 fusion fusion -" > "$R/usr/lib/tmpfiles.d/fusion-fwr.conf"
 
 echo "  [customize] eszközréteg: a soros portot semmi ne foglalja le"
 for pkg in modemmanager brltty; do

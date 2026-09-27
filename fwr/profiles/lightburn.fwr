@@ -1,0 +1,10 @@
+# LightBurn (Windows x64) — a Prototype 0.1 célprogramja
+# Telepítés: fwr install lightburn <LightBurn-…-x64.exe>   Indítás: fwr launch lightburn
+id = lightburn
+name = LightBurn
+exe = C:\Program Files\LightBurn\LightBurn.exe
+windows = win10
+# a lézer a Fusion eszközréteg szerepe szerint (M3): COM3 -> /dev/fusion/laser
+port.COM3 = laser
+# P: = Projektek (a felhasználó mappája); a Linux-fájlrendszer (Z:) nem látszik
+drive.P = Projektek

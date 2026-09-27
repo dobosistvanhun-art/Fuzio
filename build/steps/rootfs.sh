@@ -13,7 +13,8 @@ rootfs_stale() {
     local img; img=$(rootfs_img)
     [ -r "$img" ] || return 0
     nvidia_ko_ready || return 0
-    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" \
+    wine_ready || return 0
+    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" \
               -newer "$img" -type f -print -quit 2>/dev/null)" ]
 }
 
@@ -43,6 +44,8 @@ step_rootfs() {
 
     # a gyári kernelmodulok (NVIDIA) a rögzített kernelhez — ha hiányoznak, most fordulnak
     nvidia_ko_ready || step_drivers
+    # a Fusion Windows Runtime motorja (Wine, WoW64) — ha még nincs kész, most fordul
+    wine_ready || step_wine
 
     # a rögzített NVIDIA csomagok helyi .deb fájlként (a forráscsomag nem kerül a képbe)
     local -a nvinc=()
@@ -59,10 +62,11 @@ step_rootfs() {
     step "Rendszerkép: Ubuntu 24.04 (noble) minbase + FusionOS csomagok"
     info "tükör: $ROOTFS_MIRROR"
     FUSION_NVIDIA_KO=$(nvidia_ko_dir)
+    FUSION_WINE_BUILD=$(wine_out_dir); FUSION_WINE_ID=$(wine_build_id)
     FUSION_EXTRA_ROOT="$CACHE_DIR/root"
     [ -d "$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI" ] || die "hiányzik a kicsomagolt kernel — előbb: build/fusion-build fetch"
     export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES \
-           FUSION_EXTRA_ROOT EXTRA_MODULES
+           FUSION_EXTRA_ROOT EXTRA_MODULES FUSION_WINE_BUILD FUSION_WINE_ID
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \
         --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \

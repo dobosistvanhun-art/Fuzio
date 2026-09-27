@@ -83,5 +83,16 @@ echo "FUSION-M3: TTY $(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ')"
 echo "FUSION-M3: USB $(lsusb 2>/dev/null | grep -v 'root hub' | cut -d' ' -f6- | tr '\n' ';')"
 echo "FUSION-M3: MODS $(lsmod | awk '$1 ~ /^(usbserial|ftdi_sio|ch341|cp210x|pl2303|cdc_acm|xhci_pci)$/ {print $1}' | tr '\n' ' ')"
 echo "FUSION-M3: NOGRAB $(for c in ModemManager brltty; do command -v $c >/dev/null && printf '%s ' $c; done)ok"
+# --- M4: Fusion Windows Runtime (Wine WoW64; COM3 -> /dev/fusion/laser; OpenGL) ---
+if [ -x /usr/lib/fusion/wine/bin/wine ]; then
+    echo "FUSION-M4: WINE $(/usr/lib/fusion/wine/bin/wine --version 2>/dev/null)"
+    if [ -e /dev/fusion/laser ]; then
+        out=$(timeout 1200 runuser -u fusion -- env HOME=/home/fusion DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority \
+              /usr/bin/fwr check 2>&1); rc=$?
+        printf '%s\n' "$out" | sed 's/^/FUSION-M4:   /'
+        echo "FUSION-M4: CHECK rc=$rc"
+        echo "FUSION-M4: PREFIX $(ls -d /data/fwr/fwr-check/drive_c 2>/dev/null) owner=$(stat -c %U /data/fwr/fwr-check 2>/dev/null)"
+    fi
+fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block
