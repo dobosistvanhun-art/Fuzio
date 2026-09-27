@@ -15,6 +15,8 @@ step_image() {
     need sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate dd
     local out; out=$(variant_dir)
     [ -d "$out/esp" ] || die "előbb futtasd: build/fusion-build build"
+    local rootimg; rootimg=$(rootfs_img)
+    [ -r "$rootimg" ] || die "nincs rendszerkép — előbb: build/fusion-build rootfs (vagy all)"
     local img="$out/fusionos.img" total; total=$(image_total_mib)
 
     step "Lemezkép készítése ($total MiB, ritka fájl)"
@@ -38,12 +40,16 @@ step_image() {
     dd if="$espimg" of="$img" bs=1M seek=1 conv=notrunc,sparse status=none
     rm -f "$espimg"
 
+    # A slot: a FusionOS rendszerkép (EROFS)
+    dd if="$rootimg" of="$img" bs=1M seek=$((1 + ESP_MIB)) conv=notrunc,sparse status=none
+    info "A slot: $(basename "$rootimg") ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB); B slot: üres"
+
     # DATA: ext4, a tartalmát a -d kapcsoló tölti fel (root nélkül)
     local dataimg="$out/data.ext4" stage="$out/data-stage"
     rm -rf "$stage" "$dataimg"; mkdir -p "$stage"
     _data_readme > "$stage/README.txt"
     truncate -s "${IMAGE_DATA_MIB}M" "$dataimg"
-    mkfs.ext4 -q -F -L FUSION_DATA -d "$stage" "$dataimg"
+    mkfs.ext4 -q -F -E nodiscard -L FUSION_DATA -d "$stage" "$dataimg"
     dd if="$dataimg" of="$img" bs=1M seek=$((1 + ESP_MIB + 2 * SLOT_MIB)) conv=notrunc,sparse status=none
     rm -rf "$dataimg" "$stage"
 

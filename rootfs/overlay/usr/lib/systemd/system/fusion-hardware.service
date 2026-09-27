@@ -1,0 +1,17 @@
+[Unit]
+Description=Fusion Hardware Layer — grafikus hardver azonosítása és driver betöltése
+DefaultDependencies=no
+After=systemd-udevd.service systemd-udev-trigger.service systemd-modules-load.service
+Wants=systemd-udev-trigger.service
+Before=sysinit.target getty-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# a settle időtúllépése nem hiba: a hardverazonosítás a sysfs-ből dolgozik
+ExecStartPre=-/usr/bin/udevadm settle --timeout=10
+ExecStart=/usr/lib/fusion/hardware/fusion-hwprobe --apply -q
+
+[Install]
+WantedBy=sysinit.target

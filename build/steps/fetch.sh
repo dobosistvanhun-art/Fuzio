@@ -26,7 +26,7 @@ step_fetch() {
                 || true
         fi
         compgen -G "$debs/${name}_*.deb" >/dev/null \
-            || die "nem sikerült letölteni: $name ${ver} — ha a verzió már nincs a tárolóban, frissítsd a build/config/build.conf fájlt (apt-cache policy $name)."
+            || die "nem sikerült letölteni: $name ${ver} — futtasd: sudo apt update. Ha a verzió már nincs a tárolóban, frissítsd a build/config/build.conf fájlt (apt-cache policy $name)."
     done
 
     step "Csomagok kibontása"

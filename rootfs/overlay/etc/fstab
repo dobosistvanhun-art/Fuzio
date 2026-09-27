@@ -1,0 +1,2 @@
+# FusionOS: a gyökér (csak olvasható EROFS), a /data, az /etc és a /var
+# overlay-t, valamint a /home-ot a fusion-init csatolja az initramfs-ben.

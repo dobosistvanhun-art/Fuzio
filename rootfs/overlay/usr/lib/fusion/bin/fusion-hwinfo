@@ -1,0 +1,3 @@
+#!/bin/sh
+# A Fusion Hardware Layer aktuális állapota, emberi nyelven.
+exec /usr/lib/fusion/hardware/fusion-hwprobe --status

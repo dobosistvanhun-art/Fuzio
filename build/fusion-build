@@ -7,13 +7,14 @@
 #  Parancsok:
 #    deps [--install]   build-függőségek ellenőrzése (--install: telepítés apt-tal)
 #    fetch              kernel, busybox, modulok, betűkészlet letöltése (root nélkül)
-#    build              initramfs + UKI + ESP-fa
+#    rootfs [--force]   a FusionOS rendszerkép (EROFS) építése — root kell (sudo)
+#    build              initramfs-ek + UKI-k (FusionOS + diagnosztika) + ESP-fa
 #    image              GPT lemezkép (VirtualBox / QEMU)
 #    vdi                a lemezkép VDI-vé alakítása
 #    vm [--usb]         FusionOS-dev VirtualBox VM létrehozása / frissítése
 #                       (--usb: lézer + nyomtató USB-átadása, Extension Pack kell)
 #    vm-start           a VM indítása
-#    all                fetch + build + image + vdi
+#    all                fetch + rootfs (sudo-t kér, ha kell) + build + image + vdi
 #    test               automatikus EFI boot-teszt QEMU + OVMF alatt
 #    usb <eszköz>       felírás pendrive-ra (root: sudo build/fusion-build usb /dev/sdX)
 #    clean              a build/out törlése (a letöltött cache marad)
@@ -27,8 +28,8 @@ for s in "$BUILD_DIR"/steps/*.sh; do
     . "$s"
 done
 
-DEPS_CMDS=(apt-get dpkg-deb sha256sum cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate)
-DEPS_PKGS="systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils"
+DEPS_CMDS=(apt-get dpkg-deb sha256sum cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
+DEPS_PKGS="systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
 DEPS_OPT_PKGS="qemu-system-x86 ovmf"
 
 step_deps() {
@@ -61,18 +62,19 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
     deps)     step_deps "$@" ;;
     fetch)    step_fetch ;;
+    rootfs)   if [ "$(id -u)" -eq 0 ]; then step_rootfs; else ensure_rootfs "$@"; fi ;;
     build)    step_build ;;
     image)    step_image ;;
     vdi)      step_vdi ;;
     vm)       step_vm "$@" ;;
     vm-start) step_vm_start ;;
-    all)      step_fetch; step_build; step_image
+    all)      step_fetch; ensure_rootfs; step_build; step_image
               if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
     test)     step_test ;;
     usb)      step_usb "$@" ;;

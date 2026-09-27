@@ -22,6 +22,10 @@
 #    $FUSION_RUN/hardware/display.env   — gépi olvasásra (KEY='érték' sorok)
 #    stdout                             — emberi összefoglaló (-q: nincs)
 #    --env                              — a display.env tartalmát írja stdoutra
+#    --apply                            — a profil display.kernel_modules moduljait
+#                                         be is tölti (modprobe); az állapot a
+#                                         FUSION_DISPLAY_DRIVER_STATE kulcsban
+#    --status                           — a legutóbbi eredmény kiírása (nem keres újra)
 # =============================================================================
 
 set -u
@@ -39,19 +43,32 @@ else
     PROFILES="/usr/lib/fusion/hardware/profiles"
 fi
 
+# a modulkezelő parancsok felülírhatók (tesztekhez)
+MODINFO="${FUSION_MODINFO:-modinfo}"
+MODPROBE="${FUSION_MODPROBE:-modprobe}"
+
 QUIET=0
 PRINT_ENV=0
+APPLY=0
 for a in "$@"; do
     case "$a" in
         -q|--quiet) QUIET=1 ;;
         --env) PRINT_ENV=1; QUIET=1 ;;
+        --apply) APPLY=1 ;;
+        --status)
+            if [ -r "$HW_DIR/display.summary" ]; then cat "$HW_DIR/display.summary"; exit 0; fi ;;
         -h|--help)
-            echo "Használat: fusion-hwprobe [-q] [--env]"
+            echo "Használat: fusion-hwprobe [-q] [--env] [--apply] [--status]"
             exit 0 ;;
     esac
 done
 
-say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+SUMMARY=""
+say() {
+    SUMMARY="$SUMMARY$*
+"
+    [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"
+}
 
 lower() { printf '%s' "$1" | tr 'ABCDEF' 'abcdef'; }
 
@@ -154,6 +171,34 @@ elif [ -n "$FW_FILE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
+# 3b) Driver betöltése (--apply): a profil display.kernel_modules listája
+#     none    — a profil nem kér modult (pl. firmware framebuffer)
+#     loaded  — minden modul betöltve
+#     missing — a modul nincs a rendszerben (pl. az NVIDIA driver még nincs telepítve)
+#     failed  — a modul megvan, de nem tölthető be
+#     skipped — nem kértek betöltést (--apply nélkül)
+# -----------------------------------------------------------------------------
+DRIVER_STATE="skipped"; DRIVER_DETAIL=""
+if [ -n "$CHOSEN" ]; then
+    MODS=$(profile_get "$CHOSEN" display.kernel_modules)
+    if [ "$APPLY" -eq 1 ]; then
+        if [ -z "$MODS" ]; then
+            DRIVER_STATE="none"
+        else
+            DRIVER_STATE="loaded"
+            for m in $MODS; do
+                if ! $MODINFO -n "$m" >/dev/null 2>&1; then
+                    DRIVER_STATE="missing"; DRIVER_DETAIL="$DRIVER_DETAIL $m"
+                elif ! $MODPROBE "$m" 2>/dev/null; then
+                    [ "$DRIVER_STATE" = "missing" ] || DRIVER_STATE="failed"
+                    DRIVER_DETAIL="$DRIVER_DETAIL $m"
+                fi
+            done
+        fi
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # 4) Kimenet
 # -----------------------------------------------------------------------------
 ENV_OUT=""
@@ -177,6 +222,8 @@ if [ -n "$CHOSEN" ]; then
     done < "$CHOSEN"
 fi
 [ -n "$MESSAGE" ] && add_env FUSION_DISPLAY_MESSAGE "$MESSAGE"
+add_env FUSION_DISPLAY_DRIVER_STATE "$DRIVER_STATE"
+[ -n "$DRIVER_DETAIL" ] && add_env FUSION_DISPLAY_DRIVER_DETAIL "${DRIVER_DETAIL# }"
 
 if mkdir -p "$HW_DIR" 2>/dev/null; then
     printf '%s' "$ENV_OUT" > "$HW_DIR/display.env.tmp" && mv "$HW_DIR/display.env.tmp" "$HW_DIR/display.env"
@@ -207,4 +254,11 @@ else
 fi
 say "  Állapot: $STATUS"
 [ -n "$MESSAGE" ] && say "  Megjegyzés: $MESSAGE"
+case "$DRIVER_STATE" in
+    loaded)  say "  Driver:  betöltve ($MODS)" ;;
+    none)    say "  Driver:  nincs külön driver (firmware framebuffer)" ;;
+    missing) say "  Driver:  NINCS TELEPÍTVE:${DRIVER_DETAIL} — a firmware framebuffer marad" ;;
+    failed)  say "  Driver:  NEM TÖLTHETŐ BE:${DRIVER_DETAIL}" ;;
+esac
+[ -d "$HW_DIR" ] && printf '%s' "$SUMMARY" > "$HW_DIR/display.summary" 2>/dev/null
 exit 0

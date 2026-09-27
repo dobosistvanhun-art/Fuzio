@@ -1,0 +1,34 @@
+# FusionOS M1 rendszerkép — csomaglista (Ubuntu 24.04 noble, minbase fölé)
+# Egy sor = egy csomag. A # utáni rész megjegyzés.
+
+# init, eszközkezelés, munkamenetek
+systemd
+systemd-sysv
+udev
+dbus
+libpam-systemd
+kmod
+
+# kernelmodulok — pontosan a UKI kernelének verziója (build.conf: KERNEL_ABI)
+linux-modules-@KERNEL_ABI@
+
+# hálózat (M1: vezetékes DHCP; a Wi-Fi később)
+iproute2
+netbase
+systemd-resolved
+iputils-ping
+
+# magyar nyelv, billentyűzet, konzol, időzóna
+locales
+keyboard-configuration
+console-setup
+console-setup-linux
+kbd
+tzdata
+
+# kezelés és hibakeresés a fejlesztés alatt
+sudo
+less
+nano
+pciutils
+usbutils

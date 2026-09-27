@@ -103,5 +103,46 @@ else
     FAIL=$((FAIL + 1)); echo "  HIBA  display.env tartalma hiányos"
 fi
 
+# 11-13. --apply: ál-modinfo/modprobe. FAKE_MODS = létező modulok, FAKE_BROKEN = betölthetetlenek
+FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/modinfo" <<'EOS'
+#!/bin/sh
+m=$(eval echo "\$$#")
+case " $FAKE_MODS " in *" $m "*) echo "/lib/modules/x/$m.ko"; exit 0 ;; esac
+exit 1
+EOS
+cat > "$FAKEBIN/modprobe" <<'EOS'
+#!/bin/sh
+m=$(eval echo "\$$#")
+case " $FAKE_BROKEN " in *" $m "*) exit 1 ;; esac
+echo "$m" >> "$FAKE_LOG"; exit 0
+EOS
+chmod +x "$FAKEBIN/modinfo" "$FAKEBIN/modprobe"
+
+# apply_check <név> <sysfs> <FAKE_MODS> <FAKE_BROKEN> <várt állapot> <várt betöltött modulok>
+apply_check() {
+    run="$TMP/apply-$1"; log="$TMP/apply-$1.log"; : > "$log"
+    FUSION_MODINFO="$FAKEBIN/modinfo" FUSION_MODPROBE="$FAKEBIN/modprobe" \
+        FAKE_MODS="$3" FAKE_BROKEN="$4" FAKE_LOG="$log" \
+        FUSION_SYSFS="$2" FUSION_RUN="$run" $RUNNER "$PROBE" --apply -q
+    st=$(sed -n "s/^FUSION_DISPLAY_DRIVER_STATE='\(.*\)'$/\1/p" "$run/hardware/display.env")
+    loaded=$(tr '\n' ' ' < "$log" | sed 's/ $//')
+    if [ "$st" = "$5" ] && [ "$loaded" = "$6" ]; then
+        PASS=$((PASS + 1)); echo "  OK    apply $1: $st [${loaded}]"
+    else
+        FAIL=$((FAIL + 1)); echo "  HIBA  apply $1: várt $5 [$6], kapott $st [$loaded]"
+    fi
+}
+# ZBook M1-ben: az NVIDIA driver még nincs telepítve -> missing, semmi nem töltődik be
+apply_check zbook-m1 "$TMP/zbook-discrete" "i915 vmwgfx" "" missing ""
+# ZBook M2-től: minden NVIDIA modul megvan -> loaded, sorrendben
+apply_check zbook-m2 "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
+# VirtualBox VMSVGA -> vmwgfx betöltve
+apply_check vbox "$TMP/vbox-vmsvga" "vmwgfx" "" loaded "vmwgfx"
+# a modul megvan, de nem tölthető be -> failed
+apply_check vbox-broken "$TMP/vbox-vmsvga" "vmwgfx" "vmwgfx" failed ""
+# firmware framebuffer: nincs modul -> none
+apply_check fw "$TMP/no-pci-display" "" "" none ""
+
 echo "Eredmény: $PASS sikeres, $FAIL hibás"
 [ "$FAIL" -eq 0 ]

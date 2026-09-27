@@ -15,6 +15,8 @@ step_usb() {
     [ -n "$dev" ] || die "add meg a pendrive-ot, pl.:  sudo build/fusion-build usb /dev/sdc   (lista: lsblk -d -o NAME,TRAN,SIZE,MODEL)"
     esp_src="$OUT_DIR/release/esp"
     [ -d "$esp_src/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
+    local rootimg; rootimg=$(rootfs_img)
+    [ -r "$rootimg" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
 
     dev=$(readlink -f "$dev")
     [ -b "$dev" ] || die "nem blokkeszköz: $dev"
@@ -88,7 +90,14 @@ step_usb() {
 
     step "Fájlrendszerek"
     mkfs.vfat -F 32 -n FUSION_ESP "$p1" >/dev/null
-    wipefs -a -q "$p2"; wipefs -a -q "$p3"      # A/B slot: az M1-től kerül rá rendszerkép
+    wipefs -a -q "$p3"                          # B slot: üres (az A/B frissítés az M7-ben)
+    info "A slot: rendszerkép írása ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB)..."
+    dd if="$rootimg" of="$p2" bs=4M conv=fsync status=none || die "a rendszerkép írása nem sikerült ($p2)"
+    # visszaolvasásos ellenőrzés: a slot eleje bájtra egyezik a rendszerképpel.
+    # Előbb ürítjük az eszköz gyorsítótárát, hogy valóban a pendrive-ról olvassunk.
+    blockdev --flushbufs "$p2" 2>/dev/null || true
+    cmp -n "$(stat -c %s "$rootimg")" "$rootimg" "$p2" >/dev/null || die "a slot tartalma eltér a rendszerképtől ($p2) — hibás pendrive?"
+    info "A slot: ellenőrizve (visszaolvasás egyezik)"
     local stage; stage=$(mktemp -d)
     cat > "$stage/README.txt" <<EOF
 FusionOS adatpartíció (FUSION_DATA). Az M0 ezt a partíciót nem használja.
@@ -96,7 +105,7 @@ EOF
     # nodiscard: a teljes partícióra küldött TRIM sok pendrive-on percekig tart
     mkfs.ext4 -q -F -E nodiscard -L FUSION_DATA -d "$stage" "$p4"
     rm -rf "$stage"
-    ok "ESP (FAT32), DATA (ext4) kész; A/B üres"
+    ok "ESP (FAT32), A slot (rendszerkép), DATA (ext4) kész; B üres"
 
     step "Bootloader és UKI másolása"
     # mtools: csatolás nélkül ír a FAT-partícióra (nincs ütközés az automatikus csatolással)

@@ -1,0 +1,28 @@
+#!/bin/sh
+# FusionOS boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 sorokat.
+# (Type=exec szolgáltatásként fut, így a boot befejeződhet, és itt megvárhatjuk.)
+systemctl is-system-running --wait >/dev/null 2>&1
+state=$(systemctl is-system-running 2>/dev/null)
+root="$(findmnt -no FSTYPE /) $(findmnt -no OPTIONS / | cut -d, -f1)"
+etc=$(findmnt -no FSTYPE /etc)
+var=$(findmnt -no FSTYPE /var)
+data=$(findmnt -no FSTYPE /data)
+home=$(findmnt -no SOURCE /home)
+# shellcheck disable=SC1091
+. /run/fusion/hardware/display.env 2>/dev/null
+echo "FUSION-M1: SYSTEM UP state=$state"
+echo "FUSION-M1: ROOT $root"
+echo "FUSION-M1: MOUNTS etc=$etc var=$var data=$data home=$home"
+echo "FUSION-M1: SLOT $(cat /run/fusion/slot 2>/dev/null)"
+echo "FUSION-M1: DISPLAY_PROFILE=${FUSION_DISPLAY_PROFILE:-none} STATUS=${FUSION_DISPLAY_STATUS:-none} DRIVER=${FUSION_DISPLAY_DRIVER_STATE:-none}"
+echo "FUSION-M1: LOCALE $(sed -n 's/^LANG=//p' /etc/default/locale) KEYMAP $(sed -n 's/^XKBLAYOUT=//p' /etc/default/keyboard | tr -d '"')"
+echo "FUSION-M1: GETTY $(systemctl is-active getty@tty1.service)"
+echo "FUSION-M1: FAILED $(systemctl --failed --no-legend --plain | awk '{print $1}' | tr '\n' ' ')"
+echo "FUSION-M1: USER $(getent passwd fusion | cut -d: -f1,6)"
+echo "FUSION-M1: MACHINE-ID $( [ -s /etc/machine-id ] && echo ok || echo empty)"
+for u in $(systemctl --failed --no-legend --plain | awk '{print $1}'); do
+    echo "FUSION-M1: --- napló: $u"
+    journalctl -b -u "$u" --no-pager -o cat 2>/dev/null | tail -n 15 | sed 's/^/FUSION-M1:   /'
+done
+echo "FUSION-M1: POWEROFF"
+systemctl poweroff --no-block

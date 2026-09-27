@@ -1,0 +1,108 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-init (initramfs, busybox)
+#
+#  1. a lemez- és USB-modulok betöltése
+#  2. a slot kiválasztása (kernel parancssor: fusion.slot=A|B)
+#  3. a slot rendszerképének (EROFS) csatolása csak olvashatóan
+#  4. a FUSION_DATA partíció csatolása (írható állapot)
+#  5. /etc és /var: overlay (alul a rendszerkép, felül a DATA)
+#     /home: a DATA-ról; az első indításkor a rendszerképből töltődik fel
+#  6. átadás a rendszernek (switch_root -> systemd)
+#
+#  A partíciókat GPT-név szerint keresi (FUSION_A, FUSION_B, FUSION_DATA),
+#  nem eszköznév szerint. Hiba esetén mentőhéjat ad, érthető üzenettel.
+# =============================================================================
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+exec </dev/console >/dev/console 2>&1
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
+echo 3 > /proc/sys/kernel/printk
+
+CMDLINE=$(cat /proc/cmdline)
+arg_val() { for a in $CMDLINE; do case "$a" in "$1="*) echo "${a#*=}"; return ;; esac; done; }
+has_arg() { case " $CMDLINE " in *" $1 "*|*" $1="*) return 0 ;; esac; return 1; }
+
+msg() { printf 'fusion-init: %s\n' "$*"; }
+
+rescue() {
+    printf '\n\033[1;31mFusionOS: a rendszer nem indítható.\033[0m\n%s\n\n' "$*"
+    printf 'Mentőhéj — "reboot -f" újraindít, "poweroff -f" kikapcsol.\n'
+    printf 'A FusionOS diagnosztika a boot menüből is elérhető.\n\n'
+    setsid cttyhack sh
+    reboot -f
+}
+
+# betűkészlet (magyar ékezetek) — fbcon=nodefer mellett azonnal betölthető
+[ -r /usr/share/fusion/console.psf ] && loadfont < /usr/share/fusion/console.psf 2>/dev/null
+
+# 1. modulok
+if [ -r /lib/modules/fusion/modules.order ]; then
+    while read -r m; do
+        [ -n "$m" ] && insmod "/lib/modules/fusion/$m" 2>/dev/null
+    done < /lib/modules/fusion/modules.order
+fi
+
+# 2. slot
+SLOT=$(arg_val fusion.slot)
+case "$SLOT" in A|B) ;; *) rescue "Érvénytelen vagy hiányzó slot a kernel parancssorában (fusion.slot=$SLOT)." ;; esac
+
+# GPT-név szerinti keresés; várunk az USB/SATA eszközökre (legfeljebb ~15 mp)
+find_part() {
+    for u in /sys/class/block/*/uevent; do
+        if grep -qs "^PARTNAME=$1\$" "$u"; then
+            d=${u%/uevent}; echo "/dev/${d##*/}"; return 0
+        fi
+    done
+    return 1
+}
+i=0
+while :; do
+    ROOTDEV=$(find_part "FUSION_$SLOT"); DATADEV=$(find_part FUSION_DATA)
+    [ -n "$ROOTDEV" ] && [ -n "$DATADEV" ] && break
+    i=$((i + 1)); [ $i -ge 30 ] && break
+    sleep 0.5
+done
+[ -n "$ROOTDEV" ] || rescue "A FUSION_$SLOT partíció nem található."
+[ -n "$DATADEV" ] || rescue "A FUSION_DATA partíció nem található."
+
+# 3. rendszerkép (EROFS, csak olvasható)
+mkdir -p /newroot
+mount -t erofs -o ro "$ROOTDEV" /newroot 2>/dev/null \
+    || rescue "A(z) $SLOT slot rendszerképe ($ROOTDEV) nem csatolható. Üres vagy sérült a slot?"
+[ -x /newroot/sbin/init ] || rescue "A(z) $SLOT slot rendszerképében nincs /sbin/init."
+
+# 4. adatpartíció
+mount -t ext4 -o rw,noatime "$DATADEV" /newroot/data 2>/dev/null \
+    || rescue "A FUSION_DATA partíció ($DATADEV) nem csatolható."
+
+# 5. írható rétegek
+D=/newroot/data
+mkdir -p "$D/overlay/etc/upper" "$D/overlay/etc/work" "$D/overlay/var/upper" "$D/overlay/var/work" "$D/home"
+mount -t overlay overlay -o "lowerdir=/newroot/etc,upperdir=$D/overlay/etc/upper,workdir=$D/overlay/etc/work" /newroot/etc \
+    || rescue "Az /etc réteg nem hozható létre."
+mount -t overlay overlay -o "lowerdir=/newroot/var,upperdir=$D/overlay/var/upper,workdir=$D/overlay/var/work" /newroot/var \
+    || rescue "A /var réteg nem hozható létre."
+if [ ! -e "$D/home/.fusion-seeded" ]; then
+    cp -a /newroot/home/. "$D/home/" 2>/dev/null
+    : > "$D/home/.fusion-seeded"
+    msg "első indítás: a /home feltöltve a rendszerképből"
+fi
+mount -o bind "$D/home" /newroot/home || rescue "A /home nem csatolható."
+
+# állapot a rendszernek
+mkdir -p /run/fusion
+echo "$SLOT" > /run/fusion/slot
+echo "$ROOTDEV" > /run/fusion/root-device
+echo "$DATADEV" > /run/fusion/data-device
+
+# 6. átadás
+for m in /dev /proc /sys /run; do
+    mount -o move "$m" "/newroot$m" 2>/dev/null || mount -o bind "$m" "/newroot$m"
+done
+command -v switch_root >/dev/null || rescue "A switch_root nem érhető el az initramfs-ben."
+exec switch_root /newroot /sbin/init

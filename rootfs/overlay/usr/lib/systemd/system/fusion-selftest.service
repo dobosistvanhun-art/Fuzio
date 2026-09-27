@@ -1,0 +1,13 @@
+[Unit]
+Description=FusionOS automatikus boot-teszt (csak fusion.test kernelparaméterrel)
+ConditionKernelCommandLine=fusion.test
+After=multi-user.target
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/fusion/bin/fusion-selftest
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
