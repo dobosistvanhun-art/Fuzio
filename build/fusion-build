@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  FusionOS build — M0
+#
+#  Használat:  build/fusion-build <parancs> [opciók]
+#
+#  Parancsok:
+#    deps [--install]   build-függőségek ellenőrzése (--install: telepítés apt-tal)
+#    fetch              kernel, busybox, modulok, betűkészlet letöltése (root nélkül)
+#    build              initramfs + UKI + ESP-fa
+#    image              GPT lemezkép (VirtualBox / QEMU)
+#    vdi                a lemezkép VDI-vé alakítása
+#    vm [--usb]         FusionOS-dev VirtualBox VM létrehozása / frissítése
+#                       (--usb: lézer + nyomtató USB-átadása, Extension Pack kell)
+#    vm-start           a VM indítása
+#    all                fetch + build + image + vdi
+#    test               automatikus EFI boot-teszt QEMU + OVMF alatt
+#    usb <eszköz>       felírás pendrive-ra (root: sudo build/fusion-build usb /dev/sdX)
+#    clean              a build/out törlése (a letöltött cache marad)
+# =============================================================================
+set -euo pipefail
+
+# shellcheck source=build/lib/common.sh
+. "$(dirname "$(readlink -f "$0")")/lib/common.sh"
+for s in "$BUILD_DIR"/steps/*.sh; do
+    # shellcheck source=/dev/null
+    . "$s"
+done
+
+DEPS_CMDS=(apt-get dpkg-deb sha256sum cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate)
+DEPS_PKGS="systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils"
+DEPS_OPT_PKGS="qemu-system-x86 ovmf"
+
+step_deps() {
+    step "Build-függőségek"
+    local lack=0 c
+    for c in "${DEPS_CMDS[@]}"; do
+        if have "$c"; then info "megvan:   $c"; else warn "hiányzik: $c"; lack=1; fi
+    done
+    if [ -r /usr/lib/systemd/boot/efi/systemd-bootx64.efi ]; then info "megvan:   systemd-boot EFI"; else warn "hiányzik: systemd-boot-efi"; lack=1; fi
+    if have qemu-img; then info "megvan:   qemu-img"; else warn "hiányzik: qemu-img (a VDI-hez; tartalék: VBoxManage)"; fi
+    if have VBoxManage; then info "megvan:   VBoxManage (VirtualBox)"; else warn "VirtualBox nincs telepítve (a 'vm' lépéshez kell)"; fi
+    if have qemu-system-x86_64; then info "megvan:   qemu-system-x86_64 (opcionális, 'test')"; else info "opcionális: qemu-system-x86 ovmf (a 'test' lépéshez)"; fi
+    echo
+    info "Telepítés:  sudo apt install $DEPS_PKGS"
+    info "Opcionális: sudo apt install $DEPS_OPT_PKGS"
+    info "Megjegyzés: a 'systemd-boot' csomagot NE telepítsd — az a Mint bootloaderét is átvenné."
+    info "            A build csak a 'systemd-boot-efi' EFI-fájljait használja, a gépet nem módosítja."
+    if [ "${1:-}" = "--install" ]; then
+        step "Telepítés"
+        # shellcheck disable=SC2086
+        sudo apt-get install -y $DEPS_PKGS
+        lack=0
+    fi
+    [ "$lack" -eq 0 ] || return 1
+}
+
+step_clean() {
+    not_root
+    rm -rf "$OUT_DIR"
+    ok "build/out törölve"
+}
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+    deps)     step_deps "$@" ;;
+    fetch)    step_fetch ;;
+    build)    step_build ;;
+    image)    step_image ;;
+    vdi)      step_vdi ;;
+    vm)       step_vm "$@" ;;
+    vm-start) step_vm_start ;;
+    all)      step_fetch; step_build; step_image
+              if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
+    test)     step_test ;;
+    usb)      step_usb "$@" ;;
+    clean)    step_clean ;;
+    ""|-h|--help|help) usage ;;
+    *)        usage; die "ismeretlen parancs: $cmd" ;;
+esac

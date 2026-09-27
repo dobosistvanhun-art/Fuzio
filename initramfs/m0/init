@@ -1,0 +1,136 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS M0 — boot-teszt init (initramfs, busybox)
+#
+#  Célja: bizonyítani, hogy a pendrive/VM EFI-ből bootol, a systemd-boot
+#  betölti a Fusion UKI-t, a kernel elindul, a Fusion Hardware Layer azonosítja
+#  a grafikát, és a FusionOS partíciók megtalálhatók.
+#  Semmit nem ír a lemezekre.
+# =============================================================================
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+exec </dev/console >/dev/console 2>&1
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t tmpfs -o mode=0755 tmpfs /run
+[ -d /sys/firmware/efi/efivars ] && mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null
+echo 3 > /proc/sys/kernel/printk
+
+# shellcheck disable=SC1091
+. /etc/fusion-release
+
+CMDLINE=$(cat /proc/cmdline)
+has_arg() { case " $CMDLINE " in *" $1 "*|*" $1="*) return 0 ;; esac; return 1; }
+arg_val() { for a in $CMDLINE; do case "$a" in "$1="*) echo "${a#*=}"; return ;; esac; done; }
+
+# Tesztmódban a /dev/console a soros port; a képernyőre is kiírunk.
+MIRROR=0
+has_arg fusion.test && [ -c /dev/tty0 ] && MIRROR=1
+say() {
+    printf '%s\n' "$*"
+    [ "$MIRROR" = 1 ] && printf '%s\n' "$*" > /dev/tty0
+}
+
+# Magyar ékezetes betűkészlet a képernyős konzolra.
+# (A kernel parancssorában fbcon=nodefer: a framebuffer-konzol azonnal aktív,
+#  különben a font betöltése "Function not implemented" hibával elbukik.)
+printf '\033[2J\033[H' > /dev/tty0 2>/dev/null
+FONT_ERR=""
+if [ -r /usr/share/fusion/console.psf ] && [ -c /dev/tty0 ]; then
+    FONT_ERR=$(loadfont < /usr/share/fusion/console.psf 2>&1) && FONT_ERR=""
+fi
+
+# Kernelmodulok (lemezek és USB-billentyűzet); a függőségi sorrend a modules.order-ben
+if [ -r /lib/modules/fusion/modules.order ]; then
+    MOD_ERR=""
+    while read -r m; do
+        [ -n "$m" ] || continue
+        e=$(insmod "/lib/modules/fusion/$m" 2>&1) || MOD_ERR="$MOD_ERR ${m%.ko}($e)"
+    done < /lib/modules/fusion/modules.order
+fi
+# várunk, amíg az USB/SATA lemezek megjelennek (legfeljebb ~15 mp;
+# az usb-storage alapból 1 mp-et vár az eszköz felismerése előtt)
+i=0
+while [ $i -lt 30 ]; do
+    grep -qs '^PARTNAME=FUSION_ESP$' /sys/class/block/*/uevent && break
+    sleep 0.5; i=$((i + 1))
+done
+
+# EFI változó olvasása (4 bájt attribútum + UTF-16LE szöveg)
+efivar() {
+    f="/sys/firmware/efi/efivars/$1-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+    [ -r "$f" ] && tail -c +5 "$f" | tr -d '\000'
+}
+
+say "================================================================"
+say "  $FUSION_PRETTY_NAME"
+say "  M0 boot-teszt — a rendszer semmit nem ír a lemezekre"
+say "================================================================"
+say ""
+say "Kernel:          $(uname -r)"
+[ -n "${MOD_ERR:-}" ] && say "Modulhiba:      $MOD_ERR"
+[ -n "$FONT_ERR" ] && say "Betűkészlet:     nem tölthető be ($FONT_ERR)"
+if [ -d /sys/firmware/efi ]; then
+    say "Rendszerindítás: UEFI ($(cat /sys/firmware/efi/fw_platform_size 2>/dev/null)-bit)"
+else
+    say "Rendszerindítás: Legacy BIOS (a FusionOS UEFI-t céloz!)"
+fi
+LDR=$(efivar LoaderInfo)
+ENT=$(efivar LoaderEntrySelected)
+say "Bootloader:      ${LDR:-ismeretlen}"
+say "Betöltött UKI:   ${ENT:-ismeretlen}"
+say "Gép:             $(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+say ""
+
+# Fusion Hardware Layer
+/usr/lib/fusion/hardware/fusion-hwprobe > /run/fusion-hwprobe.txt 2>&1
+while IFS= read -r l; do say "$l"; done < /run/fusion-hwprobe.txt
+# shellcheck disable=SC1091
+. /run/fusion/hardware/display.env 2>/dev/null
+say ""
+
+# FusionOS partíciók (GPT név szerint, nem eszköznév szerint)
+say "FusionOS partíciók:"
+FOUND=0
+for want in FUSION_ESP FUSION_A FUSION_B FUSION_DATA; do
+    hit=""
+    for u in /sys/class/block/*/uevent; do
+        if grep -qs "^PARTNAME=$want\$" "$u"; then
+            dir=${u%/uevent}; dev=${dir##*/}
+            sz=$(( $(cat "$dir/size") / 2048 ))
+            hit="/dev/$dev  ${sz} MiB"
+            break
+        fi
+    done
+    if [ -n "$hit" ]; then
+        say "  $want  $hit"; FOUND=$((FOUND + 1))
+    else
+        say "  $want  NEM TALÁLHATÓ"
+    fi
+done
+say ""
+
+say "FUSION-M0: BOOT OK"
+say "FUSION-M0: PARTITIONS $FOUND/4"
+say "FUSION-M0: DISPLAY_PROFILE=${FUSION_DISPLAY_PROFILE:-none} STATUS=${FUSION_DISPLAY_STATUS:-none}"
+say ""
+
+if has_arg fusion.test; then
+    hold=$(arg_val fusion.test.hold)
+    sleep "${hold:-0}"
+    say "FUSION-M0: POWEROFF"
+    sync
+    poweroff -f
+fi
+
+while :; do
+    say "[Enter] parancssor   [u] újraindítás   [k] kikapcsolás"
+    read -r c
+    case "$c" in
+        u|U) sync; reboot -f ;;
+        k|K) sync; poweroff -f ;;
+        *)   say "Parancssor — kilépés: exit"; setsid cttyhack sh ;;
+    esac
+done

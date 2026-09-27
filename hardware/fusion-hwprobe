@@ -1,0 +1,210 @@
+#!/bin/sh
+# =============================================================================
+#  Fusion Hardware Layer — fusion-hwprobe (grafikus hardver azonosítása)
+#
+#  Általános, adatvezérelt azonosítás: a PCI-eszközök osztálya, gyártó- és
+#  eszközazonosítója alapján a hardverprofilok (profiles/*.profile) közül
+#  választja ki a legjobban illőt. A kódban nincs gép- vagy hipervizor-
+#  specifikus ág: új hardver támogatása = új profilfájl.
+#
+#  Ebből nő ki később a Fusion Hardware API.
+#
+#  POSIX sh — busybox ash és bash alatt is fut.
+#
+#  Környezeti változók (teszteléshez / átirányításhoz):
+#    FUSION_SYSFS         sysfs gyökér            (alapértelmezés: /sys)
+#    FUSION_HW_PROFILES   profilok könyvtára      (alapértelmezés: a script melletti
+#                                                  profiles/, különben
+#                                                  /usr/lib/fusion/hardware/profiles)
+#    FUSION_RUN           futásidejű állapot gyökere (alapértelmezés: /run/fusion)
+#
+#  Kimenet:
+#    $FUSION_RUN/hardware/display.env   — gépi olvasásra (KEY='érték' sorok)
+#    stdout                             — emberi összefoglaló (-q: nincs)
+#    --env                              — a display.env tartalmát írja stdoutra
+# =============================================================================
+
+set -u
+
+SYSFS="${FUSION_SYSFS:-/sys}"
+RUN_DIR="${FUSION_RUN:-/run/fusion}"
+HW_DIR="$RUN_DIR/hardware"
+
+SELF_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+if [ -n "${FUSION_HW_PROFILES:-}" ]; then
+    PROFILES="$FUSION_HW_PROFILES"
+elif [ -d "$SELF_DIR/profiles" ]; then
+    PROFILES="$SELF_DIR/profiles"
+else
+    PROFILES="/usr/lib/fusion/hardware/profiles"
+fi
+
+QUIET=0
+PRINT_ENV=0
+for a in "$@"; do
+    case "$a" in
+        -q|--quiet) QUIET=1 ;;
+        --env) PRINT_ENV=1; QUIET=1 ;;
+        -h|--help)
+            echo "Használat: fusion-hwprobe [-q] [--env]"
+            exit 0 ;;
+    esac
+done
+
+say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+
+lower() { printf '%s' "$1" | tr 'ABCDEF' 'abcdef'; }
+
+# in_list <érték> <lista>  — a lista szóközzel elválasztott, "*" mindenre illik
+in_list() {
+    [ -z "$2" ] && return 1
+    # a "*" joker szó szerint értendő, nem fájlnév-minta
+    case " $2 " in *" * "*) return 0 ;; esac
+    set -f
+    for _i in $2; do
+        if [ "$(lower "$_i")" = "$1" ]; then set +f; return 0; fi
+    done
+    set +f
+    return 1
+}
+
+# shell-biztos idézés egy értékhez: 'abc'\''def'
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# -----------------------------------------------------------------------------
+# 1) Grafikus adapterek összegyűjtése (PCI osztály 0x03xx)
+# -----------------------------------------------------------------------------
+ADAPTERS=""        # soronként: slot|class|vendor|device|boot_vga|driver
+ADAPTER_COUNT=0
+NL='
+'
+if [ -d "$SYSFS/bus/pci/devices" ]; then
+    for d in "$SYSFS"/bus/pci/devices/*; do
+        [ -r "$d/class" ] || continue
+        cls=$(lower "$(cat "$d/class")")
+        cls=${cls%??}                      # 0x030000 -> 0x0300
+        case "$cls" in 0x03*) ;; *) continue ;; esac
+        ven=$(lower "$(cat "$d/vendor" 2>/dev/null)")
+        dev=$(lower "$(cat "$d/device" 2>/dev/null)")
+        bvga=$(cat "$d/boot_vga" 2>/dev/null || echo 0)
+        drv=""
+        [ -e "$d/driver" ] && drv=$(basename "$(readlink "$d/driver")")
+        ADAPTERS="$ADAPTERS$(basename "$d")|$cls|$ven|$dev|$bvga|$drv$NL"
+        ADAPTER_COUNT=$((ADAPTER_COUNT + 1))
+    done
+fi
+
+# -----------------------------------------------------------------------------
+# 2) Profilok értékelése
+# -----------------------------------------------------------------------------
+BEST_PRIO=100000; BEST_FILE=""; BEST_SLOT=""; BEST_ID=""; BEST_BVGA=0
+FW_PRIO=100000;   FW_FILE=""
+
+# profile_get <fájl> <kulcs>
+profile_get() {
+    sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1 | sed 's/[[:space:]]*$//'
+}
+
+for pf in "$PROFILES"/*.profile; do
+    [ -r "$pf" ] || continue
+    prio=$(profile_get "$pf" priority); prio=${prio:-500}
+    kind=$(profile_get "$pf" match.kind); kind=${kind:-pci}
+    if [ "$kind" = "firmware" ]; then
+        if [ "$prio" -lt "$FW_PRIO" ]; then FW_PRIO=$prio; FW_FILE=$pf; fi
+        continue
+    fi
+    m_cls=$(profile_get "$pf" match.class)
+    m_ven=$(profile_get "$pf" match.vendor)
+    m_dev=$(profile_get "$pf" match.device)
+    oldifs=$IFS; IFS="$NL"
+    for line in $ADAPTERS; do
+        IFS=$oldifs
+        slot=${line%%|*};  r=${line#*|}
+        cls=${r%%|*};      r=${r#*|}
+        ven=${r%%|*};      r=${r#*|}
+        dev=${r%%|*};      r=${r#*|}
+        bvga=${r%%|*}
+        in_list "$cls" "$m_cls" || continue
+        in_list "$ven" "$m_ven" || continue
+        in_list "$dev" "$m_dev" || continue
+        # jobb: kisebb prioritásszám; egyenlőnél a boot_vga=1 adapter
+        if [ "$prio" -lt "$BEST_PRIO" ] || { [ "$prio" -eq "$BEST_PRIO" ] && [ "$bvga" = 1 ] && [ "$BEST_BVGA" != 1 ]; }; then
+            BEST_PRIO=$prio; BEST_FILE=$pf; BEST_SLOT=$slot
+            BEST_ID="${ven#0x}:${dev#0x}"; BEST_BVGA=$bvga
+        fi
+    done
+    IFS=$oldifs
+done
+
+# -----------------------------------------------------------------------------
+# 3) Döntés és állapot
+# -----------------------------------------------------------------------------
+STATUS="none"; MESSAGE=""; CHOSEN=""
+if [ -n "$BEST_FILE" ]; then
+    CHOSEN=$BEST_FILE; STATUS="ok"
+    sole=$(profile_get "$CHOSEN" requires_sole_adapter)
+    if [ "$sole" = "yes" ] && [ "$ADAPTER_COUNT" -gt 1 ]; then
+        STATUS="warning"
+        MESSAGE=$(profile_get "$CHOSEN" hint.multi_adapter)
+        [ -n "$MESSAGE" ] || MESSAGE="Ez a profil egyetlen grafikus adaptert feltételez, de $ADAPTER_COUNT látható."
+    fi
+elif [ -n "$FW_FILE" ]; then
+    CHOSEN=$FW_FILE; STATUS="fallback"
+    MESSAGE="Nincs illeszkedő PCI grafikus profil; a firmware framebuffer marad használatban."
+fi
+
+# -----------------------------------------------------------------------------
+# 4) Kimenet
+# -----------------------------------------------------------------------------
+ENV_OUT=""
+add_env() { ENV_OUT="$ENV_OUT$1=$(shq "$2")$NL"; }
+
+add_env FUSION_DISPLAY_STATUS "$STATUS"
+add_env FUSION_DISPLAY_ADAPTER_COUNT "$ADAPTER_COUNT"
+if [ -n "$CHOSEN" ]; then
+    add_env FUSION_DISPLAY_PROFILE "$(profile_get "$CHOSEN" id)"
+    add_env FUSION_DISPLAY_PROFILE_NAME "$(profile_get "$CHOSEN" name)"
+    add_env FUSION_DISPLAY_ADAPTER "$BEST_SLOT"
+    add_env FUSION_DISPLAY_ADAPTER_ID "$BEST_ID"
+    # a profil minden nem-illesztő kulcsa átmegy FUSION_PROFILE_* néven
+    while IFS= read -r pl || [ -n "$pl" ]; do
+        case "$pl" in ''|'#'*) continue ;; esac
+        k=$(printf '%s' "${pl%%=*}" | sed 's/[[:space:]]*$//')
+        v=$(printf '%s' "${pl#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$k" in match.*|id|name|priority) continue ;; esac
+        kk=$(printf '%s' "$k" | tr 'a-z.-' 'A-Z__')
+        add_env "FUSION_PROFILE_$kk" "$v"
+    done < "$CHOSEN"
+fi
+[ -n "$MESSAGE" ] && add_env FUSION_DISPLAY_MESSAGE "$MESSAGE"
+
+if mkdir -p "$HW_DIR" 2>/dev/null; then
+    printf '%s' "$ENV_OUT" > "$HW_DIR/display.env.tmp" && mv "$HW_DIR/display.env.tmp" "$HW_DIR/display.env"
+fi
+
+if [ "$PRINT_ENV" -eq 1 ]; then
+    printf '%s' "$ENV_OUT"
+fi
+
+say "Fusion Hardware Layer — grafika"
+if [ "$ADAPTER_COUNT" -eq 0 ]; then
+    say "  Grafikus PCI-adapter: nincs"
+else
+    oldifs=$IFS; IFS="$NL"
+    for line in $ADAPTERS; do
+        IFS=$oldifs
+        slot=${line%%|*}; r=${line#*|}; r=${r#*|}
+        ven=${r%%|*}; r=${r#*|}; dev=${r%%|*}; r=${r#*|}; bvga=${r%%|*}; drv=${r#*|}
+        mark=""; [ "$slot" = "$BEST_SLOT" ] && mark="  <- kiválasztva"
+        say "  Adapter: $slot  ${ven#0x}:${dev#0x}  boot_vga=$bvga  driver=${drv:--}$mark"
+    done
+    IFS=$oldifs
+fi
+if [ -n "$CHOSEN" ]; then
+    say "  Profil:  $(profile_get "$CHOSEN" id) — $(profile_get "$CHOSEN" name)"
+else
+    say "  Profil:  nincs"
+fi
+say "  Állapot: $STATUS"
+[ -n "$MESSAGE" ] && say "  Megjegyzés: $MESSAGE"
+exit 0

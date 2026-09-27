@@ -1,0 +1,51 @@
+# shellcheck shell=bash
+# image — GPT lemezkép (ESP + A + B + DATA) a VirtualBoxhoz / QEMU-hoz, root nélkül.
+
+_data_readme() {
+    cat <<EOF
+FusionOS adatpartíció (FUSION_DATA)
+
+Ide kerülnek majd a felhasználói adatok, beállítások, a Windows-programok
+környezetei és a Klipper-konfiguráció. Az M0 ezt a partíciót nem használja.
+EOF
+}
+
+step_image() {
+    not_root
+    need sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate dd
+    local out; out=$(variant_dir)
+    [ -d "$out/esp" ] || die "előbb futtasd: build/fusion-build build"
+    local img="$out/fusionos.img" total; total=$(image_total_mib)
+
+    step "Lemezkép készítése ($total MiB, ritka fájl)"
+    rm -f "$img"
+    truncate -s "${total}M" "$img"
+    sfdisk_script "$IMAGE_DATA_MIB" | sfdisk --quiet --no-reread --no-tell-kernel "$img" >/dev/null
+    info "GPT: $PART_ESP ${ESP_MIB}M, $PART_A ${SLOT_MIB}M, $PART_B ${SLOT_MIB}M, $PART_DATA ${IMAGE_DATA_MIB}M"
+
+    # ESP: FAT32 fájlrendszer külön fájlban, majd a helyére másolva
+    local espimg="$out/esp.fat"
+    rm -f "$espimg"
+    truncate -s "${ESP_MIB}M" "$espimg"
+    mkfs.vfat -F 32 -n FUSION_ESP "$espimg" >/dev/null
+    local d f rel
+    while IFS= read -r d; do
+        rel=${d#"$out/esp"}; [ -n "$rel" ] && mmd -i "$espimg" "::$rel"
+    done < <(find "$out/esp" -mindepth 1 -type d | sort)
+    while IFS= read -r f; do
+        rel=${f#"$out/esp"}; mcopy -i "$espimg" "$f" "::$rel"
+    done < <(find "$out/esp" -type f | sort)
+    dd if="$espimg" of="$img" bs=1M seek=1 conv=notrunc,sparse status=none
+    rm -f "$espimg"
+
+    # DATA: ext4, a tartalmát a -d kapcsoló tölti fel (root nélkül)
+    local dataimg="$out/data.ext4" stage="$out/data-stage"
+    rm -rf "$stage" "$dataimg"; mkdir -p "$stage"
+    _data_readme > "$stage/README.txt"
+    truncate -s "${IMAGE_DATA_MIB}M" "$dataimg"
+    mkfs.ext4 -q -F -L FUSION_DATA -d "$stage" "$dataimg"
+    dd if="$dataimg" of="$img" bs=1M seek=$((1 + ESP_MIB + 2 * SLOT_MIB)) conv=notrunc,sparse status=none
+    rm -rf "$dataimg" "$stage"
+
+    ok "kész: $img (lemezen ténylegesen: $(du -h "$img" | cut -f1))"
+}
