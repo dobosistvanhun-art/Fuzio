@@ -1,0 +1,13 @@
+# Fusion eszközréteg — soros eszközök szerephez kötése (fusion-devd)
+# A 60-serial.rules után fut (ID_VENDOR_ID, ID_MODEL_ID, ID_SERIAL_SHORT, ID_PATH),
+# és a 73-seat-late.rules előtt, így a uaccess címke még érvényesül: a bejelentkezett
+# felhasználó root és kézi csoportbeállítás nélkül megnyithatja az eszközt.
+ACTION=="remove", GOTO="fusion_devices_end"
+SUBSYSTEM!="tty", GOTO="fusion_devices_end"
+ENV{ID_BUS}!="usb", GOTO="fusion_devices_end"
+
+IMPORT{program}="/usr/lib/fusion/devices/fusion-devd udev"
+ENV{FUSION_ROLE}=="?*", SYMLINK+="fusion/$env{FUSION_ROLE}", TAG+="uaccess"
+ENV{FUSION_ROLE_NEW}=="1", RUN+="/usr/lib/fusion/devices/fusion-devd record $env{FUSION_ROLE} $env{FUSION_DEVICE_KEY} $env{DEVPATH}"
+
+LABEL="fusion_devices_end"

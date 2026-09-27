@@ -4,10 +4,36 @@ Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendsz
 A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M2 lezárva — grafikus felület, NVIDIA 470** (ZBook: OpenGL 4.6, Vulkan 1.2.175).
-Az M0 (build-környezet, EFI-boot) és az M1 (bootolható alaprendszer) is lezárva.
+**Állapot: M3 — eszközréteg** (soros eszközök stabil néven: `/dev/fusion/laser`, `/dev/fusion/printer`).
+Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook: OpenGL 4.6, Vulkan 1.2.175).
+
+## Mit tud az M3
+
+- A **Fusion eszközréteg** (`fusion-devd`) a soros eszközöket szerephez köti, és stabil nevet
+  ad nekik a ttyUSB-sorszámtól és a bedugási sorrendtől függetlenül:
+
+  | Szerep | Eszköz (Phase 0b) | Azonosítás | Név | Kinek |
+  | --- | --- | --- | --- | --- |
+  | Lézer (GRBL) | CH340 1a86:7523, nincs sorozatszáma | USB-port szerint | `/dev/fusion/laser` | LightBurn → COM3 (M4) |
+  | 3D nyomtató (Klipper) | CP2102 10c4:ea60 | sorozatszám szerint | `/dev/fusion/printer` | Klipper (M5) |
+
+- Az első illeszkedő eszköz automatikusan megkapja a szabad szerepet; a hozzárendelés
+  az `/etc/fusion/devices.conf`-ba kerül (a DATA-n megmarad).
+- A bejelentkezett felhasználó root nélkül megnyitja az eszközöket (udev `uaccess`).
+- Kihúzás és visszadugás után az eszköz ugyanazzal a névvel tér vissza.
+- `fusion-devices`: szerepek, csatlakozás, ki használja a portot, szerep nélküli eszközök;
+  `sudo fusion-devices assign laser ttyUSB0` — áthelyezés (pl. másik USB-port);
+  `sudo fusion-devices forget <szerep>`.
+- Adatvezérelt: a szerepeket a `devices/roles/*.role` fájlok írják le (USB-azonosítók,
+  azonosítási mód, Windows COM-port); a kódban nincs eszközspecifikus ág.
+- A soros driverek (ch341, cp210x, ftdi_sio, pl2303, cdc-acm) a `linux-modules-extra`-ból
+  kerülnek a képbe, csak ezek (`build.conf`: `EXTRA_MODULES`). ModemManager / brltty nincs.
+
+Kézi ellenőrzés: `docs/M3-ellenorzes.md`.
 
 ## Mit tud az M2
+
+## Mit tud az M2 (lezárva)
 
 - A FusionOS a **Fusion Desktopra** indul: a tty1-en automatikus belépés (`fusion`),
   majd X11 + ideiglenes ablakkezelő (**JWM**, a Fusion Shell az M6-ban váltja) és egy
@@ -120,7 +146,9 @@ a kódban nincs gép- vagy hipervizor-specifikus ág. Új hardver = új profilf�
 | `generic-kms` | bármely PCI grafika | — (firmware framebuffer) |
 | `firmware-fb` | nincs PCI grafika | — |
 
-Tesztek: `sh tests/hwprobe-test.sh` (29 eset, hamis sysfs-sel, modulkezelővel és kernel parancssorral).
+Tesztek: `sh tests/hwprobe-test.sh` (32 eset, hamis sysfs-sel, modulkezelővel és kernel parancssorral),
+`sh tests/devices-test.sh` (21 eset: automatikus hozzárendelés, port / sorozatszám, jelölt,
+egyszerre bedugott eszközök, assign, forget).
 
 ## Automatikus teszt (`build/fusion-build test`)
 
@@ -129,7 +157,10 @@ QEMU + OVMF, KVM nélkül is (lassabb). A FusionOS-t háromféleképp indítja
 systemd „running”, gyökér-overlay, /usr csak olvasható (EROFS), /data ext4, A slot,
 hardverprofil és driver, getty, magyar locale és billentyűzet, `fusion` felhasználó,
 machine-id, nincs hibás szolgáltatás; std VGA-n a Fusion Desktopot is (Xorg, OpenGL,
-ablakkezelő, magyar kiosztás az X-ben). Ezen felül a diagnosztikai bejegyzést is elindítja.
+ablakkezelő, magyar kiosztás az X-ben). Az std + SATA futásban egy emulált USB-soros eszköz
+(FTDI) is van: `/dev/fusion/laser` létrejön, a `fusion` felhasználó root nélkül megnyitja,
+és a teszt a QEMU monitorán át **kihúzza és visszadugja** — a név ugyanúgy visszatér.
+Ezen felül a mérési és a diagnosztikai bejegyzést is elindítja.
 
 Megjegyzés: QEMU `-vga vmware` alatt a vmwgfx nem veszi át az eszközt („unsupported
 hypervisor”) — a Hardware Layer ezt `failed`-ként jelzi, és ott a teszt grafikus felületet
@@ -141,6 +172,7 @@ nem vár. A VMSVGA támogatott környezete a VirtualBox.
 build/        fusion-build, lépések (steps/), konfiguráció (config/)
 rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (overlay/)
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
+devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
 tools/        fusion-hardware-discovery.sh (Phase 0)

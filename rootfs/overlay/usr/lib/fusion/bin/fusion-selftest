@@ -51,5 +51,37 @@ else
     grep -a '(EE)' /var/log/Xorg.0.log /home/fusion/.local/share/xorg/Xorg.0.log 2>/dev/null | tail -n 15 | sed 's/^/FUSION-M2:   /'
 fi
 fi
+# --- M3: eszközréteg (soros eszközök szerephez kötve, /dev/fusion/*) ---
+if ls /dev/ttyUSB* /dev/ttyACM* >/dev/null 2>&1 || grep -qw 'fusion.test.serial' /proc/cmdline; then
+    i=0; while [ $i -lt 30 ] && [ ! -e /dev/fusion/laser ]; do sleep 1; i=$((i + 1)); done
+fi
+if [ -e /dev/fusion/laser ]; then
+    t=$(readlink -f /dev/fusion/laser)
+    echo "FUSION-M3: LASER $(basename "$t") group=$(stat -c %G "$t") mode=$(stat -c %a "$t")"
+    # megnyitás a fusion felhasználóval, root nélkül
+    if runuser -u fusion -- sh -c 'exec 3<>/dev/fusion/laser' 2>/dev/null; then echo "FUSION-M3: OPEN fusion ok"; else echo "FUSION-M3: OPEN fusion failed"; fi
+    echo "FUSION-M3: DB $(grep -v '^#' /etc/fusion/devices.conf 2>/dev/null | tr '\n' ' ')"
+    # kihúzás és visszadugás (a teszt a QEMU monitorán keresztül húzza ki és dugja vissza)
+    echo "FUSION-M3: UNPLUG-NOW"
+    i=0; while [ $i -lt 30 ] && [ -e /dev/fusion/laser ]; do sleep 1; i=$((i + 1)); done
+    [ -e /dev/fusion/laser ] && echo "FUSION-M3: STILL-THERE" || echo "FUSION-M3: GONE"
+    echo "FUSION-M3: REPLUG-NOW"
+    i=0; while [ $i -lt 30 ] && [ ! -e /dev/fusion/laser ]; do sleep 1; i=$((i + 1)); done
+    if [ -e /dev/fusion/laser ]; then
+        echo "FUSION-M3: BACK $(basename "$(readlink -f /dev/fusion/laser)")"
+        runuser -u fusion -- sh -c 'exec 3<>/dev/fusion/laser' 2>/dev/null && echo "FUSION-M3: REOPEN fusion ok"
+    else
+        echo "FUSION-M3: NOT-BACK"
+    fi
+    fusion-devices 2>&1 | sed 's/^/FUSION-M3:   /'
+else
+    echo "FUSION-M3: LASER none"
+fi
+# diagnosztika: soros eszközök, USB-eszközök, betöltött soros driverek
+# shellcheck disable=SC2012
+echo "FUSION-M3: TTY $(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ')"
+echo "FUSION-M3: USB $(lsusb 2>/dev/null | grep -v 'root hub' | cut -d' ' -f6- | tr '\n' ';')"
+echo "FUSION-M3: MODS $(lsmod | awk '$1 ~ /^(usbserial|ftdi_sio|ch341|cp210x|pl2303|cdc_acm|xhci_pci)$/ {print $1}' | tr '\n' ' ')"
+echo "FUSION-M3: NOGRAB $(for c in ModemManager brltty; do command -v $c >/dev/null && printf '%s ' $c; done)ok"
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

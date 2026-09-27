@@ -24,7 +24,25 @@ _ovmf_vars() {
     done
 }
 
+# _mon <cfg-név> <parancs>: egy parancs a futó QEMU monitorának
+_mon() {
+    have python3 || return 1
+    python3 -c '
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])
+time.sleep(0.3); s.recv(65536)
+s.sendall((sys.argv[2] + "\n").encode()); time.sleep(0.8); s.close()
+' "$OUT_DIR/test/qemu-$1.mon" "$2" 2>/dev/null
+}
+
+# USB-soros eszköz (FTDI 0403:6001 — a lézer szerep illeszkedik rá) külön xHCI-n
+# (a QEMU usb-serial csak nyitott chardev-vel csatlakozik: ezért "file" háttér, nem "null"),
+# a kihúzás/visszadugás a monitoron át: device_del / device_add
+SERIAL_DEV="usb-serial,chardev=fser0,id=fser0dev,bus=fxhci.0,port=2"
+
 # _qemu_run <cfg-név> <vga> <busz> <napló> <várt záró marker>
+# QEMU_EXTRA (tömb): további QEMU-argumentumok; QEMU_HOTPLUG=1: a FUSION-M3 jelzésekre
+# kihúzza és visszadugja a soros eszközt
 _qemu_run() {
     local cfg="$1" vga="$2" bus="$3" log="$4" marker="$5"
     local out="$OUT_DIR/test" img="$OUT_DIR/test/fusionos.img"
@@ -44,10 +62,19 @@ _qemu_run() {
         "${diskdev[@]}" \
         -nic user,model=e1000e \
         -vga "$vga" -display none -serial "file:$log" -no-reboot \
-        -monitor "unix:$out/qemu-$cfg.mon,server,nowait" >/dev/null 2>&1 &
-    local qpid=$!
+        -monitor "unix:$out/qemu-$cfg.mon,server,nowait" \
+        "${QEMU_EXTRA[@]}" >/dev/null 2>&1 &
+    local qpid=$! unplugged=0 replugged=0
     RUN_SECS=0
     while kill -0 "$qpid" 2>/dev/null; do
+        if [ "${QEMU_HOTPLUG:-0}" = 1 ]; then
+            if [ "$unplugged" = 0 ] && grep -qa "FUSION-M3: UNPLUG-NOW" "$log"; then
+                _mon "$cfg" "device_del fser0dev"; unplugged=1
+            fi
+            if [ "$replugged" = 0 ] && grep -qa "FUSION-M3: REPLUG-NOW" "$log"; then
+                _mon "$cfg" "device_add $SERIAL_DEV"; replugged=1
+            fi
+        fi
         if [ ! -f "$out/screen-$cfg.ppm" ] && grep -qs "$marker" "$log"; then
             sleep 1
             have python3 && python3 - "$out/qemu-$cfg.mon" "$out/screen-$cfg.ppm" <<'PY' 2>/dev/null || true
@@ -69,6 +96,7 @@ _check() {  # _check <napló> <minta> <leírás>
 
 step_test() {
     not_root
+    QEMU_EXTRA=(); QEMU_HOTPLUG=0
     need qemu-system-x86_64 timeout
     [ -n "$(_ovmf_code)" ] && [ -n "$(_ovmf_vars)" ] || die "OVMF nem található (sudo apt install ovmf)"
     [ -r "$(rootfs_img)" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
@@ -87,7 +115,17 @@ step_test() {
             vmware) want=vmware-svga; drv=failed; desk=0 ;;
         esac
         log="$out/qemu-$cfg.log"
-        step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)"
+        # az std+SATA futásban egy USB-soros eszköz is van: az eszközréteg (M3) próbája
+        local ser=0 serinfo=""
+        if [ "$cfg" = std-sata ]; then
+            ser=1; serinfo=", + USB-soros eszköz"
+            # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
+            QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV")
+            QEMU_HOTPLUG=1
+        else
+            QEMU_EXTRA=(); QEMU_HOTPLUG=0
+        fi
+        step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
         ok_run=1
         _check "$log" "FUSION-M1: SYSTEM UP state=running" "systemd fut, hibátlanul" || ok_run=0
@@ -107,12 +145,23 @@ step_test() {
             _check "$log" "FUSION-M2: WM jwm" "ablakkezelő" || ok_run=0
             _check "$log" "FUSION-M2: XKB hu" "magyar billentyűzet az X-ben" || ok_run=0
         fi
-        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)' "$log" | sed 's/^/      /' >&2
+        if [ "$ser" = 1 ]; then
+            _check "$log" "FUSION-M3: LASER ttyUSB" "/dev/fusion/laser létrejött" || ok_run=0
+            _check "$log" "FUSION-M3: OPEN fusion ok" "a fusion felhasználó root nélkül megnyitja" || ok_run=0
+            _check "$log" "FUSION-M3: DB laser path:0403:6001:" "hozzárendelés rögzítve (port szerint)" || ok_run=0
+            _check "$log" "FUSION-M3: GONE" "kihúzáskor a név eltűnik" || ok_run=0
+            _check "$log" "FUSION-M3: BACK ttyUSB" "visszadugás után ugyanazzal a névvel visszatér" || ok_run=0
+            _check "$log" "FUSION-M3: REOPEN fusion ok" "visszadugás után is megnyitható" || ok_run=0
+        else
+            _check "$log" "FUSION-M3: LASER none" "soros eszköz nélkül nincs /dev/fusion/laser" || ok_run=0
+        fi
+        _check "$log" "FUSION-M3: NOGRAB ok" "nincs ModemManager / brltty" || ok_run=0
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else
             warn "SIKERTELEN — napló: $log"
-            grep -a 'FUSION-M[12]\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
+            grep -a 'FUSION-M[123]\|fusion-init\|FAILED\|Failed' "$log" | tail -n 20 | sed 's/^/      /' >&2
             fails=$((fails + 1))
         fi
     done
@@ -122,6 +171,7 @@ step_test() {
     FUSION_VARIANT="test" step_image >/dev/null
     log="$out/qemu-konzol.log"
     step "QEMU EFI boot → mérési bejegyzés: szöveges konzol (fusion.desktop=0)"
+    QEMU_EXTRA=(); QEMU_HOTPLUG=0
     _qemu_run konzol std sata "$log" "FUSION-M1: SYSTEM UP"
     if _check "$log" "FUSION-M1: CMDLINE .*fusion.desktop=0" "a bejegyzés parancssora átjutott" \
        && _check "$log" "FUSION-M2: XORG disabled" "Desktop kikapcsolva" \
@@ -136,6 +186,7 @@ step_test() {
     FUSION_VARIANT="test" step_image >/dev/null
     log="$out/qemu-diag-usb.log"
     step "QEMU EFI boot → diagnosztika: -vga std, lemez: usb"
+    QEMU_EXTRA=(); QEMU_HOTPLUG=0
     _qemu_run diag-usb std usb "$log" "FUSION-M0: BOOT OK"
     if _check "$log" "FUSION-M0: BOOT OK" "diagnosztika fut" \
        && _check "$log" "FUSION-M0: PARTITIONS 4/4" "4 partíció"; then

@@ -1,0 +1,7 @@
+# 3D nyomtató (Klipper MCU)
+# A ZBookon mérve (Phase 0b): CP2102 10c4:ea60, egyedi sorozatszámmal, USB-port 9.
+# Sorozatszám szerint azonosítva: bármelyik USB-portba dugható.
+role = printer
+name = 3D nyomtató (Klipper)
+match.usb = 10c4:ea60 1d50:614e 0483:5740 2341:0042 2341:0010
+identify = serial

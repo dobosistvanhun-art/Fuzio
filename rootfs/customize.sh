@@ -7,6 +7,7 @@
 set -euo pipefail
 R="$1"
 : "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
+: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] FusionOS fájlok"
@@ -16,9 +17,14 @@ mkdir -p "$R/usr/lib/fusion/hardware"
 install -m 0755 "$FUSION_ROOT/hardware/fusion-hwprobe" "$R/usr/lib/fusion/hardware/fusion-hwprobe"
 rm -rf "$R/usr/lib/fusion/hardware/profiles"
 cp -r "$FUSION_ROOT/hardware/profiles" "$R/usr/lib/fusion/hardware/profiles"
+rm -rf "$R/usr/lib/fusion/devices"; mkdir -p "$R/usr/lib/fusion/devices"
+install -m 0755 "$FUSION_ROOT/devices/fusion-devd" "$R/usr/lib/fusion/devices/fusion-devd"
+cp -r "$FUSION_ROOT/devices/roles" "$R/usr/lib/fusion/devices/roles"
+mkdir -p "$R/etc/fusion"
 chown -R root:root "$R/usr/lib/fusion"
 ln -sf /usr/lib/fusion/bin/fusion-hwinfo "$R/usr/bin/fusion-hwinfo"
 ln -sf /usr/lib/fusion/bin/fusion-session "$R/usr/bin/fusion-session"
+ln -sf /usr/lib/fusion/devices/fusion-devd "$R/usr/bin/fusion-devices"
 mkdir -p "$R/data"
 
 echo "  [customize] NVIDIA kernelmodulok ($KERNEL_ABI)"
@@ -28,7 +34,37 @@ mkdir -p "$kdir/updates/nvidia"
 for m in $NVIDIA_MODULES; do
     install -m 0644 "$FUSION_NVIDIA_KO/$m.ko" "$kdir/updates/nvidia/$m.ko"
 done
+
+echo "  [customize] kiegészítő kernelmodulok (linux-modules-extra): $EXTRA_MODULES"
+# a kiválasztott modulok és a függőségeik; ami már a képben van, nem másoljuk újra
+xsrc="$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI"
+modkey() { basename "$1" | sed 's/\.ko.*$//' | tr '-' '_'; }
+idx_img=$(mktemp); idx_src=$(mktemp)
+find "$kdir" -name '*.ko*' | while read -r f; do echo "$(modkey "$f") $f"; done > "$idx_img"
+find "$xsrc" -name '*.ko*' | while read -r f; do echo "$(modkey "$f") $f"; done > "$idx_src"
+queue=$EXTRA_MODULES; copied=""
+while :; do
+    # shellcheck disable=SC2086  # a sor szóközzel elválasztott modullista
+    set -- $queue; [ $# -gt 0 ] || break
+    m=$(echo "$1" | tr '-' '_'); shift; queue="$*"
+    case " $copied " in *" $m "*) continue ;; esac
+    copied="$copied $m"
+    grep -q "^$m " "$idx_img" && continue
+    f=$(awk -v m="$m" '$1==m {print $2; exit}' "$idx_src")
+    [ -n "$f" ] || { echo "  [customize] HIBA: nincs ilyen kernelmodul: $m"; exit 1; }
+    rel=${f#"$xsrc"/}
+    mkdir -p "$kdir/$(dirname "$rel")"
+    install -m 0644 "$f" "$kdir/$rel"
+    echo "$m $kdir/$rel" >> "$idx_img"
+    deps=$(modinfo -F depends "$f" 2>/dev/null | tr ',' ' ')
+    queue="$queue $deps"
+done
+rm -f "$idx_img" "$idx_src"
 in_root depmod -a "$KERNEL_ABI"
+for m in $EXTRA_MODULES; do
+    in_root modinfo -k "$KERNEL_ABI" -n "$m" >/dev/null 2>&1 \
+        || { echo "  [customize] HIBA: a(z) $m modul nem látható a depmod után"; exit 1; }
+done
 in_root modinfo -k "$KERNEL_ABI" -F version nvidia >/dev/null \
     || { echo "  [customize] HIBA: az nvidia modul nem látható a depmod után"; exit 1; }
 
@@ -37,6 +73,11 @@ echo "  [customize] grafikus szerver (a Fusion Hardware Layer beállításaival)
 ln -sf /run/fusion/hardware/xorg-display.conf "$R/etc/X11/xorg.conf.d/10-fusion-display.conf"
 ln -sf /run/fusion/hardware/Xwrapper.config "$R/etc/X11/Xwrapper.config"
 chmod 0755 "$R/usr/lib/fusion/bin/"* "$R/usr/lib/fusion/session/xinitrc"
+
+echo "  [customize] eszközréteg: a soros portot semmi ne foglalja le"
+for pkg in modemmanager brltty; do
+    if in_root dpkg -s "$pkg" >/dev/null 2>&1; then echo "  [customize] HIBA: $pkg a rendszerképben"; exit 1; fi
+done
 
 echo "  [customize] os-release"
 cat > "$R/usr/lib/os-release" <<EOF

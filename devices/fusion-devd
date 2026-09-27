@@ -1,0 +1,272 @@
+#!/bin/sh
+# =============================================================================
+#  Fusion eszközréteg — fusion-devd
+#
+#  A soros eszközöket (lézer, 3D nyomtató) szerepekhez köti, és stabil nevet ad
+#  nekik a /dev/fusion/ alatt, a ttyUSB-sorszámtól és a bedugási sorrendtől
+#  függetlenül. Adatvezérelt: a szerepeket a roles/*.role fájlok írják le
+#  (USB-azonosítók, azonosítási mód), a kódban nincs eszközspecifikus ág.
+#
+#  Azonosítás (eszközkulcs):
+#    serial:<vid>:<pid>:<sorozatszám>   ha az eszköznek van sorozatszáma és a
+#                                        szerep ezt kéri (identify = serial)
+#    path:<vid>:<pid>:<ID_PATH>         különben a fizikai USB-port szerint
+#                                        (pl. a CH340-nek nincs sorozatszáma);
+#                                        a típus is része: más eszköz ugyanabban
+#                                        a portban nem veszi át a szerepet
+#
+#  Hozzárendelés: /etc/fusion/devices.conf ("<szerep> <kulcs>" sorok, a DATA-n
+#  megmarad). Egy még nem hozzárendelt szerephez az első illeszkedő eszköz
+#  automatikusan hozzárendelődik; utána a szerep ahhoz az eszközhöz kötött,
+#  más ugyanilyen eszköz "jelölt" marad, amíg kézzel át nem rendeled.
+#
+#  Parancsok:
+#    fusion-devd udev                 udev IMPORT{program}: KEY=érték sorok
+#    fusion-devd record <szerep> <kulcs> [devpath]
+#                                     automatikus hozzárendelés rögzítése (udev RUN)
+#    fusion-devices [list]            szerepek, eszközök, ki használja
+#    fusion-devices assign <szerep> <eszköz>   pl. assign laser ttyUSB0   (root)
+#    fusion-devices forget <szerep>                                        (root)
+#
+#  POSIX sh — busybox ash és bash alatt is fut.
+#  Környezeti változók (teszteléshez):
+#    FUSION_DEVICES_ROLES  szerepek könyvtára  (alapértelmezés: a script melletti
+#                          roles/, különben /usr/lib/fusion/devices/roles)
+#    FUSION_DEVICES_DB     hozzárendelések      (alapértelmezés: /etc/fusion/devices.conf)
+#    FUSION_DEVICES_LOCK   zár könyvtár         (alapértelmezés: /run/fusion/devices.lock)
+#    FUSION_DEV            /dev gyökér          FUSION_SYSFS  /sys gyökér
+#    FUSION_UDEVADM        udevadm parancs (teszteléshez felülírható)
+# =============================================================================
+set -u
+
+SELF_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+if [ -n "${FUSION_DEVICES_ROLES:-}" ]; then ROLES="$FUSION_DEVICES_ROLES"
+elif [ -d "$SELF_DIR/roles" ]; then ROLES="$SELF_DIR/roles"
+else ROLES="/usr/lib/fusion/devices/roles"; fi
+DB="${FUSION_DEVICES_DB:-/etc/fusion/devices.conf}"
+LOCK="${FUSION_DEVICES_LOCK:-/run/fusion/devices.lock}"
+DEV="${FUSION_DEV:-/dev}"
+SYSFS="${FUSION_SYSFS:-/sys}"
+UDEVADM="${FUSION_UDEVADM:-udevadm}"
+
+lower() { printf '%s' "$1" | tr 'ABCDEF' 'abcdef'; }
+role_get() {  # role_get <fájl> <kulcs>
+    sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1 | sed 's/[[:space:]]*$//'
+}
+role_file() {  # role_file <szerep> -> a szerep leírófájlja
+    for _rf in "$ROLES"/*.role; do
+        [ -r "$_rf" ] || continue
+        [ "$(role_get "$_rf" role)" = "$1" ] && { printf '%s' "$_rf"; return 0; }
+    done
+    return 1
+}
+db_key() {  # db_key <szerep> -> a hozzárendelt kulcs
+    [ -r "$DB" ] || return 1
+    awk -v r="$1" '$1==r {print $2; f=1; exit} END {exit !f}' "$DB"
+}
+db_role() {  # db_role <kulcs> -> a kulcshoz rendelt szerep
+    [ -r "$DB" ] || return 1
+    awk -v k="$1" '$2==k {print $1; f=1; exit} END {exit !f}' "$DB"
+}
+# usb_match <vid:pid> <lista>: a lista elemei vid:pid vagy vid:*
+usb_match() {
+    set -f
+    for _m in $2; do
+        _m=$(lower "$_m")
+        case "$_m" in
+            "$1") set +f; return 0 ;;
+            *:\*) [ "${_m%%:*}" = "${1%%:*}" ] && { set +f; return 0; } ;;
+        esac
+    done
+    set +f
+    return 1
+}
+# device_key <szerep-fájl|""> <vid> <pid> <sorozatszám> <id_path>
+device_key() {
+    _ident="path"
+    [ -n "$1" ] && _ident=$(role_get "$1" identify)
+    if [ "$_ident" = "serial" ] && [ -n "$4" ]; then
+        printf 'serial:%s:%s:%s' "$2" "$3" "$4"
+    elif [ -n "$5" ]; then
+        printf 'path:%s:%s:%s' "$2" "$3" "$5"
+    elif [ -n "$4" ]; then
+        printf 'serial:%s:%s:%s' "$2" "$3" "$4"
+    fi
+}
+# a szerepek sorrendben (a fájlnév szerint: 10-laser, 20-printer ...)
+roles_sorted() { for _rf in "$ROLES"/*.role; do [ -r "$_rf" ] && printf '%s\n' "$_rf"; done; }
+
+# --------------------------------------------------------------------------
+# udev: IMPORT{program} — a környezetből: ID_VENDOR_ID ID_MODEL_ID
+#       ID_SERIAL_SHORT ID_PATH (a 60-serial.rules és a usb_id builtin tölti)
+# --------------------------------------------------------------------------
+cmd_udev() {
+    vid=$(lower "${ID_VENDOR_ID:-}"); pid=$(lower "${ID_MODEL_ID:-}")
+    ser="${ID_SERIAL_SHORT:-}"; path="${ID_PATH:-}"
+    [ -n "$vid" ] && [ -n "$pid" ] || exit 0
+    kp=$(device_key "" "$vid" "$pid" "" "$path")
+    ks=""; [ -n "$ser" ] && ks="serial:$vid:$pid:$ser"
+    # 1) már hozzárendelt eszköz (sorozatszám vagy port szerint)
+    for k in $ks $kp; do
+        if r=$(db_role "$k"); then
+            echo "FUSION_ROLE=$r"; echo "FUSION_DEVICE_KEY=$k"; exit 0
+        fi
+    done
+    # 2) illeszkedő szerep, amelyhez még nincs eszköz -> automatikus hozzárendelés
+    cand=""
+    for rf in $(roles_sorted); do
+        usb_match "$vid:$pid" "$(role_get "$rf" match.usb)" || continue
+        r=$(role_get "$rf" role)
+        if ! db_key "$r" >/dev/null; then
+            k=$(device_key "$rf" "$vid" "$pid" "$ser" "$path")
+            [ -n "$k" ] || continue
+            echo "FUSION_ROLE=$r"; echo "FUSION_DEVICE_KEY=$k"; echo "FUSION_ROLE_NEW=1"
+            exit 0
+        fi
+        [ -n "$cand" ] || cand=$r
+    done
+    # 3) ismert típusú, de a szerephez már másik eszköz tartozik -> jelölt
+    [ -n "$cand" ] && echo "FUSION_CANDIDATE=$cand"
+    exit 0
+}
+
+# --------------------------------------------------------------------------
+# zár: egyszerre csak egy író (mkdir atomikus)
+# --------------------------------------------------------------------------
+lock() {
+    mkdir -p "$(dirname "$LOCK")" 2>/dev/null
+    _n=0
+    while ! mkdir "$LOCK" 2>/dev/null; do
+        _n=$((_n + 1)); [ "$_n" -gt 50 ] && { rmdir "$LOCK" 2>/dev/null; continue; }
+        sleep 0.1 2>/dev/null || sleep 1
+    done
+}
+unlock() { rmdir "$LOCK" 2>/dev/null; }
+
+db_write() {  # db_write <szerep> <kulcs|"">  — a szerep sorának cseréje / törlése
+    mkdir -p "$(dirname "$DB")" || return 1
+    {
+        echo "# Fusion eszközréteg — szerep -> eszköz hozzárendelések (fusion-devices kezeli)"
+        [ -r "$DB" ] && grep -v '^#' "$DB" | awk -v r="$1" 'NF && $1!=r'
+        if [ -n "$2" ]; then echo "$1 $2"; fi
+    } > "$DB.tmp" && mv "$DB.tmp" "$DB"
+}
+
+# record: az udev automatikus hozzárendelését rögzíti — csak ha a szerep még szabad.
+# Ha közben másik eszköz kapta meg (egyszerre bedugott két eszköz), ennek az
+# eszköznek a szabályait újrafuttatjuk, így a /dev/fusion név nem kettőződik.
+cmd_record() {
+    [ $# -ge 2 ] || { echo "használat: fusion-devd record <szerep> <kulcs> [devpath]" >&2; exit 2; }
+    lock
+    cur=$(db_key "$1" || true)
+    if [ -z "$cur" ]; then
+        db_write "$1" "$2"; unlock; exit 0
+    fi
+    unlock
+    if [ "$cur" != "$2" ] && [ -n "${3:-}" ]; then
+        $UDEVADM trigger --action=change "$SYSFS$3" >/dev/null 2>&1 || true
+    fi
+    exit 0
+}
+
+# --------------------------------------------------------------------------
+# CLI: fusion-devices
+# --------------------------------------------------------------------------
+# dev_props <eszköz> -> ID_* változók a udev-adatbázisból
+dev_props() {
+    ID_VENDOR_ID=""; ID_MODEL_ID=""; ID_SERIAL_SHORT=""; ID_PATH=""; ID_MODEL=""
+    eval "$($UDEVADM info -q property -n "$1" 2>/dev/null \
+        | grep -E '^(ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT|ID_PATH|ID_MODEL)=' \
+        | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/")"
+}
+# who_uses <eszközfájl> -> "program(pid) ..." (a más felhasználók folyamatai csak rootként látszanak)
+who_uses() {
+    _t=$(readlink -f "$1" 2>/dev/null); _out=""
+    for _fd in /proc/[0-9]*/fd/*; do
+        [ "$(readlink "$_fd" 2>/dev/null)" = "$_t" ] || continue
+        _p=${_fd#/proc/}; _p=${_p%%/*}
+        _out="$_out $(cat "/proc/$_p/comm" 2>/dev/null)($_p)"
+    done
+    printf '%s' "${_out# }"
+}
+serial_devices() {
+    for _d in "$DEV"/ttyUSB* "$DEV"/ttyACM*; do [ -e "$_d" ] && printf '%s\n' "$_d"; done
+}
+
+cmd_list() {
+    echo "Fusion eszközréteg — soros eszközök"
+    for rf in $(roles_sorted); do
+        r=$(role_get "$rf" role); name=$(role_get "$rf" name)
+        k=$(db_key "$r" || true)
+        link="$DEV/fusion/$r"
+        if [ -e "$link" ]; then
+            tgt=$(basename "$(readlink -f "$link")")
+            state="csatlakoztatva: $link -> $tgt"
+            u=$(who_uses "$link"); [ -n "$u" ] && state="$state, használja: $u"
+        elif [ -n "$k" ]; then
+            state="nincs csatlakoztatva"
+        else
+            state="nincs hozzárendelve"
+        fi
+        echo "  $name ($r)"
+        echo "    Állapot:  $state"
+        [ -n "$k" ] && echo "    Eszköz:   $k"
+        wc=$(role_get "$rf" windows.com); [ -n "$wc" ] && echo "    Windows:  $wc"
+    done
+    others=""
+    for d in $(serial_devices); do
+        dev_props "$d"
+        found=""
+        for rf in $(roles_sorted); do
+            [ "$(readlink -f "$DEV/fusion/$(role_get "$rf" role)" 2>/dev/null)" = "$(readlink -f "$d")" ] && found=1
+        done
+        [ -n "$found" ] && continue
+        others="$others
+  $(basename "$d"): ${ID_VENDOR_ID}:${ID_MODEL_ID} ${ID_MODEL} — port: ${ID_PATH:-?}${ID_SERIAL_SHORT:+, sorozatszám: $ID_SERIAL_SHORT}"
+    done
+    if [ -n "$others" ]; then
+        echo "Szerep nélküli soros eszközök:$others"
+        echo "  Hozzárendelés: sudo fusion-devices assign <szerep> <eszköz>   (pl. assign laser ttyUSB0)"
+    fi
+}
+
+retrigger() { $UDEVADM trigger --action=change --subsystem-match=tty >/dev/null 2>&1 || true; $UDEVADM settle --timeout=5 >/dev/null 2>&1 || true; }
+
+cmd_assign() {
+    [ $# -eq 2 ] || { echo "használat: fusion-devices assign <szerep> <eszköz>  (pl. assign laser ttyUSB0)" >&2; exit 2; }
+    rf=$(role_file "$1") || { echo "ismeretlen szerep: $1 (lásd: fusion-devices)" >&2; exit 2; }
+    d=$2; case "$d" in /*) ;; *) d="$DEV/$d" ;; esac
+    [ -e "$d" ] || { echo "nincs ilyen eszköz: $d" >&2; exit 2; }
+    dev_props "$d"
+    [ -n "$ID_VENDOR_ID" ] || { echo "nem USB-s soros eszköz, vagy nincs udev-adata: $d" >&2; exit 2; }
+    k=$(device_key "$rf" "$(lower "$ID_VENDOR_ID")" "$(lower "$ID_MODEL_ID")" "$ID_SERIAL_SHORT" "$ID_PATH")
+    [ -n "$k" ] || { echo "az eszköz nem azonosítható (nincs port és sorozatszám)" >&2; exit 2; }
+    lock
+    # a kulcs egyszerre csak egy szerephez tartozhat
+    if old=$(db_role "$k") && [ "$old" != "$1" ]; then db_write "$old" ""; fi
+    db_write "$1" "$k"; rc=$?
+    unlock
+    [ $rc -eq 0 ] || { echo "nem sikerült írni: $DB (root kell: sudo fusion-devices assign …)" >&2; exit 1; }
+    retrigger
+    echo "$(role_get "$rf" name): $k -> $DEV/fusion/$1"
+}
+
+cmd_forget() {
+    [ $# -eq 1 ] || { echo "használat: fusion-devices forget <szerep>" >&2; exit 2; }
+    role_file "$1" >/dev/null || { echo "ismeretlen szerep: $1" >&2; exit 2; }
+    lock; db_write "$1" ""; rc=$?; unlock
+    [ $rc -eq 0 ] || { echo "nem sikerült írni: $DB (root kell)" >&2; exit 1; }
+    retrigger
+    echo "$1: hozzárendelés törölve"
+}
+
+case "$(basename "$0"):${1:-}" in
+    fusion-devices:|*:list) cmd_list ;;
+    *:udev)   cmd_udev ;;
+    *:record) shift; cmd_record "$@" ;;
+    *:assign) shift; cmd_assign "$@" ;;
+    *:forget) shift; cmd_forget "$@" ;;
+    *)
+        echo "Használat: fusion-devices [list] | assign <szerep> <eszköz> | forget <szerep>" >&2
+        exit 2 ;;
+esac
