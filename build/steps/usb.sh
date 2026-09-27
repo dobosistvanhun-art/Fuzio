@@ -93,7 +93,8 @@ step_usb() {
     cat > "$stage/README.txt" <<EOF
 FusionOS adatpartíció (FUSION_DATA). Az M0 ezt a partíciót nem használja.
 EOF
-    mkfs.ext4 -q -F -L FUSION_DATA -d "$stage" "$p4"
+    # nodiscard: a teljes partícióra küldött TRIM sok pendrive-on percekig tart
+    mkfs.ext4 -q -F -E nodiscard -L FUSION_DATA -d "$stage" "$p4"
     rm -rf "$stage"
     ok "ESP (FAT32), DATA (ext4) kész; A/B üres"
 
