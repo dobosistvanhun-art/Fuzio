@@ -11,7 +11,7 @@
 step_usb() {
     local dev="${1:-}" esp_src
     [ "$(id -u)" -eq 0 ] || die "az 'usb' lépéshez root kell:  sudo build/fusion-build usb /dev/sdX"
-    need lsblk sfdisk wipefs mkfs.vfat mkfs.ext4 udevadm partx mmd mcopy
+    need lsblk sfdisk wipefs mkfs.vfat mkfs.ext4 udevadm partx blockdev mmd mcopy
     [ -n "$dev" ] || die "add meg a pendrive-ot, pl.:  sudo build/fusion-build usb /dev/sdc   (lista: lsblk -d -o NAME,TRAN,SIZE,MODEL)"
     esp_src="$OUT_DIR/release/esp"
     [ -d "$esp_src/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
@@ -65,10 +65,25 @@ step_usb() {
     udevadm settle
     local p1 p2 p3 p4 i=0
     p1=$(part_dev "$dev" 1); p2=$(part_dev "$dev" 2); p3=$(part_dev "$dev" 3); p4=$(part_dev "$dev" 4)
-    # ha a kernel nem olvasta újra a partíciótáblát, kérjük meg külön
-    [ -b "$p4" ] || { partx -u "$dev" 2>/dev/null || partx -a "$dev" 2>/dev/null || true; udevadm settle; }
-    while [ ! -b "$p4" ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
-    [ -b "$p4" ] || die "a partíciók nem jelentek meg ($p4)"
+    # Ha a kernel nem olvasta újra a partíciótáblát (pl. az asztali környezet épp
+    # fogta a régi partíciót), frissítjük: -a felveszi a hiányzó partíciókat,
+    # -u a meglévőket igazítja az új táblához. Mindkettő kell.
+    local want_p1; want_p1=$(( ESP_MIB * 2048 ))
+    _kernel_sees_layout() {
+        [ -b "$p4" ] && [ "$(cat "/sys/class/block/$(basename "$p1")/size" 2>/dev/null)" = "$want_p1" ]
+    }
+    while ! _kernel_sees_layout && [ $i -lt 10 ]; do
+        blockdev --rereadpt "$dev" 2>/dev/null || true
+        partx -a "$dev" 2>/dev/null || true
+        partx -u "$dev" 2>/dev/null || true
+        udevadm settle
+        _kernel_sees_layout || sleep 1
+        i=$((i + 1))
+    done
+    if ! _kernel_sees_layout; then
+        lsblk -o NAME,SIZE,MOUNTPOINTS "$dev" | sed 's/^/      /' >&2
+        die "a kernel nem látja az új partíciókat. Húzd ki és dugd vissza a pendrive-ot, majd futtasd újra ugyanezt a parancsot."
+    fi
     lsblk -o NAME,SIZE,PARTLABEL "$dev" | sed 's/^/      /'
 
     step "Fájlrendszerek"
