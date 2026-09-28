@@ -12,7 +12,10 @@ kmod
 # kernelmodulok — pontosan a UKI kernelének verziója (build.conf: KERNEL_ABI)
 linux-modules-@KERNEL_ABI@
 
-# hálózat (M1: vezetékes DHCP; a Wi-Fi később)
+# hálózat: vezetékes és Wi-Fi DHCP (systemd-networkd); Wi-Fi: iwd (jelenlegi megoldás,
+# a NetworkManager/iwd végleges döntése a Fusion Desktop felületével együtt)
+iwd
+wireless-regdb
 iproute2
 netbase
 systemd-resolved

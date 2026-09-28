@@ -39,6 +39,20 @@ sudo umount /media/$USER/FUSION_*
 
 (A FusionOS-en ez a `/data/import/` mappa.)
 
+## 0) Wi-Fi (a LightBurn licencaktiválásához hálózat kell)
+
+A Desktop terminálja kiírja a Wi-Fi állapotát. Kapcsolódás:
+
+```bash
+fusion-wifi list                         # elérhető hálózatok
+fusion-wifi connect "Hálózat neve"       # a jelszót bekéri
+fusion-wifi                              # állapot: connected, cím
+ping -c3 1.1.1.1
+```
+
+- [ ] `Állapot: connected`, és van `Cím:` (DHCP)
+- [ ] újraindítás után magától kapcsolódik (a hálózatot megjegyzi, a DATA-n)
+
 ## A) A runtime ellenőrzése a ZBookon
 
 Lézer a szokásos portjában (bekapcsolva), indítás a kártyáról, a Desktop terminálja:

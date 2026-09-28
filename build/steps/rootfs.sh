@@ -66,7 +66,7 @@ step_rootfs() {
     FUSION_EXTRA_ROOT="$CACHE_DIR/root"
     [ -d "$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI" ] || die "hiányzik a kicsomagolt kernel — előbb: build/fusion-build fetch"
     export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES \
-           FUSION_EXTRA_ROOT EXTRA_MODULES FUSION_WINE_BUILD FUSION_WINE_ID
+           FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \
         --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \

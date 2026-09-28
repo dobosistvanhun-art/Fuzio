@@ -7,7 +7,7 @@
 set -euo pipefail
 R="$1"
 : "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
-: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}"
+: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FIRMWARE_FILES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] FusionOS fájlok"
@@ -25,6 +25,7 @@ chown -R root:root "$R/usr/lib/fusion"
 ln -sf /usr/lib/fusion/bin/fusion-hwinfo "$R/usr/bin/fusion-hwinfo"
 ln -sf /usr/lib/fusion/bin/fusion-session "$R/usr/bin/fusion-session"
 ln -sf /usr/lib/fusion/devices/fusion-devd "$R/usr/bin/fusion-devices"
+ln -sf /usr/lib/fusion/bin/fusion-wifi "$R/usr/bin/fusion-wifi"
 mkdir -p "$R/data"
 
 echo "  [customize] NVIDIA kernelmodulok ($KERNEL_ABI)"
@@ -73,6 +74,21 @@ echo "  [customize] grafikus szerver (a Fusion Hardware Layer beállításaival)
 ln -sf /run/fusion/hardware/xorg-display.conf "$R/etc/X11/xorg.conf.d/10-fusion-display.conf"
 ln -sf /run/fusion/hardware/Xwrapper.config "$R/etc/X11/Xwrapper.config"
 chmod 0755 "$R/usr/lib/fusion/bin/"* "$R/usr/lib/fusion/session/xinitrc"
+
+echo "  [customize] firmware: $FIRMWARE_FILES"
+fwsrc="$FUSION_EXTRA_ROOT/lib/firmware"
+nfw=0
+for pat in $FIRMWARE_FILES; do
+    for f in $fwsrc/$pat; do
+        [ -e "$f" ] || continue
+        rel=${f#"$fwsrc"/}
+        mkdir -p "$R/usr/lib/firmware/$(dirname "$rel")"
+        cp -L "$f" "$R/usr/lib/firmware/$rel"      # a hivatkozások helyett a fájl
+        nfw=$((nfw + 1))
+    done
+done
+[ "$nfw" -gt 0 ] || { echo "  [customize] HIBA: egy firmware-fájl sem illeszkedik: $FIRMWARE_FILES"; exit 1; }
+echo "  [customize] firmware: $nfw fájl"
 
 echo "  [customize] Fusion Windows Runtime (Wine $FUSION_WINE_ID)"
 mkdir -p "$R/usr/lib/fusion/wine" "$R/usr/lib/fusion/fwr/tools"
@@ -132,7 +148,7 @@ in_root runuser -u fusion -- touch /home/fusion/.sudo_as_admin_successful
 rm -f "$R/var/lib/dbus/machine-id"
 
 echo "  [customize] szolgáltatások"
-in_root systemctl enable systemd-networkd.service systemd-resolved.service \
+in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
     fusion-hardware.service fusion-selftest.service >/dev/null 2>&1
 in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.service >/dev/null 2>&1 || true
 # TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et

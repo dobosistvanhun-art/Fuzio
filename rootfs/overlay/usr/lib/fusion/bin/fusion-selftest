@@ -83,6 +83,25 @@ echo "FUSION-M3: TTY $(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ')"
 echo "FUSION-M3: USB $(lsusb 2>/dev/null | grep -v 'root hub' | cut -d' ' -f6- | tr '\n' ';')"
 echo "FUSION-M3: MODS $(lsmod | awk '$1 ~ /^(usbserial|ftdi_sio|ch341|cp210x|pl2303|cdc_acm|xhci_pci)$/ {print $1}' | tr '\n' ' ')"
 echo "FUSION-M3: NOGRAB $(for c in ModemManager brltty; do command -v $c >/dev/null && printf '%s ' $c; done)ok"
+# --- Wi-Fi (iwd + systemd-networkd) — valódi kapcsolódás virtuális rádiókkal (mac80211_hwsim) ---
+echo "FUSION-WIFI: IWD $(systemctl is-active iwd)"
+# shellcheck disable=SC2012
+echo "FUSION-WIFI: FW $(ls /usr/lib/firmware/iwlwifi-7260-17.ucode* 2>/dev/null | head -n 1)"
+echo "FUSION-WIFI: MODS $(modinfo -n iwlwifi >/dev/null 2>&1 && echo iwlwifi) $(modinfo -n iwlmvm >/dev/null 2>&1 && echo iwlmvm)"
+if modprobe mac80211_hwsim radios=2 2>/dev/null; then
+    i=0; while [ $i -lt 20 ] && [ "$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5' | wc -l)" -lt 2 ]; do sleep 1; i=$((i + 1)); done
+    ap=$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5 {print $1}' | tail -n 1)
+    iwctl device "$ap" set-property Mode ap >/dev/null 2>&1; sleep 2
+    iwctl ap "$ap" start FusionTeszt fusion12345 >/dev/null 2>&1; sleep 3
+    out=$(timeout 90 runuser -u fusion -- env FUSION_WIFI_PASSPHRASE=fusion12345 fusion-wifi connect FusionTeszt 2>&1)
+    printf '%s\n' "$out" | sed 's/^/FUSION-WIFI:   /'
+    echo "FUSION-WIFI: STATE $(runuser -u fusion -- fusion-wifi 2>/dev/null | sed -n 's/^  Állapot: *//p')"
+    runuser -u fusion -- fusion-wifi known 2>/dev/null | grep -q FusionTeszt && echo "FUSION-WIFI: KNOWN FusionTeszt"
+    iwctl ap "$ap" stop >/dev/null 2>&1; modprobe -r mac80211_hwsim 2>/dev/null
+else
+    echo "FUSION-WIFI: HWSIM none"
+fi
+
 # --- M4 proof-of-concept: LightBurn-futtató (kísérleti: Wine WoW64); COM3 -> /dev/fusion/laser; OpenGL ---
 if [ -x /usr/lib/fusion/wine/bin/wine ]; then
     echo "FUSION-M4: WINE $(/usr/lib/fusion/wine/bin/wine --version 2>/dev/null)"

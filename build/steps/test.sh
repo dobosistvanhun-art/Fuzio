@@ -166,6 +166,12 @@ step_test() {
             _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
         fi
         _check "$log" "FUSION-M3: NOGRAB ok" "nincs ModemManager / brltty" || ok_run=0
+        # Wi-Fi: iwd fut, a ZBook firmware-je és drivere a képben, valódi kapcsolódás virtuális rádiókkal
+        _check "$log" "FUSION-WIFI: IWD active" "iwd fut" || ok_run=0
+        _check "$log" "FUSION-WIFI: FW /usr/lib/firmware/iwlwifi-7260-17.ucode" "Intel 7260 firmware" || ok_run=0
+        _check "$log" "FUSION-WIFI: MODS iwlwifi iwlmvm" "iwlwifi / iwlmvm driver" || ok_run=0
+        _check "$log" "FUSION-WIFI: STATE connected" "fusion-wifi connect (virtuális AP, jelszóval)" || ok_run=0
+        _check "$log" "FUSION-WIFI: KNOWN FusionTeszt" "a hálózat megjegyezve" || ok_run=0
         grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"

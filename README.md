@@ -29,6 +29,11 @@ Használat (M4 PoC):
 - `fwr check`: tesztprogramok (`fwr/tools/`) — SERIALCOMM, COM3 megnyitása és írása
   (GRBL-megjegyzéssel, a gép nem mozdul), OpenGL-renderelő
 
+**Wi-Fi** (Intel Wireless 7260, `iwlwifi`): `fusion-wifi list` · `fusion-wifi connect "<hálózat>"` ·
+`fusion-wifi`. A kapcsolódást az iwd végzi, a címet a systemd-networkd adja; a megjegyzett
+hálózatok a DATA-n maradnak. A vezetékes kapcsolat, ha van, elsőbbséget kap. (iwd: jelenlegi
+megoldás; a NetworkManager/iwd végleges döntése a Fusion Desktop felületével együtt.)
+
 Kézi ellenőrzés: `docs/M4-ellenorzes.md`.
 
 ## Mit tud az M3 (lezárva)
@@ -185,6 +190,8 @@ machine-id, nincs hibás szolgáltatás; std VGA-n a Fusion Desktopot is (Xorg, 
 ablakkezelő, magyar kiosztás az X-ben). Az std + SATA futásban egy emulált USB-soros eszköz
 (FTDI) is van: `/dev/fusion/laser` létrejön, a `fusion` felhasználó root nélkül megnyitja,
 és a teszt a QEMU monitorán át **kihúzza és visszadugja** — a név ugyanúgy visszatér.
+A Wi-Fi-t virtuális rádiókkal (`mac80211_hwsim`) teszteli: az egyik hozzáférési pont, a másikról
+a `fusion` felhasználó jelszóval kapcsolódik (`fusion-wifi connect`).
 Ugyanebben a futásban az `fwr check` is lefut: a Windows-program csak a COM3-at látja a
 SERIALCOMM-ban, megnyitja, és a kiírt sor megérkezik az emulált eszközre; az OpenGL a Wine-on
 át működik. Ezen felül a mérési és a diagnosztikai bejegyzést is elindítja.

@@ -1,0 +1,89 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-wifi: Wi-Fi kezelése egyszerűen (az iwd fölött)
+#
+#    fusion-wifi                  állapot: eszköz, hálózat, IP-cím
+#    fusion-wifi list             elérhető hálózatok (keresés)
+#    fusion-wifi connect <név>    kapcsolódás (a jelszót bekéri; a FUSION_WIFI_PASSPHRASE
+#                                 környezeti változóból is jöhet)
+#    fusion-wifi forget <név>     egy megjegyzett hálózat törlése
+#    fusion-wifi known            megjegyzett hálózatok
+#
+#  A megjegyzett hálózatokat az iwd tárolja (/var/lib/iwd — a DATA-n megmarad),
+#  a következő indításkor magától kapcsolódik. A cím DHCP-vel jön (systemd-networkd).
+#  Root nem kell: a sudo csoport tagjai kezelhetik a Wi-Fi-t.
+# =============================================================================
+set -u
+
+say()  { printf '%s\n' "$*"; }
+fail() { printf 'fusion-wifi: %s\n' "$*" >&2; exit 1; }
+nocolor() { sed 's/\x1b\[[0-9;]*m//g'; }
+
+command -v iwctl >/dev/null || fail "az iwd nincs telepítve"
+systemctl is-active -q iwd || fail "az iwd szolgáltatás nem fut (systemctl status iwd)"
+
+# a Wi-Fi eszköz: az első "station" módú (a hozzáférési pont módú kimarad)
+wifi_dev() {
+    iwctl device list 2>/dev/null | nocolor | awk 'NR>4 && $NF=="station" {print $1; exit}'
+}
+
+DEV=$(wifi_dev)
+[ -n "$DEV" ] || fail "nem található Wi-Fi eszköz (a driver betöltődött? lsmod | grep iwlwifi)"
+
+show() {  # show <kulcs> — az iwctl station show egy sora
+    iwctl station "$DEV" show 2>/dev/null | nocolor | sed -n "s/^ *$1 *//p" | sed 's/[[:space:]]*$//' | head -n 1
+}
+
+cmd_status() {
+    state=$(show State); net=$(show "Connected network")
+    ip4=$(ip -4 -o addr show dev "$DEV" 2>/dev/null | awk '{print $4}' | head -n 1)
+    say "Wi-Fi: $DEV"
+    say "  Állapot:  ${state:-ismeretlen}"
+    [ -n "$net" ] && say "  Hálózat:  $net"
+    [ -n "$ip4" ] && say "  Cím:      $ip4"
+    [ "$state" = "connected" ] || say "  Kapcsolódás: fusion-wifi list, majd fusion-wifi connect \"<hálózat neve>\""
+}
+
+cmd_list() {
+    iwctl station "$DEV" scan >/dev/null 2>&1
+    sleep 3
+    say "Elérhető hálózatok ($DEV):"
+    iwctl station "$DEV" get-networks 2>/dev/null | nocolor | sed -n '5,$p' | sed '/^\s*$/d'
+}
+
+cmd_connect() {
+    [ $# -ge 1 ] || fail "használat: fusion-wifi connect \"<hálózat neve>\""
+    ssid=$1
+    pass="${FUSION_WIFI_PASSPHRASE:-}"
+    known=$(iwctl known-networks list 2>/dev/null | nocolor | grep -F " $ssid " || true)
+    if [ -z "$pass" ] && [ -z "$known" ]; then
+        printf 'Jelszó (%s): ' "$ssid"
+        stty -echo 2>/dev/null; read -r pass; stty echo 2>/dev/null; printf '\n'
+    fi
+    iwctl station "$DEV" scan >/dev/null 2>&1; sleep 2
+    if [ -n "$pass" ]; then
+        iwctl --passphrase "$pass" station "$DEV" connect "$ssid" 2>&1 | nocolor
+    else
+        iwctl station "$DEV" connect "$ssid" 2>&1 | nocolor
+    fi
+    i=0
+    while [ $i -lt 20 ] && [ "$(show State)" != "connected" ]; do sleep 1; i=$((i + 1)); done
+    if [ "$(show State)" = "connected" ]; then
+        # a DHCP-cím néhány másodperc
+        i=0; while [ $i -lt 15 ] && [ -z "$(ip -4 -o addr show dev "$DEV" 2>/dev/null)" ]; do sleep 1; i=$((i + 1)); done
+        say "Kapcsolódva: $ssid"
+        cmd_status
+    else
+        fail "nem sikerült kapcsolódni: $ssid (rossz jelszó vagy gyenge jel?)"
+    fi
+}
+
+case "${1:-status}" in
+    status)  cmd_status ;;
+    list)    cmd_list ;;
+    connect) shift; cmd_connect "$@" ;;
+    forget)  shift; [ $# -ge 1 ] || fail "használat: fusion-wifi forget \"<hálózat neve>\""
+             iwctl known-networks "$1" forget 2>&1 | nocolor; say "Elfelejtve: $1" ;;
+    known)   iwctl known-networks list 2>/dev/null | nocolor | sed -n '5,$p' | sed '/^\s*$/d' ;;
+    *)       fail "ismeretlen parancs: $1 (status, list, connect, forget, known)" ;;
+esac
