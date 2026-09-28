@@ -40,7 +40,7 @@ step_rootfs() {
     local work="$OUT_DIR/rootfs-work" tree img pkgs
     tree="$work/tree"; img=$(rootfs_img)
     mkdir -p "$OUT_DIR"
-    rm -rf "$work"; mkdir -p "$work"
+    rm_work "$work"; mkdir -p "$work"
 
     # a gyári kernelmodulok (NVIDIA) a rögzített kernelhez — ha hiányoznak, most fordulnak
     nvidia_ko_ready || step_drivers
@@ -114,6 +114,6 @@ step_rootfs() {
     printf 'kicsomagolva=%s MiB\nerofs=%s MiB\nslot=%s MiB\ncsomagok=%s\n' \
         "$raw" "$sz" "$SLOT_MIB" "$(wc -l < "$OUT_DIR/rootfs.packages")" > "$OUT_DIR/rootfs.size"
     chown "$owner": "$OUT_DIR/rootfs.size" 2>/dev/null || true
-    rm -rf "$work"
+    rm_work "$work"
     ok "kész: $img — ${sz} MiB tömörítve (kicsomagolva ${raw} MiB, $(wc -l < "$OUT_DIR/rootfs.packages") csomag), slot: ${SLOT_MIB} MiB"
 }

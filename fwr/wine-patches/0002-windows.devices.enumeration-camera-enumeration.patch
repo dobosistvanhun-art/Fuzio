@@ -1,0 +1,420 @@
+diff -ruN a/dlls/windows.devices.enumeration/Makefile.in b/dlls/windows.devices.enumeration/Makefile.in
+--- a/dlls/windows.devices.enumeration/Makefile.in	2026-09-28 17:52:14.875684400 +0200
++++ b/dlls/windows.devices.enumeration/Makefile.in	2026-09-28 17:52:14.883132206 +0200
+@@ -8,6 +8,8 @@
+ 	async_private.idl \
+ 	classes.idl \
+ 	event_handlers.c \
++	frames.c \
++	frames_private.idl \
+ 	information.c \
+ 	main.c \
+ 	vector.c \
+diff -ruN a/dlls/windows.devices.enumeration/classes.idl b/dlls/windows.devices.enumeration/classes.idl
+--- a/dlls/windows.devices.enumeration/classes.idl	2026-09-28 17:52:14.877485944 +0200
++++ b/dlls/windows.devices.enumeration/classes.idl	2026-09-28 17:52:14.884936153 +0200
+@@ -22,8 +22,14 @@
+ #pragma winrt ns_prefix
+ 
+ import "windows.devices.enumeration.idl";
++/* FusionOS M4 kísérleti: kamera-felsoroló */
++import "frames_private.idl";
+ 
+ namespace Windows.Devices.Enumeration {
+     runtimeclass DeviceInformation;
+     runtimeclass DeviceAccessInformation;
+ }
++
++namespace Windows.Media.Capture.Frames {
++    runtimeclass MediaFrameSourceGroup;
++}
+diff -ruN a/dlls/windows.devices.enumeration/frames.c b/dlls/windows.devices.enumeration/frames.c
+--- a/dlls/windows.devices.enumeration/frames.c	1970-01-01 01:00:00.000000000 +0100
++++ b/dlls/windows.devices.enumeration/frames.c	2026-09-28 17:52:14.890404587 +0200
+@@ -0,0 +1,204 @@
++/*
++ * FusionOS M4 — KÍSÉRLETI kiegészítés (nem a FusionOS végleges architektúrája)
++ *
++ * Windows.Media.Capture.Frames.MediaFrameSourceGroup statikus metódusai.
++ *
++ * A Wine 11.0-ban ez az osztály nincs meg, a RoGetActivationFactory
++ * REGDB_E_CLASSNOTREG-et ad, és a C++/WinRT-vel írt programok (pl. LightBurn 2.x)
++ * induláskor kezeletlen kivétellel leállnak. Ez a kiegészítés egy üres
++ * kamera-listát ad: FindAllAsync -> üres IVectorView, FromIdAsync -> null.
++ * A kameratámogatás így „nincs kamera” állapotú, a program többi része fut.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#include "private.h"
++
++#include "initguid.h"
++#define WIDL_using_Windows_Media_Capture_Frames
++#include "frames_private.h"
++
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(enumeration);
++
++struct frame_source_group_statics
++{
++    IActivationFactory IActivationFactory_iface;
++    IMediaFrameSourceGroupStatics IMediaFrameSourceGroupStatics_iface;
++    LONG ref;
++};
++
++static inline struct frame_source_group_statics *impl_from_IActivationFactory( IActivationFactory *iface )
++{
++    return CONTAINING_RECORD( iface, struct frame_source_group_statics, IActivationFactory_iface );
++}
++
++static HRESULT WINAPI factory_QueryInterface( IActivationFactory *iface, REFIID iid, void **out )
++{
++    struct frame_source_group_statics *impl = impl_from_IActivationFactory( iface );
++
++    TRACE( "iface %p, iid %s, out %p.\n", iface, debugstr_guid( iid ), out );
++
++    if (IsEqualGUID( iid, &IID_IUnknown ) ||
++        IsEqualGUID( iid, &IID_IInspectable ) ||
++        IsEqualGUID( iid, &IID_IAgileObject ) ||
++        IsEqualGUID( iid, &IID_IActivationFactory ))
++    {
++        IInspectable_AddRef( (*out = &impl->IActivationFactory_iface) );
++        return S_OK;
++    }
++
++    if (IsEqualGUID( iid, &IID_IMediaFrameSourceGroupStatics ))
++    {
++        IInspectable_AddRef( (*out = &impl->IMediaFrameSourceGroupStatics_iface) );
++        return S_OK;
++    }
++
++    FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( iid ) );
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI factory_AddRef( IActivationFactory *iface )
++{
++    struct frame_source_group_statics *impl = impl_from_IActivationFactory( iface );
++    ULONG ref = InterlockedIncrement( &impl->ref );
++    TRACE( "iface %p, ref %lu.\n", iface, ref );
++    return ref;
++}
++
++static ULONG WINAPI factory_Release( IActivationFactory *iface )
++{
++    struct frame_source_group_statics *impl = impl_from_IActivationFactory( iface );
++    ULONG ref = InterlockedDecrement( &impl->ref );
++    TRACE( "iface %p, ref %lu.\n", iface, ref );
++    return ref;
++}
++
++static HRESULT WINAPI factory_GetIids( IActivationFactory *iface, ULONG *iid_count, IID **iids )
++{
++    FIXME( "iface %p, iid_count %p, iids %p stub!\n", iface, iid_count, iids );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI factory_GetRuntimeClassName( IActivationFactory *iface, HSTRING *class_name )
++{
++    FIXME( "iface %p, class_name %p stub!\n", iface, class_name );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI factory_GetTrustLevel( IActivationFactory *iface, TrustLevel *trust_level )
++{
++    FIXME( "iface %p, trust_level %p stub!\n", iface, trust_level );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI factory_ActivateInstance( IActivationFactory *iface, IInspectable **instance )
++{
++    FIXME( "iface %p, instance %p stub!\n", iface, instance );
++    return E_NOTIMPL;
++}
++
++static const struct IActivationFactoryVtbl factory_vtbl =
++{
++    factory_QueryInterface,
++    factory_AddRef,
++    factory_Release,
++    /* IInspectable methods */
++    factory_GetIids,
++    factory_GetRuntimeClassName,
++    factory_GetTrustLevel,
++    /* IActivationFactory methods */
++    factory_ActivateInstance,
++};
++
++DEFINE_IINSPECTABLE( frame_statics, IMediaFrameSourceGroupStatics, struct frame_source_group_statics, IActivationFactory_iface );
++
++/* üres kamera-lista: a művelet szinkron fejeződik be (a hívó azonnal Completed állapotot lát) */
++static HRESULT find_all_async( IUnknown *invoker, IUnknown *param, PROPVARIANT *result, BOOL called_async )
++{
++    static const struct vector_iids iids =
++    {
++        .vector = &IID_IVector_IInspectable,
++        .view = &IID_IVectorView_MediaFrameSourceGroup,
++        .iterable = &IID_IIterable_MediaFrameSourceGroup,
++        .iterator = &IID_IIterator_MediaFrameSourceGroup,
++    };
++    IVectorView_MediaFrameSourceGroup *view;
++    IVector_IInspectable *vector;
++    HRESULT hr;
++
++    TRACE( "invoker %p, param %p, result %p, called_async %d\n", invoker, param, result, called_async );
++
++    if (FAILED(hr = vector_create( &iids, (void *)&vector ))) return hr;
++    hr = IVector_IInspectable_GetView( vector, (void *)&view );
++    IVector_IInspectable_Release( vector );
++    if (FAILED(hr)) return hr;
++
++    result->vt = VT_UNKNOWN;
++    result->punkVal = (IUnknown *)view;
++    return S_OK;
++}
++
++static HRESULT from_id_async( IUnknown *invoker, IUnknown *param, PROPVARIANT *result, BOOL called_async )
++{
++    TRACE( "invoker %p, param %p, result %p, called_async %d\n", invoker, param, result, called_async );
++    result->vt = VT_UNKNOWN;
++    result->punkVal = NULL;
++    return S_OK;
++}
++
++static HRESULT WINAPI frame_statics_FindAllAsync( IMediaFrameSourceGroupStatics *iface,
++                                                  IAsyncOperation_IVectorView_MediaFrameSourceGroup **op )
++{
++    FIXME( "iface %p, op %p: nincs kamera-támogatás, üres lista (FusionOS M4 kísérleti)\n", iface, op );
++    return async_operation_inspectable_create( &IID_IAsyncOperation_IVectorView_MediaFrameSourceGroup, (IUnknown *)iface, NULL,
++                                               find_all_async, (IAsyncOperation_IInspectable **)op );
++}
++
++static HRESULT WINAPI frame_statics_FromIdAsync( IMediaFrameSourceGroupStatics *iface, HSTRING id,
++                                                 IAsyncOperation_MediaFrameSourceGroup **op )
++{
++    FIXME( "iface %p, id %s, op %p: nincs kamera-támogatás, null\n", iface, debugstr_hstring( id ), op );
++    return async_operation_inspectable_create( &IID_IAsyncOperation_MediaFrameSourceGroup, (IUnknown *)iface, NULL,
++                                               from_id_async, (IAsyncOperation_IInspectable **)op );
++}
++
++static HRESULT WINAPI frame_statics_GetDeviceSelector( IMediaFrameSourceGroupStatics *iface, HSTRING *value )
++{
++    /* KSCATEGORY_VIDEO_CAMERA eszközfelületek */
++    static const WCHAR selector[] = L"System.Devices.InterfaceClassGuid:=\"{E5323777-F976-4F5B-9B55-B94699C46E44}\""
++                                    L" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True";
++
++    TRACE( "iface %p, value %p\n", iface, value );
++    if (!value) return E_POINTER;
++    return WindowsCreateString( selector, wcslen( selector ), value );
++}
++
++static const struct IMediaFrameSourceGroupStaticsVtbl frame_statics_vtbl =
++{
++    frame_statics_QueryInterface,
++    frame_statics_AddRef,
++    frame_statics_Release,
++    /* IInspectable methods */
++    frame_statics_GetIids,
++    frame_statics_GetRuntimeClassName,
++    frame_statics_GetTrustLevel,
++    /* IMediaFrameSourceGroupStatics methods */
++    frame_statics_FindAllAsync,
++    frame_statics_FromIdAsync,
++    frame_statics_GetDeviceSelector,
++};
++
++static struct frame_source_group_statics frame_source_group_statics =
++{
++    {&factory_vtbl},
++    {&frame_statics_vtbl},
++    1,
++};
++
++IActivationFactory *media_frame_source_group_factory = &frame_source_group_statics.IActivationFactory_iface;
+diff -ruN a/dlls/windows.devices.enumeration/frames_private.idl b/dlls/windows.devices.enumeration/frames_private.idl
+--- a/dlls/windows.devices.enumeration/frames_private.idl	1970-01-01 01:00:00.000000000 +0100
++++ b/dlls/windows.devices.enumeration/frames_private.idl	2026-09-28 17:52:14.892236181 +0200
+@@ -0,0 +1,81 @@
++/*
++ * FusionOS M4 — KÍSÉRLETI kiegészítés (nem a FusionOS végleges architektúrája)
++ *
++ * Windows.Media.Capture.Frames.MediaFrameSourceGroup — minimális deklarációk
++ * a kamera-felsoroláshoz (FindAllAsync). A Wine 11.0-ból hiányzik ez az osztály,
++ * és a LightBurn 2.x induláskor kivétellel leáll nélküle.
++ *
++ * Az interfész-azonosítók a Windows SDK-val egyeznek:
++ *   IMediaFrameSourceGroup        7f605b87-4832-4b5f-ae3d-412faab37d34
++ *   IMediaFrameSourceGroupStatics 1c48bfc5-436f-4508-94cf-d5d8b7326445
++ * (a paraméterezett interfészek azonosítóit a widl ezekből számolja)
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#pragma makedep header
++
++#ifdef __WIDL__
++#pragma winrt ns_prefix
++#endif
++
++import "inspectable.idl";
++import "asyncinfo.idl";
++import "windowscontracts.idl";
++import "windows.foundation.idl";
++
++namespace Windows.Media.Capture.Frames {
++    interface IMediaFrameSourceGroup;
++    interface IMediaFrameSourceGroupStatics;
++    runtimeclass MediaFrameSourceGroup;
++
++    declare
++    {
++        interface Windows.Foundation.Collections.IVectorView<Windows.Media.Capture.Frames.MediaFrameSourceGroup *>;
++        interface Windows.Foundation.Collections.IIterable<Windows.Media.Capture.Frames.MediaFrameSourceGroup *>;
++        interface Windows.Foundation.Collections.IIterator<Windows.Media.Capture.Frames.MediaFrameSourceGroup *>;
++        interface Windows.Foundation.AsyncOperationCompletedHandler<Windows.Media.Capture.Frames.MediaFrameSourceGroup *>;
++        interface Windows.Foundation.IAsyncOperation<Windows.Media.Capture.Frames.MediaFrameSourceGroup *>;
++        interface Windows.Foundation.AsyncOperationCompletedHandler<Windows.Foundation.Collections.IVectorView<Windows.Media.Capture.Frames.MediaFrameSourceGroup *> *>;
++        interface Windows.Foundation.IAsyncOperation<Windows.Foundation.Collections.IVectorView<Windows.Media.Capture.Frames.MediaFrameSourceGroup *> *>;
++    }
++
++    [
++        contract(Windows.Foundation.UniversalApiContract, 3.0),
++        exclusiveto(Windows.Media.Capture.Frames.MediaFrameSourceGroup),
++        uuid(7f605b87-4832-4b5f-ae3d-412faab37d34)
++    ]
++    interface IMediaFrameSourceGroup : IInspectable
++    {
++        [propget] HRESULT Id([out, retval] HSTRING *value);
++        [propget] HRESULT DisplayName([out, retval] HSTRING *value);
++        /* valójában IVectorView<MediaFrameSourceInfo>; példány nem készül, így elég az IInspectable */
++        [propget] HRESULT SourceInfos([out, retval] IInspectable **value);
++    }
++
++    [
++        contract(Windows.Foundation.UniversalApiContract, 3.0),
++        exclusiveto(Windows.Media.Capture.Frames.MediaFrameSourceGroup),
++        uuid(1c48bfc5-436f-4508-94cf-d5d8b7326445)
++    ]
++    interface IMediaFrameSourceGroupStatics : IInspectable
++    {
++        HRESULT FindAllAsync([out, retval] Windows.Foundation.IAsyncOperation<Windows.Foundation.Collections.IVectorView<Windows.Media.Capture.Frames.MediaFrameSourceGroup *> *> **value);
++        HRESULT FromIdAsync([in] HSTRING id, [out, retval] Windows.Foundation.IAsyncOperation<Windows.Media.Capture.Frames.MediaFrameSourceGroup *> **value);
++        HRESULT GetDeviceSelector([out, retval] HSTRING *value);
++    }
++
++    [
++        contract(Windows.Foundation.UniversalApiContract, 3.0),
++        marshaling_behavior(agile),
++        static(Windows.Media.Capture.Frames.IMediaFrameSourceGroupStatics, Windows.Foundation.UniversalApiContract, 3.0),
++        threading(both)
++    ]
++    runtimeclass MediaFrameSourceGroup
++    {
++        [default] interface Windows.Media.Capture.Frames.IMediaFrameSourceGroup;
++    }
++}
+diff -ruN a/dlls/windows.devices.enumeration/main.c b/dlls/windows.devices.enumeration/main.c
+--- a/dlls/windows.devices.enumeration/main.c	2026-09-28 17:52:14.879381893 +0200
++++ b/dlls/windows.devices.enumeration/main.c	2026-09-28 17:52:14.886731009 +0200
+@@ -119,6 +119,8 @@
+ 
+     struct list added_handlers;
+     struct list enumerated_handlers;
++    struct list updated_handlers; /* FusionOS M4 kísérleti: Updated/Removed feliratkozás */
++    struct list removed_handlers;
+     struct list stopped_handlers;
+     IUnknown *query_params;
+     BOOL aqs_all_whitespace;
+@@ -178,6 +180,8 @@
+     {
+         typed_event_handlers_clear( &impl->added_handlers );
+         typed_event_handlers_clear( &impl->enumerated_handlers );
++        typed_event_handlers_clear( &impl->updated_handlers );
++        typed_event_handlers_clear( &impl->removed_handlers );
+         typed_event_handlers_clear( &impl->stopped_handlers );
+         IUnknown_Release( impl->query_params );
+         impl->cs.DebugInfo->Spare[0] = 0;
+@@ -222,30 +226,37 @@
+     return typed_event_handlers_remove( &impl->added_handlers, &token );
+ }
+ 
++/* FusionOS M4 kísérleti: a feliratkozás megjegyzése (eddig csonk volt, E_NOTIMPL -> a
++ * C++/WinRT-programok, pl. a LightBurn 2.x kamerafigyelője, kivétellel leálltak).
++ * Updated/Removed eseményt ez a megvalósítás nem küld (a lista induláskor készül). */
+ static HRESULT WINAPI device_watcher_add_Updated( IDeviceWatcher *iface, ITypedEventHandler_DeviceWatcher_DeviceInformationUpdate *handler,
+                                                   EventRegistrationToken *token )
+ {
+-    FIXME( "iface %p, handler %p, token %p stub!\n", iface, handler, token );
+-    return S_OK;
++    struct device_watcher *impl = impl_from_IDeviceWatcher( iface );
++    TRACE( "iface %p, handler %p, token %p\n", iface, handler, token );
++    return typed_event_handlers_append( &impl->updated_handlers, (ITypedEventHandler_IInspectable_IInspectable *)handler, token );
+ }
+ 
+ static HRESULT WINAPI device_watcher_remove_Updated( IDeviceWatcher *iface, EventRegistrationToken token )
+ {
+-    FIXME( "iface %p, token %#I64x stub!\n", iface, token.value );
+-    return E_NOTIMPL;
++    struct device_watcher *impl = impl_from_IDeviceWatcher( iface );
++    TRACE( "iface %p, token %#I64x.\n", iface, token.value );
++    return typed_event_handlers_remove( &impl->updated_handlers, &token );
+ }
+ 
+ static HRESULT WINAPI device_watcher_add_Removed( IDeviceWatcher *iface, ITypedEventHandler_DeviceWatcher_DeviceInformationUpdate *handler,
+                                                   EventRegistrationToken *token )
+ {
+-    FIXME( "iface %p, handler %p, token %p stub!\n", iface, handler, token );
+-    return E_NOTIMPL;
++    struct device_watcher *impl = impl_from_IDeviceWatcher( iface );
++    TRACE( "iface %p, handler %p, token %p\n", iface, handler, token );
++    return typed_event_handlers_append( &impl->removed_handlers, (ITypedEventHandler_IInspectable_IInspectable *)handler, token );
+ }
+ 
+ static HRESULT WINAPI device_watcher_remove_Removed( IDeviceWatcher *iface, EventRegistrationToken token )
+ {
+-    FIXME( "iface %p, token %#I64x stub!\n", iface, token.value );
+-    return E_NOTIMPL;
++    struct device_watcher *impl = impl_from_IDeviceWatcher( iface );
++    TRACE( "iface %p, token %#I64x.\n", iface, token.value );
++    return typed_event_handlers_remove( &impl->removed_handlers, &token );
+ }
+ 
+ static HRESULT WINAPI device_watcher_add_EnumerationCompleted( IDeviceWatcher *iface, ITypedEventHandler_DeviceWatcher_IInspectable *handler,
+@@ -593,6 +604,8 @@
+ 
+     list_init( &impl->added_handlers );
+     list_init( &impl->enumerated_handlers );
++    list_init( &impl->updated_handlers );
++    list_init( &impl->removed_handlers );
+     list_init( &impl->stopped_handlers );
+ 
+     InitializeCriticalSectionEx( &impl->cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO );
+@@ -974,6 +987,9 @@
+                 &IID_IActivationFactory, (void **)factory );
+     else if (!wcscmp( buffer, RuntimeClass_Windows_Devices_Enumeration_DeviceAccessInformation ))
+         IActivationFactory_QueryInterface( device_access_factory, &IID_IActivationFactory, (void **)factory );
++    /* FusionOS M4 kísérleti: kamera-felsoroló (üres lista) */
++    else if (!wcscmp( buffer, L"Windows.Media.Capture.Frames.MediaFrameSourceGroup" ))
++        IActivationFactory_QueryInterface( media_frame_source_group_factory, &IID_IActivationFactory, (void **)factory );
+ 
+     if (*factory) return S_OK;
+     return CLASS_E_CLASSNOTAVAILABLE;
+diff -ruN a/dlls/windows.devices.enumeration/private.h b/dlls/windows.devices.enumeration/private.h
+--- a/dlls/windows.devices.enumeration/private.h	2026-09-28 17:52:14.881206162 +0200
++++ b/dlls/windows.devices.enumeration/private.h	2026-09-28 17:52:14.888417931 +0200
+@@ -55,6 +55,7 @@
+ };
+ 
+ extern IActivationFactory *device_access_factory;
++extern IActivationFactory *media_frame_source_group_factory; /* FusionOS M4 kísérleti */
+ 
+ HRESULT typed_event_handlers_append( struct list *list, ITypedEventHandler_IInspectable_IInspectable *handler, EventRegistrationToken *token );
+ HRESULT typed_event_handlers_remove( struct list *list, EventRegistrationToken *token );

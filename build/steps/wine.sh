@@ -53,7 +53,7 @@ libdbus-1-dev,libx11-dev,libxext-dev,libxrandr-dev,libxi-dev,libxcursor-dev,libx
 libxinerama-dev,libxcomposite-dev,libxrender-dev,libxxf86vm-dev,libxkbfile-dev,binutils"
 
 # a fordítás receptjének változata: ha a fusion-build.sh lépései érdemben változnak, növelni kell
-WINE_BUILD_REV=2
+WINE_BUILD_REV=3
 
 # a Wine konfigurációja: WoW64, csak a FusionOS-ben használt alrendszerek
 WINE_CONFIGURE="--prefix=/usr/lib/fusion/wine --enable-archs=i386,x86_64 --disable-tests \
@@ -72,7 +72,7 @@ step_wine() {
     [ "$(git -C "$src" rev-parse HEAD)" = "$WINE_COMMIT" ] || die "a Wine forrás commitja nem egyezik — futtasd: build/fusion-build fetch"
 
     step "Wine $WINE_VERSION fordítása (WoW64, build-chroot) — első alkalommal hosszú, 4 magon ~1 óra"
-    rm -rf "$work"; mkdir -p "$work/src" "$work/result" "$OUT_DIR"
+    rm_work "$work"; mkdir -p "$work/src" "$work/result" "$OUT_DIR"
     # a forrás .git nélkül, a javításokkal (a build-chrootba ez kerül)
     tar -C "$src" --exclude=.git -cf - . | tar -C "$work/src" -xf -
     local p
@@ -103,6 +103,7 @@ for t in winegcc wineg++ winecpp widl wmc wrc winemaker winedump function_grep.p
 cd /tmp/wine-src/fusion-tools
 x86_64-w64-mingw32-gcc -O2 -s -o fwr-comtest.exe fwr-comtest.c
 x86_64-w64-mingw32-gcc -O2 -s -o fwr-gltest.exe fwr-gltest.c -lopengl32 -lgdi32
+x86_64-w64-mingw32-gcc -O2 -s -o fwr-camtest.exe fwr-camtest.c
 grep -E '^(configure: WARNING|configure: libs)' /tmp/wine-configure.log > /tmp/wine-configure.summary || true
 EOF
     chmod +x "$work/src/fusion-build.sh"
@@ -128,7 +129,7 @@ EOF
     printf 'wine=%s\nref=%s\ncommit=%s\nconfigure=%s\npatches=%s\n' \
         "$WINE_VERSION" "$WINE_REF" "$WINE_COMMIT" "$WINE_CONFIGURE" \
         "$(for p in "$FUSION_ROOT"/fwr/wine-patches/*.patch; do printf '%s ' "$(basename "$p")"; done)" > "$out/BUILD-INFO"
-    rm -rf "$work"
+    rm_work "$work"
     chown -R "$owner": "$CACHE_DIR/wine" 2>/dev/null || true
     ok "kész: $out ($(du -sm "$out/wine.tar" | cut -f1) MiB)"
 }

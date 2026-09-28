@@ -71,3 +71,20 @@ sfdisk_script() {
 
 # a lemezkép teljes mérete MiB-ban (1 MiB eleje + partíciók + 1 MiB a GPT-másolatnak)
 image_total_mib() { echo $((1 + ESP_MIB + 2 * SLOT_MIB + IMAGE_DATA_MIB + 1)); }
+
+# rm_work <könyvtár> — munkakönyvtár biztonságos törlése. Ha egy korábbi, megszakadt
+# build csatolásokat hagyott benne (proc, sys, dev/pts, dev/shm), előbb leválasztja őket,
+# és a törlés soha nem lép át másik fájlrendszerre (a gazdagép /dev-je, /proc-ja érintetlen marad).
+rm_work() {
+    local dir="$1" m
+    [ -n "$dir" ] && [ "$dir" != "/" ] || die "rm_work: érvénytelen könyvtár: '$dir'"
+    [ -e "$dir" ] || return 0
+    dir=$(readlink -f "$dir")
+    if [ -r /proc/self/mounts ]; then
+        # a legmélyebb csatolással kezdve
+        for m in $(awk -v d="$dir/" 'index($2, d) == 1 {print $2}' /proc/self/mounts | sort -r); do
+            umount "$m" 2>/dev/null || umount -l "$m" 2>/dev/null || die "nem választható le: $m"
+        done
+    fi
+    rm -rf --one-file-system "$dir"
+}

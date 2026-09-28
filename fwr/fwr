@@ -209,6 +209,10 @@ cmd_check() {
     out=$(cmd_run fwr-check 'C:\fusion-tools\fwr-comtest.exe' COM3 "$(printf '(FUSION-COM-OK)\r')" 2>&1); r=$?
     printf '%s\n' "$out" | tr -d '\r' | sed 's/^/  /'
     [ $r -eq 0 ] || rc=1
+    # Windows kamera-felsoroló (WinRT) — a LightBurn 2.x induláskor ezt hívja
+    out=$(cmd_run fwr-check 'C:\fusion-tools\fwr-camtest.exe' 2>&1); r=$?
+    printf '%s\n' "$out" | tr -d '\r' | grep '^CAM' | sed 's/^/  /'
+    [ $r -eq 0 ] || { say "  CAM: HIBA (kód $r)"; rc=1; }
     if [ -n "${DISPLAY:-}" ]; then
         out=$(cmd_run fwr-check 'C:\fusion-tools\fwr-gltest.exe' 2>&1); r=$?
         printf '%s\n' "$out" | tr -d '\r' | grep '^GL' | sed 's/^/  /'

@@ -28,7 +28,7 @@ step_drivers() {
     [ -r "$src_deb" ] || die "hiányzik a(z) $NVIDIA_SOURCE_PKG csomag — előbb: build/fusion-build fetch"
 
     step "NVIDIA $NVIDIA_VERSION kernelmodul fordítása a $KERNEL_ABI kernelhez (build-chroot, ~3–6 perc)"
-    rm -rf "$work"; mkdir -p "$work/ko" "$OUT_DIR"
+    rm_work "$work"; mkdir -p "$work/ko" "$OUT_DIR"
     local mods_excl="nvidia-peermem nvidia-vgpu-vfio"
     # a build-chroot mindent a saját tükréből telepít, a gazdagép apt-jától független
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
@@ -59,7 +59,7 @@ step_drivers() {
     cp "$work/ko/build.log" "$out/build.log"
     printf 'nvidia=%s\ncsomag=%s\nkernel=%s\nmodulok=%s\n' \
         "$NVIDIA_VERSION" "$NVIDIA_PKG_VERSION" "$KERNEL_ABI" "$NVIDIA_MODULES" > "$out/BUILD-INFO"
-    rm -rf "$work"
+    rm_work "$work"
     chown -R "$owner": "$CACHE_DIR/drivers" 2>/dev/null || true
     ok "kész: $out ($(du -sm "$out" | cut -f1) MiB)"
 }

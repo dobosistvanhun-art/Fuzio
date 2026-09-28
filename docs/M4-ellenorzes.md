@@ -11,29 +11,31 @@ nem a FusionOS végleges architektúrája. Az M4 mérései ennek a kísérletnek
 
 ## Előkészítés (Mint)
 
+A csomag (`fusionos-m4c.tar.gz`) és a LightBurn telepítője (`LightBurn-v2.1.04.exe`) a `~/Fusion` mappában van, a pendrive az `sdc`.
+
 ```bash
 cd ~/Fusion
-rm -rf fusionos-m2c && mv fusionos fusionos-m3
-tar xzf fusionos-m4.tar.gz
-cp -r fusionos-m3/build/cache fusionos/build/
+rm -rf fusionos-regi && mv fusionos fusionos-regi
+tar xzf fusionos-m4c.tar.gz
+cp -r fusionos-regi/build/cache fusionos/build/
 cd fusionos
-build/fusion-build deps --install     # új: git, patch
+build/fusion-build deps --install
 build/fusion-build all
 ```
 
-Az `all` most a kísérleti futtatót, a **Wine-t is lefordítja** forrásból (Wine 11.0,
-WoW64 mód, a kísérleti portjavítással). Ez első alkalommal hosszú — a ZBookon kb. **1 óra** —, utána a
-gyorsítótárból jön. A végén: `kész: …/wine/wine-11.0-db11d0fe-…`.
+Az `all` a kísérleti futtatót, a **Wine-t forrásból fordítja** (Wine 11.0, WoW64, a két kísérleti
+kiegészítéssel: COM-portok, kamera-felsoroló). Új kiegészítés után ez újra lefut — a ZBookon kb. **1 óra**.
+A végén: `kész: …/fusionos-dev.vdi`.
 
-A LightBurn telepítőjét (Windows, 64 bites `.exe`, lightburnsoftware.com) a pendrive
-DATA partíciójára másold, mert a FusionOS-en még nincs böngésző:
+A LightBurn telepítőjét a pendrive DATA partíciójára kell másolni (a felírás a DATA-t is újra létrehozza):
 
 ```bash
+lsblk -d -o NAME,SIZE,TRAN,MODEL          # az sdc legyen az usb
 sudo umount /media/$USER/FUSION_* 2>/dev/null
-sudo build/fusion-build usb /dev/sdc
-# a felírás után a kártyát húzd ki és dugd vissza, hogy a Mint csatolja, majd:
+sudo build/fusion-build usb /dev/sdc      # megerősítés: sdc
+# a felírás után a pendrive-ot húzd ki és dugd vissza, hogy a Mint csatolja, majd:
 sudo mkdir -p /media/$USER/FUSION_DATA/import
-sudo cp ~/Letöltések/LightBurn*.exe /media/$USER/FUSION_DATA/import/
+sudo cp ~/Fusion/LightBurn-v2.1.04.exe /media/$USER/FUSION_DATA/import/
 sudo umount /media/$USER/FUSION_*
 ```
 
@@ -67,16 +69,19 @@ Elvárt:
 - [ ] `SERIALCOMM: COM3` — **csak** a COM3 (a nyomtató portja és a ttyS-ek nem látszanak)
 - [ ] `COM3: megnyitva, 115200 8N1, … bájt kiírva`
       (a próbasor GRBL-megjegyzés, a gép nem mozdul)
+- [ ] `CAM: DeviceWatcher OK (kamerák: 0)` és `CAM: MediaFrameSourceGroup.FindAllAsync OK, kamerák: 0`
+      (a Windows kamera-felsoroló — a LightBurn 2.x induláskor ezt hívja; kísérleti kiegészítés)
 - [ ] `GL_RENDERER: Quadro K1100M/PCIe/SSE2`, `GL_VERSION: 4.6…`
       (a Wine OpenGL-útja az NVIDIA 470-re — ez a döntési dokumentum nyitott kockázata)
 
-Az első `fwr check` létrehozza az ellenőrző környezetet, ez 1–2 perc.
+Az első `fwr check` létrehozza az ellenőrző környezetet; a pendrive lassú írása miatt ez több perc is lehet.
+Közben ne gépelj a terminálba (a begépelt sorok a futás után végrehajtódnak).
 
 ## B) LightBurn telepítése
 
 ```bash
 ls /data/import/
-fwr install lightburn /data/import/LightBurn-…-x64.exe      # a pontos fájlnévvel
+fwr install lightburn /data/import/LightBurn-v2.1.04.exe
 ```
 
 - [ ] a LightBurn telepítője elindul (Windows-ablak), végigkattintható
@@ -88,7 +93,7 @@ fwr install lightburn /data/import/LightBurn-…-x64.exe      # a pontos fájln�
 fwr launch lightburn
 ```
 
-- [ ] a LightBurn elindul (egy induláskori WMI-hibaüzenet ismert — ha jön, OK-val tovább)
+- [ ] a LightBurn elindul, a licencablak megjelenik (a felhős próbában így volt)
 - [ ] licenc: aktiválás a kulcsoddal (vagy a próbaidőszak indítása) — hálózati kapcsolat kell
 - [ ] Eszközök (Devices) → **Find My Laser** vagy kézzel: GRBL, **COM3**, 115200
 - [ ] a lézer csatlakozik (a konzolban `Grbl 1.1h`, állapot: Alarm/Idle)
