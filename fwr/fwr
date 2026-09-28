@@ -121,6 +121,9 @@ cmd_prepare() {
     # meghajtók: a profil meghajtói; a teljes Linux-fájlrendszer (Z:) nem látszik
     dd="$WINEPREFIX/dosdevices"
     rm -f "$dd/z:"
+    # korábbi (automatikusan létrehozott) port-hivatkozások törlése — a Wine a
+    # következő indításkor csak a profil portjait hozza létre
+    rm -f "$dd"/com[0-9]* "$dd"/lpt[0-9]*
     prof_keys "$pf" drive | while IFS='|' read -r letter dir; do
         l=$(printf '%s' "$letter" | tr '[:upper:]' '[:lower:]')
         case "$dir" in /*) target=$dir ;; *) target="$HOME/$dir" ;; esac

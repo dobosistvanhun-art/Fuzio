@@ -53,7 +53,7 @@ libdbus-1-dev,libx11-dev,libxext-dev,libxrandr-dev,libxi-dev,libxcursor-dev,libx
 libxinerama-dev,libxcomposite-dev,libxrender-dev,libxxf86vm-dev,libxkbfile-dev,binutils"
 
 # a fordítás receptjének változata: ha a fusion-build.sh lépései érdemben változnak, növelni kell
-WINE_BUILD_REV=1
+WINE_BUILD_REV=2
 
 # a Wine konfigurációja: WoW64, csak a FusionOS-ben használt alrendszerek
 WINE_CONFIGURE="--prefix=/usr/lib/fusion/wine --enable-archs=i386,x86_64 --disable-tests \
@@ -91,8 +91,14 @@ cd /tmp/wine-src
 ./configure $WINE_CONFIGURE > /tmp/wine-configure.log 2>&1 || { tail -n 40 /tmp/wine-configure.log; exit 1; }
 make -j$jobs > /tmp/wine-make.log 2>&1 || { tail -n 60 /tmp/wine-make.log; exit 1; }
 make install DESTDIR=/tmp/wine-inst > /tmp/wine-install.log 2>&1 || { tail -n 40 /tmp/wine-install.log; exit 1; }
-# a Unix-oldali binárisok hibakereső adatai nélkül (a Windows-oldali PE-k maradnak)
+# karcsúsítás (1,5 GB -> ~0,5 GB): hibakereső adatok nélkül (Unix-oldal és Windows-oldali PE-k),
+# fejlesztői részek (fejlécek, import-könyvtárak, fordítóeszközök, man) nélkül
 find /tmp/wine-inst -type f \( -name '*.so' -o -path '*/bin/*' \) -exec strip --strip-unneeded {} + 2>/dev/null || true
+find /tmp/wine-inst/usr/lib/fusion/wine/lib/wine/x86_64-windows -type f -exec x86_64-w64-mingw32-strip --strip-debug {} + 2>/dev/null || true
+find /tmp/wine-inst/usr/lib/fusion/wine/lib/wine/i386-windows -type f -exec i686-w64-mingw32-strip --strip-debug {} + 2>/dev/null || true
+find /tmp/wine-inst/usr/lib/fusion/wine -name '*.a' -delete
+rm -rf /tmp/wine-inst/usr/lib/fusion/wine/include /tmp/wine-inst/usr/lib/fusion/wine/share/man
+for t in winegcc wineg++ winecpp widl wmc wrc winemaker winedump function_grep.pl; do rm -f /tmp/wine-inst/usr/lib/fusion/wine/bin/\$t; done
 # diagnosztikai Windows-programok (64 bites PE)
 cd /tmp/wine-src/fusion-tools
 x86_64-w64-mingw32-gcc -O2 -s -o fwr-comtest.exe fwr-comtest.c

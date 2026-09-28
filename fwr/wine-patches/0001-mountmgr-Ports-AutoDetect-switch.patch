@@ -1,18 +1,43 @@
-From 2c0b36d44c9cb542690a21b8f5011b3a39237a82 Mon Sep 17 00:00:00 2001
+From 8174678046124b5060c647190f60e06011a56a46 Mon Sep 17 00:00:00 2001
 From: FusionOS <fusion@localhost>
-Date: Sun, 27 Sep 2026 18:04:21 +0200
+Date: Mon, 28 Sep 2026 05:12:12 +0200
 Subject: [PATCH] mountmgr: HKLM\Software\Wine\Ports\AutoDetect=N disables
- automatic serial/parallel port mapping (FusionOS)
+ automatic serial/parallel port mapping; skip non-port value names that do not
+ fit (FusionOS)
 
 ---
- dlls/mountmgr.sys/device.c | 8 ++++++++
- 1 file changed, 8 insertions(+)
+ dlls/mountmgr.sys/device.c | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/mountmgr.sys/device.c b/dlls/mountmgr.sys/device.c
-index 733d48a..bb81156 100644
+index 733d48a..f1fc064 100644
 --- a/dlls/mountmgr.sys/device.c
 +++ b/dlls/mountmgr.sys/device.c
-@@ -2033,6 +2033,14 @@ static void create_port_devices( DRIVER_OBJECT *driver, const char *devices )
+@@ -1990,6 +1990,7 @@ static void create_port_devices( DRIVER_OBJECT *driver, const char *devices )
+     BOOL used[MAX_PORTS];
+     WCHAR port[7];
+     DWORD port_len, type, size;
++    LSTATUS res;
+     int i, n;
+ 
+     if (driver == serial_driver)
+@@ -2014,9 +2015,12 @@ static void create_port_devices( DRIVER_OBJECT *driver, const char *devices )
+     {
+         port_len = ARRAY_SIZE(port);
+         size = sizeof(reg_value);
+-        if (RegEnumValueW( wine_ports_key, i, port, &port_len, NULL,
+-                    &type, (BYTE*)reg_value, &size ) != ERROR_SUCCESS)
+-            break;
++        res = RegEnumValueW( wine_ports_key, i, port, &port_len, NULL,
++                             &type, (BYTE*)reg_value, &size );
++        /* FusionOS: a value name that does not fit (e.g. "AutoDetect") is not a port;
++         * skip it instead of ending the enumeration */
++        if (res == ERROR_MORE_DATA) continue;
++        if (res != ERROR_SUCCESS) break;
+         if (type != REG_SZ || wcsnicmp( port, port_prefix, 3 ))
+             continue;
+ 
+@@ -2033,6 +2037,14 @@ static void create_port_devices( DRIVER_OBJECT *driver, const char *devices )
          create_port_device( driver, n, unix_path, dosdev, &windows_ports_key );
      }
  
