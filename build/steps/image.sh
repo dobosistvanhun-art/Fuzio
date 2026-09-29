@@ -48,6 +48,8 @@ step_image() {
     local dataimg="$out/data.ext4" stage="$out/data-stage"
     rm -rf "$stage" "$dataimg"; mkdir -p "$stage"
     _data_readme > "$stage/README.txt"
+    # a teszthez: melyik lemezkép DATA-járól indult a rendszer (több lemezes boot-próba)
+    [ -n "${FUSION_IMAGE_MARKER:-}" ] && echo "$FUSION_IMAGE_MARKER" > "$stage/.fusion-test-marker"
     truncate -s "${IMAGE_DATA_MIB}M" "$dataimg"
     mkfs.ext4 -q -F -E nodiscard -L FUSION_DATA -d "$stage" "$dataimg"
     dd if="$dataimg" of="$img" bs=1M seek=$((1 + ESP_MIB + 2 * SLOT_MIB)) conv=notrunc,sparse status=none

@@ -132,6 +132,7 @@ step_test() {
         _check "$log" "FUSION-M1: ROOT overlay usr=erofs ro" "gyökér-overlay, /usr csak olvasható (EROFS)" || ok_run=0
         _check "$log" "FUSION-M1: MOUNTS data=ext4" "/data" || ok_run=0
         _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
+        _check "$log" "FUSION-M1: BOOTDISK sda MARKER none" "a boot-lemez felismerve (LoaderDevicePartUUID)" || ok_run=0
         _check "$log" "FUSION-M1: DISPLAY_PROFILE=$want STATUS=ok DRIVER=$drv" "hardverprofil és driver" || ok_run=0
         _check "$log" "FUSION-M1: GETTY active" "bejelentkezési képernyő" || ok_run=0
         _check "$log" "FUSION-M1: LOCALE hu_HU.UTF-8 KEYMAP hu" "magyar nyelv és billentyűzet" || ok_run=0
@@ -206,6 +207,28 @@ step_test() {
     else
         warn "SIKERTELEN — napló: $log"; fails=$((fails + 1))
     fi
+
+    # két FusionOS-lemez (pl. SSD + pendrive): a második lemezről indul; a slot és a DATA is
+    # onnan kell jöjjön (a fusion-init a systemd-boot LoaderDevicePartUUID-ja alapján választ)
+    FUSION_VARIANT="test" step_build >/dev/null
+    FUSION_VARIANT="test" FUSION_IMAGE_MARKER="masodik" step_image >/dev/null
+    mv "$out/fusionos.img" "$out/fusionos-masodik.img"
+    FUSION_VARIANT="test" FUSION_IMAGE_MARKER="elso" step_image >/dev/null     # disk0 = "elso"
+    log="$out/qemu-ketlemez.log"
+    step "QEMU EFI boot → két FusionOS-lemez, indítás a másodikról (SATA 2. port)"
+    # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
+    QEMU_EXTRA=(-drive "file=$out/fusionos-masodik.img,format=raw,if=none,id=disk1,snapshot=on"
+                -device "ide-hd,drive=disk1,bus=ahci0.1,bootindex=0"); QEMU_HOTPLUG=0; QEMU_TIMEOUT=900
+    _qemu_run ketlemez std sata "$log" "FUSION-M1: SYSTEM UP"
+    if _check "$log" "FUSION-M1: BOOTDISK sdb MARKER masodik" "a boot-lemez (sdb) slotja és DATA-ja" \
+       && _check "$log" "FUSION-M1: SYSTEM UP state=running" "systemd fut, hibátlanul" \
+       && _check "$log" "FUSION-M1: FAILEDCOUNT 0" "nincs hibás szolgáltatás"; then
+        ok "SIKERES ($RUN_SECS mp)"
+    else
+        warn "SIKERTELEN — napló: $log"; grep -a 'FUSION-M1\|fusion-init' "$log" | tail -n 12 | sed 's/^/      /' >&2
+        fails=$((fails + 1))
+    fi
+    rm -f "$out/fusionos-masodik.img"
 
     # diagnosztika: a boot menü második bejegyzése, alapértelmezettként beállítva
     FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-diag*" step_build >/dev/null

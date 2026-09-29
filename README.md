@@ -8,6 +8,17 @@ Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
 OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
+## Telepítés az SSD-re és frissítés (a DATA megmarad)
+
+- `sudo build/fusion-build install /dev/sdb --internal --data-from /media/$USER/FUSION_DATA --wifi-file ~/Fusion/wifi.conf`
+  — első telepítés belső lemezre (a ZBook optikai helyén lévő SSD), a pendrive DATA-jának átvételével
+- `sudo build/fusion-build update /dev/sdb` — rendszerfrissítés: ESP + A slot újraírva, a DATA
+  (LightBurn, Wi-Fi, nyomtató-adatok) megmarad
+- a fusion-init a boot-lemezről veszi a slotot és a DATA-t (systemd-boot `LoaderDevicePartUUID`),
+  így több FusionOS-lemez (SSD + pendrive) sem keveredik
+
+Részletek: `docs/SSD-telepites.md`.
+
 ## M5 — Klipper (3D nyomtató)
 
 A Klipper és a Moonraker **rendszerszolgáltatás** (`fusion-klipper`, `fusion-moonraker`), a webes

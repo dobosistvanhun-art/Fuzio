@@ -20,6 +20,10 @@
 #    all                fetch + rootfs (sudo-t kér, ha kell) + build + image + vdi
 #    test               automatikus EFI boot-teszt QEMU + OVMF alatt
 #    usb <eszköz>       felírás pendrive-ra (root: sudo build/fusion-build usb /dev/sdX)
+#    install <eszköz> [--internal] [--data-from <FUSION_DATA>] [--wifi-file <fájl>]
+#                       telepítés lemezre (a lemez törlődik); belső lemezre csak --internal-lal
+#    update <eszköz> [--wifi-file <fájl>]
+#                       rendszerfrissítés meglévő FusionOS-lemezen — a DATA (programok, adatok) megmarad
 #    clean              a build/out törlése (a letöltött cache marad)
 # =============================================================================
 set -euo pipefail
@@ -65,7 +69,7 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -84,6 +88,8 @@ case "$cmd" in
               if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
     test)     step_test ;;
     usb)      step_usb "$@" ;;
+    install)  step_install "$@" ;;
+    update)   step_update "$@" ;;
     clean)    step_clean ;;
     ""|-h|--help|help) usage ;;
     *)        usage; die "ismeretlen parancs: $cmd" ;;

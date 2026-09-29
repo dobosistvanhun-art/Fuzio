@@ -13,6 +13,8 @@ echo "FUSION-M1: ROOT $root usr=$usr"
 echo "FUSION-M1: MOUNTS data=$data"
 echo "FUSION-M1: CMDLINE $(cat /proc/cmdline)"
 echo "FUSION-M1: SLOT $(cat /run/fusion/slot 2>/dev/null)"
+echo "FUSION-M1: WIFI-STORED $(ls /var/lib/iwd 2>/dev/null | tr '\n' ' ')"
+echo "FUSION-M1: BOOTDISK $(cat /run/fusion/boot-disk 2>/dev/null) MARKER $(cat /data/.fusion-test-marker 2>/dev/null || echo none) IMAGE-CHANGED $(cat /run/fusion/image-changed 2>/dev/null || echo 0)"
 echo "FUSION-M1: DISPLAY_PROFILE=${FUSION_DISPLAY_PROFILE:-none} STATUS=${FUSION_DISPLAY_STATUS:-none} DRIVER=${FUSION_DISPLAY_DRIVER_STATE:-none}"
 echo "FUSION-M1: LOCALE $(sed -n 's/^LANG=//p' /etc/default/locale) KEYMAP $(sed -n 's/^XKBLAYOUT=//p' /etc/default/keyboard | tr -d '"')"
 echo "FUSION-M1: GETTY $(systemctl is-active getty@tty1.service)"
@@ -89,10 +91,12 @@ echo "FUSION-WIFI: IWD $(systemctl is-active iwd)"
 echo "FUSION-WIFI: FW $(ls /usr/lib/firmware/iwlwifi-7260-17.ucode* 2>/dev/null | head -n 1)"
 echo "FUSION-WIFI: MODS $(modinfo -n iwlwifi >/dev/null 2>&1 && echo iwlwifi) $(modinfo -n iwlmvm >/dev/null 2>&1 && echo iwlmvm)"
 if modprobe mac80211_hwsim radios=2 2>/dev/null; then
-    i=0; while [ $i -lt 20 ] && [ "$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5' | wc -l)" -lt 2 ]; do sleep 1; i=$((i + 1)); done
+    i=0; while [ $i -lt 60 ] && [ "$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5' | wc -l)" -lt 2 ]; do sleep 1; i=$((i + 1)); done
     ap=$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5 {print $1}' | tail -n 1)
     iwctl device "$ap" set-property Mode ap >/dev/null 2>&1; sleep 2
     iwctl ap "$ap" start FusionTeszt fusion12345 >/dev/null 2>&1; sleep 3
+    # lassú (KVM nélküli) gépen a másik rádió station-módja késhet
+    i=0; while [ $i -lt 30 ] && ! iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4' | grep -q ' station'; do sleep 1; i=$((i + 1)); done
     out=$(timeout 90 runuser -u fusion -- env FUSION_WIFI_PASSPHRASE=fusion12345 fusion-wifi connect FusionTeszt 2>&1)
     printf '%s\n' "$out" | sed 's/^/FUSION-WIFI:   /'
     echo "FUSION-WIFI: STATE $(runuser -u fusion -- fusion-wifi 2>/dev/null | sed -n 's/^  Állapot: *//p')"

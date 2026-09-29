@@ -113,6 +113,9 @@ cp "$FUSION_PRINTER_BUILD/BUILD-INFO" "$PR/BUILD-INFO"
 cp "$FUSION_PRINTER_BUILD/pip-freeze.txt" "$PR/pip-freeze.txt"
 echo "$FUSION_PRINTER_ID" > "$PR/.fusion-build-id"
 [ -f "$PR/klipper/klippy/chelper/c_helper.so" ] || { echo "  [customize] HIBA: hiányzik a c_helper.so"; exit 1; }
+# a Moonraker a Klipper docs/ mappáját is kiszolgálná; a képből kimarad, egy üres mappa elég
+mkdir -p "$PR/klipper/docs"
+echo "A Klipper dokumentációja: https://www.klipper3d.org/ (a FusionOS képében nincs benne)" > "$PR/klipper/docs/README.txt"
 install -m 0755 "$FUSION_ROOT/printer/fusion-printer" "$PR/fusion-printer"
 install -m 0644 "$FUSION_ROOT/printer/moonraker.conf" "$PR/moonraker.conf"
 mkdir -p "$PR/defaults" "$PR/clients"
@@ -171,6 +174,7 @@ rm -f "$R/etc/lsb-release"
 cat > "$R/usr/lib/fusion/fusion-release" <<EOF
 FUSION_VERSION='$FUSION_VERSION'
 FUSION_MILESTONE='$FUSION_MILESTONE'
+FUSION_IMAGE_ID='$(date -u +%Y%m%d%H%M%S)'
 EOF
 
 echo "  [customize] nyelv, időzóna, konzol"

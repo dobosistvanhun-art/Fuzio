@@ -55,17 +55,55 @@ fi
 SLOT=$(arg_val fusion.slot)
 case "$SLOT" in A|B) ;; *) rescue "Érvénytelen vagy hiányzó slot a kernel parancssorában (fusion.slot=$SLOT)." ;; esac
 
-# GPT-név szerinti keresés; várunk az USB/SATA eszközökre (legfeljebb ~15 mp)
+# A boot-lemez: ahonnan az UEFI a FusionOS-t indította. A systemd-boot a
+# LoaderDevicePartUUID EFI-változóban megadja az ESP partíció-azonosítóját; a lemezek
+# GPT-jéből megkeressük, melyik lemezen van. Így ha több FusionOS-lemez is csatlakozik
+# (pl. SSD + pendrive), a slot és a DATA mindig arról a lemezről jön, amelyikről indult.
+guid_of() {  # 32 hexa karakter (GPT, vegyes bájtsorrend) -> xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    printf '%s-%s-%s-%s-%s' \
+        "$(printf '%s' "$1" | cut -c1-8 | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/')" \
+        "$(printf '%s' "$1" | cut -c9-12 | sed 's/\(..\)\(..\)/\2\1/')" \
+        "$(printf '%s' "$1" | cut -c13-16 | sed 's/\(..\)\(..\)/\2\1/')" \
+        "$(printf '%s' "$1" | cut -c17-20)" "$(printf '%s' "$1" | cut -c21-32)"
+}
+boot_disk() {
+    v=/sys/firmware/efi/efivars/LoaderDevicePartUUID-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+    [ -r "$v" ] || mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null
+    [ -r "$v" ] || return 1
+    want=$(tail -c +5 "$v" | tr -d '\000\n' | tr 'A-F' 'a-f')
+    [ -n "$want" ] || return 1
+    for b in /sys/block/*; do
+        n=${b##*/}
+        case "$n" in loop*|ram*|zram*|sr*|dm-*|md*|nbd*) continue ;; esac
+        # a GPT partíciós bejegyzései (LBA 2-től, 128 bájtonként; az egyedi azonosító a 16. bájttól)
+        hex=$(dd if="/dev/$n" bs=512 skip=2 count=8 2>/dev/null | od -An -v -tx1 | tr -d ' \n')
+        k=0
+        while [ $k -lt 32 ]; do
+            s=$((k * 256 + 33))
+            g=$(printf '%s' "$hex" | cut -c"$s"-"$((s + 31))")
+            [ ${#g} -eq 32 ] || break
+            [ "$(guid_of "$g")" = "$want" ] && { echo "$n"; return 0; }
+            k=$((k + 1))
+        done
+    done
+    return 1
+}
+
+# GPT-név szerinti keresés (a boot-lemezen, ha ismert); várunk az USB/SATA eszközökre (~15 mp)
 find_part() {
     for u in /sys/class/block/*/uevent; do
         if grep -qs "^PARTNAME=$1\$" "$u"; then
-            d=${u%/uevent}; echo "/dev/${d##*/}"; return 0
+            d=${u%/uevent}; p=${d##*/}
+            [ -n "$BOOTDISK" ] && [ ! -e "/sys/block/$BOOTDISK/$p" ] && continue
+            echo "/dev/$p"; return 0
         fi
     done
     return 1
 }
+BOOTDISK=""
 i=0
 while :; do
+    [ -n "$BOOTDISK" ] || BOOTDISK=$(boot_disk)
     ROOTDEV=$(find_part "FUSION_$SLOT"); DATADEV=$(find_part FUSION_DATA)
     [ -n "$ROOTDEV" ] && [ -n "$DATADEV" ] && break
     i=$((i + 1)); [ $i -ge 30 ] && break
@@ -84,8 +122,22 @@ mount -t erofs -o ro "$ROOTDEV" /lower 2>/dev/null \
 mount -t ext4 -o rw,noatime "$DATADEV" /data 2>/dev/null \
     || rescue "A FUSION_DATA partíció ($DATADEV) nem csatolható."
 
-# 5. gyökér-overlay + csak olvasható /usr
+# 4b. rendszerfrissítés után (új rendszerkép, megtartott DATA): a korábbi rendszerből a DATA-n
+# maradt felhasználó-adatbázis és könyvtár-gyorsítótár ne takarja el az új rendszerképét
+# (pl. egy új szolgáltatás-felhasználó). Nem törlés: a régi fájlok a stale/ alá kerülnek.
 mkdir -p /data/overlay/root/upper /data/overlay/root/work
+if ! cmp -s /lower/usr/lib/fusion/fusion-release /data/overlay/image-release; then
+    stale="/data/overlay/stale/$(date +%Y%m%d-%H%M%S)"
+    for f in etc/passwd etc/group etc/shadow etc/gshadow etc/subuid etc/subgid etc/ld.so.cache; do
+        if [ -e "/data/overlay/root/upper/$f" ] || [ -L "/data/overlay/root/upper/$f" ]; then
+            mkdir -p "$stale/${f%/*}" && mv "/data/overlay/root/upper/$f" "$stale/$f" && msg "frissítés: $f (régi) -> $stale"
+        fi
+    done
+    cp /lower/usr/lib/fusion/fusion-release /data/overlay/image-release
+    IMAGE_CHANGED=1
+fi
+
+# 5. gyökér-overlay + csak olvasható /usr
 mount -t overlay overlay \
     -o "lowerdir=/lower,upperdir=/data/overlay/root/upper,workdir=/data/overlay/root/work" /newroot \
     || rescue "A gyökér-réteg (overlay) nem hozható létre."
@@ -99,6 +151,8 @@ umount -l /lower
 # állapot a rendszernek
 mkdir -p /run/fusion
 echo "$SLOT" > /run/fusion/slot
+echo "${BOOTDISK:-ismeretlen}" > /run/fusion/boot-disk
+[ -n "${IMAGE_CHANGED:-}" ] && echo 1 > /run/fusion/image-changed
 echo "$ROOTDEV" > /run/fusion/root-device
 echo "$DATADEV" > /run/fusion/data-device
 
