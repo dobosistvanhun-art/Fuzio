@@ -159,6 +159,15 @@ step_test() {
             _check "$log" "FUSION-M4:   *GL_RENDERER: llvmpipe" "OpenGL a Wine-on át (WGL)" || ok_run=0
             _check "$log" "FUSION-M4:   *CAM: MediaFrameSourceGroup.FindAllAsync OK" "Windows kamera-felsoroló (WinRT) — LightBurn 2.x induláshoz" || ok_run=0
             _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
+            # M5: Klipper + Moonraker + webes felület; szoftveres MCU-val a teljes lánc
+            _check "$log" "FUSION-M5: SERVICES klipper=active moonraker=active nginx=active" "Klipper, Moonraker, nginx fut" || ok_run=0
+            _check "$log" "FUSION-M5: CONFIG serial: /dev/fusion/printer" "alapkonfiguráció: a nyomtató a /dev/fusion/printer szerepen" || ok_run=0
+            _check "$log" "FUSION-M5: KLIPPY state=ready version=$KLIPPER_DESCRIBE" "Klipper ready (szoftveres MCU), a rögzített verzió" || ok_run=0
+            _check "$log" "FUSION-M5: GCODE ok" "G-kód a Moonrakeren át" || ok_run=0
+            _check "$log" "FUSION-M5: M115 FIRMWARE_NAME:Klipper" "M115 válasz a Klippertől" || ok_run=0
+            _check "$log" "FUSION-M5: MACRO True" "a kliens-makrók (mainsail.cfg) betöltve" || ok_run=0
+            _check "$log" "FUSION-M5: WEB fluidd=fluidd mainsail=Mainsail" "Fluidd (:80) és Mainsail (:81)" || ok_run=0
+            _check "$log" "FUSION-M5: PROXY ready ready" "nginx -> Moonraker proxy mindkét felületen" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
                 warn "hiányzik: a COM3-ra írt sor nem érkezett meg az USB-soros eszközre ($out/serial-$cfg.out)"; ok_run=0
             fi
@@ -173,7 +182,7 @@ step_test() {
         _check "$log" "FUSION-WIFI: MODS iwlwifi iwlmvm" "iwlwifi / iwlmvm driver" || ok_run=0
         _check "$log" "FUSION-WIFI: STATE connected" "fusion-wifi connect (virtuális AP, jelszóval)" || ok_run=0
         _check "$log" "FUSION-WIFI: KNOWN FusionTeszt" "a hálózat megjegyezve" || ok_run=0
-        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4' "$log" | sed 's/^/      /' >&2
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4\|FUSION-M5' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else

@@ -113,5 +113,51 @@ if [ -x /usr/lib/fusion/wine/bin/wine ]; then
         echo "FUSION-M4: PREFIX $(ls -d /data/fwr/fwr-check/drive_c 2>/dev/null) owner=$(stat -c %U /data/fwr/fwr-check 2>/dev/null)"
     fi
 fi
+# --- M5: Klipper + Moonraker + webes felület (Fluidd, Mainsail) ---
+if [ -x /usr/lib/fusion/printer/klippy-env/bin/python ]; then
+    api()  { curl -fsS --max-time 5 "http://127.0.0.1:7125$1" 2>/dev/null; }
+    jval() { python3 -c "import sys, json
+try:
+    d = json.load(sys.stdin)['result']; print($1)
+except Exception:
+    print('?')"; }
+    i=0; while [ $i -lt 60 ] && ! api /server/info >/dev/null; do sleep 2; i=$((i + 1)); done
+    echo "FUSION-M5: SERVICES klipper=$(systemctl is-active fusion-klipper) moonraker=$(systemctl is-active fusion-moonraker) nginx=$(systemctl is-active nginx)"
+    echo "FUSION-M5: VERSIONS $(cat /usr/lib/fusion/printer/klipper/klippy/.version) moonraker=$(cat /usr/lib/fusion/printer/moonraker/moonraker/.version)"
+    echo "FUSION-M5: CONFIG $(grep -m1 '^serial:' /data/printer/config/printer.cfg 2>/dev/null) | $(ls /data/printer/config 2>/dev/null | tr '\n' ' ')"
+    echo "FUSION-M5: OWNER $(stat -c '%U:%G %a' /data/printer 2>/dev/null)"
+    # a valódi konfiguráció nyomtató nélkül: a Klipper hibát jelez (nincs /dev/fusion/printer), a Moonraker fut
+    echo "FUSION-M5: DEFAULT klippy=$(api /server/info | jval "d['klippy_state']")"
+    # teljes lánc szoftveres MCU-val (Klipper "Linux MCU"): Klipper ready, G-kód a Moonrakeren át
+    T=/run/fusion/printer-test
+    install -d -o klipper -g klipper "$T"
+    runuser -u klipper -- /usr/lib/fusion/printer/bin/klipper-linux-mcu -I "$T/klipper_host_mcu" >/dev/null 2>&1 &
+    mcu=$!
+    cat > "$T/printer.cfg" <<'CFG'
+[include /data/printer/config/mainsail.cfg]
+[mcu]
+serial: /run/fusion/printer-test/klipper_host_mcu
+[printer]
+kinematics: none
+max_velocity: 100
+max_accel: 100
+CFG
+    chown klipper:klipper "$T/printer.cfg"
+    echo "KLIPPER_CONFIG=$T/printer.cfg" > /run/fusion/printer.env
+    systemctl restart fusion-klipper
+    st=""; i=0
+    while [ $i -lt 45 ]; do st=$(api /printer/info | jval "d['state']"); [ "$st" = ready ] && break; sleep 2; i=$((i + 1)); done
+    echo "FUSION-M5: KLIPPY state=$st version=$(api /printer/info | jval "d['software_version']")"
+    [ "$st" = ready ] || tail -n 20 /data/printer/logs/klippy.log 2>/dev/null | sed 's/^/FUSION-M5:   klippy.log: /'
+    echo "FUSION-M5: GCODE $(curl -fsS --max-time 10 -X POST 'http://127.0.0.1:7125/printer/gcode/script?script=M115' 2>/dev/null | jval "d")"
+    echo "FUSION-M5: M115 $(api '/server/gcode_store?count=5' | jval "[w for g in d['gcode_store'] for w in g['message'].split() if w.startswith('FIRMWARE_NAME')][-1]")"
+    echo "FUSION-M5: MACRO $(api '/printer/objects/list' | jval "'gcode_macro PAUSE' in d['objects'] and 'gcode_macro CANCEL_PRINT' in d['objects']")"
+    echo "FUSION-M5: WEB fluidd=$(curl -fsS --max-time 5 http://127.0.0.1/ 2>/dev/null | grep -o '<title>[^<]*' | sed 's/<title>//') mainsail=$(curl -fsS --max-time 5 http://127.0.0.1:81/ 2>/dev/null | grep -o '<title>[^<]*' | sed 's/<title>//')"
+    echo "FUSION-M5: PROXY $(curl -fsS --max-time 5 http://127.0.0.1/server/info 2>/dev/null | jval "d['klippy_state']") $(curl -fsS --max-time 5 http://127.0.0.1:81/printer/info 2>/dev/null | jval "d['state']")"
+    runuser -u fusion -- fusion-printer 2>&1 | sed 's/^/FUSION-M5:   /'
+    rm -f /run/fusion/printer.env; kill "$mcu" 2>/dev/null
+    systemctl restart fusion-klipper
+    echo "FUSION-M5: DONE"
+fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

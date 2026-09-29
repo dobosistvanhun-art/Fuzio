@@ -1,0 +1,151 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-printer: a 3D nyomtató (Klipper + Moonraker) kezelése
+#
+#    fusion-printer                 állapot: szolgáltatások, Klipper, eszköz, webcímek
+#    fusion-printer ui [fluidd|mainsail]
+#                                   a webes felület ablakban (alapértelmezés: fluidd)
+#    fusion-printer import <printer.cfg>
+#                                   meglévő Klipper-konfiguráció átvétele (pl. a Mintről):
+#                                   [mcu] serial -> /dev/fusion/printer,
+#                                   [virtual_sdcard] path -> /data/printer/gcodes;
+#                                   a SAVE_CONFIG blokk (PID, bed mesh) változatlan marad
+#    fusion-printer restart         FIRMWARE_RESTART (a Klipper újracsatlakozik az MCU-hoz)
+#    fusion-printer log             a klippy.log vége
+#
+#  Belső (a szolgáltatások hívják): prepare, reconnect
+#
+#  Adatok: /data/printer (config, gcodes, logs, database, comms) — a DATA-n megmaradnak.
+#  A nyomtató MCU-ja az M3 eszközréteg "printer" szerepe: /dev/fusion/printer.
+# =============================================================================
+set -u
+
+P=/usr/lib/fusion/printer
+D=/data/printer
+CFG=$D/config/printer.cfg
+API=http://127.0.0.1:7125
+
+say()  { printf '%s\n' "$*"; }
+fail() { printf 'fusion-printer: %s\n' "$*" >&2; exit 1; }
+
+# JSON-mező kiolvasása a Moonraker válaszából (a python3 a képben van)
+jget() {  # jget <url> <python-kifejezés a "d" változóra>
+    curl -fsS --max-time 5 "$API$1" 2>/dev/null | python3 -c "import sys, json
+try:
+    d = json.load(sys.stdin)['result']; print($2)
+except Exception:
+    pass" 2>/dev/null
+}
+
+# a konfiguráció átírása a FusionOS útvonalaira (a SAVE_CONFIG blokk érintetlen)
+rewrite_cfg() {  # rewrite_cfg <be> <ki>
+    awk '
+        /^#\*# <-+ SAVE_CONFIG -+>/ { saved = 1 }
+        saved { print; next }
+        /^\[[^]]+\]/ { sec = tolower($0); gsub(/[[:space:]]/, "", sec) }
+        sec == "[mcu]" && /^[[:space:]]*serial[[:space:]]*[:=]/ {
+            print "serial: /dev/fusion/printer"; next }
+        sec == "[virtual_sdcard]" && /^[[:space:]]*path[[:space:]]*[:=]/ {
+            print "path: /data/printer/gcodes"; next }
+        { print }
+    ' "$1" > "$2"
+}
+
+cmd_prepare() {   # rootként, a fusion-klipper.service indulása előtt
+    [ "$(id -u)" -eq 0 ] || fail "a prepare rootként fut (a szolgáltatás hívja)"
+    for d in "$D" "$D/config" "$D/gcodes" "$D/logs" "$D/comms" "$D/database"; do
+        [ -d "$d" ] || install -d -m 2775 -o klipper -g klipper "$d"
+    done
+    if [ ! -e "$CFG" ]; then
+        install -m 0664 -o klipper -g klipper "$P/defaults/printer.cfg" "$CFG"
+        echo "fusion-printer: alapkonfiguráció telepítve: $CFG"
+    fi
+    # a kliens-makrók (a printer.cfg "[include mainsail.cfg]"-je) a képből, csak olvashatóan
+    for c in mainsail.cfg fluidd.cfg; do
+        [ -e "$D/config/$c" ] || ln -s "$P/clients/$c" "$D/config/$c"
+    done
+    chown klipper:klipper "$D" "$D/config" 2>/dev/null
+    return 0
+}
+
+cmd_status() {
+    say "Nyomtató (Klipper + Moonraker)"
+    say "  Szolgáltatások: klipper=$(systemctl is-active fusion-klipper) moonraker=$(systemctl is-active fusion-moonraker) web=$(systemctl is-active nginx)"
+    if [ -e /dev/fusion/printer ]; then
+        say "  Eszköz:     /dev/fusion/printer -> $(readlink -f /dev/fusion/printer)"
+    else
+        say "  Eszköz:     nincs csatlakoztatva (/dev/fusion/printer) — fusion-devices"
+    fi
+    say "  Konfiguráció: $CFG"
+    st=$(jget /printer/info "d['state'] + '|' + d['state_message'].splitlines()[0] + '|' + d.get('software_version','?')")
+    if [ -n "$st" ]; then
+        say "  Klipper:    $(printf '%s' "$st" | cut -d'|' -f1)  ($(printf '%s' "$st" | cut -d'|' -f3))"
+        msg=$(printf '%s' "$st" | cut -d'|' -f2)
+        [ -n "$msg" ] && say "              $msg"
+    else
+        ks=$(jget /server/info "d['klippy_state']")
+        if [ -n "$ks" ]; then say "  Klipper:    $ks (a Moonraker fut, a Klipper még nem kapcsolódott)"
+        else say "  Klipper:    a Moonraker még nem válaszol (indul?)"; fi
+    fi
+    ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{sub(/\/.*/, "", $4); print $4}')
+    say "  Webes felület:  ezen a gépen: fusion-printer ui   (Fluidd: http://localhost/  Mainsail: http://localhost:81/)"
+    for ip in $ips; do say "                  hálózatról:  Fluidd http://$ip/   Mainsail http://$ip:81/"; done
+}
+
+cmd_import() {
+    [ $# -eq 1 ] || fail "használat: sudo fusion-printer import <printer.cfg>"
+    [ -r "$1" ] || fail "nem olvasható: $1"
+    [ "$(id -u)" -eq 0 ] || fail "rootként kell: sudo fusion-printer import $1"
+    cmd_prepare >/dev/null
+    tmp=$(mktemp); rewrite_cfg "$1" "$tmp"
+    if [ -e "$CFG" ]; then
+        bak="$D/config/printer-$(date +%Y%m%d-%H%M%S).cfg"
+        cp -p "$CFG" "$bak"; say "előző konfiguráció mentve: $bak"
+    fi
+    install -m 0664 -o klipper -g klipper "$tmp" "$CFG"; rm -f "$tmp"
+    say "átvéve: $1 -> $CFG"
+    grep -n '^serial:\|^path:' "$CFG" | sed 's/^/  /'
+    systemctl restart fusion-klipper && say "a Klipper újraindult"
+}
+
+cmd_restart() {
+    curl -fsS --max-time 10 -X POST "$API/printer/firmware_restart" >/dev/null \
+        || fail "a Moonraker nem válaszol (systemctl status fusion-moonraker)"
+    say "FIRMWARE_RESTART elküldve"
+}
+
+cmd_reconnect() {  # udev: a printer szerepű eszköz megjelent
+    i=0
+    while [ $i -lt 30 ]; do    # a Moonraker indulása (boot közbeni bedugásnál)
+        st=$(jget /printer/info "d['state']")
+        [ -n "$st" ] && break
+        sleep 2; i=$((i + 1))
+    done
+    case "$st" in
+        ready|printing) say "a Klipper már kész ($st)";;
+        "") systemctl try-restart fusion-klipper; say "a Moonraker nem válaszol: Klipper újraindítva";;
+        *)  curl -fsS --max-time 10 -X POST "$API/printer/firmware_restart" >/dev/null && say "FIRMWARE_RESTART ($st)";;
+    esac
+}
+
+cmd_ui() {
+    case "${1:-fluidd}" in
+        fluidd)   url=http://localhost/ ; title="Nyomtató — Fluidd" ;;
+        mainsail) url=http://localhost:81/ ; title="Nyomtató — Mainsail" ;;
+        *) fail "ismeretlen felület: $1 (fluidd, mainsail)" ;;
+    esac
+    [ -n "${DISPLAY:-}" ] || fail "nincs grafikus munkamenet (DISPLAY) — hálózatról: fusion-printer (a címek)"
+    exec /usr/lib/fusion/bin/fusion-web --title "$title" "$url"
+}
+
+case "${1:-status}" in
+    status)    cmd_status ;;
+    ui)        shift; cmd_ui "$@" ;;
+    import)    shift; cmd_import "$@" ;;
+    restart)   cmd_restart ;;
+    log)       tail -n "${2:-40}" "$D/logs/klippy.log" ;;
+    prepare)   cmd_prepare ;;
+    reconnect) cmd_reconnect ;;
+    rewrite)   shift; rewrite_cfg "$1" "$2" ;;   # a build használja (alapkonfiguráció)
+    *)         fail "ismeretlen parancs: $1 (status, ui, import, restart, log)" ;;
+esac

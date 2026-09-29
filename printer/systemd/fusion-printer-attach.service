@@ -1,0 +1,7 @@
+[Unit]
+Description=FusionOS nyomtató — a nyomtató USB-kapcsolata létrejött, a Klipper újracsatlakozik
+After=fusion-klipper.service fusion-moonraker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/fusion/printer/fusion-printer reconnect

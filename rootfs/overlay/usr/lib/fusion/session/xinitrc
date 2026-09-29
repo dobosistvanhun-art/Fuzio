@@ -5,5 +5,5 @@ xsetroot -solid '#16202b' -cursor_name left_ptr 2>/dev/null
 xset s off -dpms 2>/dev/null
 [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
 xterm -geometry 110x32+40+40 -fa 'DejaVu Sans Mono' -fs 11 -title 'FusionOS' \
-      -e sh -c 'fusion-hwinfo; echo; fusion-wifi 2>&1; echo; fusion-devices; echo; fwr list; echo; echo "  Grafika: glxinfo -B   |   Vulkan: vulkaninfo --summary   |   NVIDIA: nvidia-smi   |   Eszközök: fusion-devices   |   Windows: fwr"; echo; exec bash -l' &
+      -e sh -c 'fusion-hwinfo; echo; fusion-wifi 2>&1; echo; fusion-devices; echo; fwr list; echo; fusion-printer; echo; echo "  Grafika: glxinfo -B  |  Eszközök: fusion-devices  |  Windows: fwr  |  Nyomtató: fusion-printer ui"; echo; exec bash -l' &
 exec jwm

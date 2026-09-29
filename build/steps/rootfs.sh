@@ -14,7 +14,8 @@ rootfs_stale() {
     [ -r "$img" ] || return 0
     nvidia_ko_ready || return 0
     wine_ready || return 0
-    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" \
+    printer_ready || return 0
+    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$FUSION_ROOT/printer" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)" \
               -newer "$img" -type f -print -quit 2>/dev/null)" ]
 }
 
@@ -46,6 +47,8 @@ step_rootfs() {
     nvidia_ko_ready || step_drivers
     # a Fusion Windows Runtime motorja (Wine, WoW64) — ha még nincs kész, most fordul
     wine_ready || step_wine
+    # M5: Klipper + Moonraker futtatókörnyezet — ha még nincs kész, most készül
+    printer_ready || step_printer
 
     # a rögzített NVIDIA csomagok helyi .deb fájlként (a forráscsomag nem kerül a képbe)
     local -a nvinc=()
@@ -63,10 +66,15 @@ step_rootfs() {
     info "tükör: $ROOTFS_MIRROR"
     FUSION_NVIDIA_KO=$(nvidia_ko_dir)
     FUSION_WINE_BUILD=$(wine_out_dir); FUSION_WINE_ID=$(wine_build_id)
+    FUSION_PRINTER_BUILD=$(printer_out_dir); FUSION_PRINTER_ID=$(printer_build_id)
+    FUSION_WEBUI_DIR=$(webui_dir)
+    FUSION_MAINSAIL_CONFIG=$(printer_src_dir mainsail-config "$MAINSAIL_CONFIG_COMMIT")
+    FUSION_FLUIDD_CONFIG=$(printer_src_dir fluidd-config "$FLUIDD_CONFIG_COMMIT")
     FUSION_EXTRA_ROOT="$CACHE_DIR/root"
     [ -d "$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI" ] || die "hiányzik a kicsomagolt kernel — előbb: build/fusion-build fetch"
     export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES \
-           FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID
+           FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID \
+           FUSION_PRINTER_BUILD FUSION_PRINTER_ID FUSION_WEBUI_DIR WEBUI_ZIPS FUSION_MAINSAIL_CONFIG FUSION_FLUIDD_CONFIG
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \
         --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \

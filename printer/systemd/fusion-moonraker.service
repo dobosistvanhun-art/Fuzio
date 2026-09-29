@@ -1,0 +1,18 @@
+[Unit]
+Description=FusionOS nyomtató — Moonraker (a webes felület API-ja)
+Documentation=https://moonraker.readthedocs.io/
+After=network.target fusion-klipper.service
+Wants=fusion-klipper.service
+RequiresMountsFor=/data
+
+[Service]
+Type=simple
+User=klipper
+Group=klipper
+UMask=0002
+ExecStart=/usr/lib/fusion/printer/moonraker-env/bin/python /usr/lib/fusion/printer/moonraker/moonraker/moonraker.py -d /data/printer -c /usr/lib/fusion/printer/moonraker.conf -l /data/printer/logs/moonraker.log
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

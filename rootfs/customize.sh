@@ -105,6 +105,50 @@ ln -sf /usr/lib/fusion/fwr/fwr "$R/usr/bin/fwr"
 mkdir -p "$R/usr/lib/tmpfiles.d"
 echo "d /data/fwr 0755 fusion fusion -" > "$R/usr/lib/tmpfiles.d/fusion-fwr.conf"
 
+echo "  [customize] nyomtató (M5): Klipper + Moonraker ($FUSION_PRINTER_ID)"
+PR="$R/usr/lib/fusion/printer"
+mkdir -p "$PR"
+tar -C "$PR" -xf "$FUSION_PRINTER_BUILD/printer.tar"
+cp "$FUSION_PRINTER_BUILD/BUILD-INFO" "$PR/BUILD-INFO"
+cp "$FUSION_PRINTER_BUILD/pip-freeze.txt" "$PR/pip-freeze.txt"
+echo "$FUSION_PRINTER_ID" > "$PR/.fusion-build-id"
+[ -f "$PR/klipper/klippy/chelper/c_helper.so" ] || { echo "  [customize] HIBA: hiányzik a c_helper.so"; exit 1; }
+install -m 0755 "$FUSION_ROOT/printer/fusion-printer" "$PR/fusion-printer"
+install -m 0644 "$FUSION_ROOT/printer/moonraker.conf" "$PR/moonraker.conf"
+mkdir -p "$PR/defaults" "$PR/clients"
+install -m 0644 "$FUSION_ROOT/printer/defaults/printer.cfg" "$PR/defaults/printer.cfg"
+# kliens-makrók (mainsail-config, fluidd-config); a gcodes útvonala a FusionOS-é
+sed 's|^path: ~/printer_data/gcodes|path: /data/printer/gcodes|' "$FUSION_MAINSAIL_CONFIG/mainsail.cfg" > "$PR/clients/mainsail.cfg"
+sed 's|^path: ~/printer_data/gcodes|path: /data/printer/gcodes|' "$FUSION_FLUIDD_CONFIG/fluidd.cfg" > "$PR/clients/fluidd.cfg"
+chown -R root:root "$PR"
+ln -sf /usr/lib/fusion/printer/fusion-printer "$R/usr/bin/fusion-printer"
+# webes felületek (Fluidd, Mainsail)
+for line in $WEBUI_ZIPS; do
+    IFS='|' read -r name ver _ _ <<<"$line"
+    rm -rf "$R/usr/share/fusion/web/$name"; mkdir -p "$R/usr/share/fusion/web/$name"
+    unzip -q "$FUSION_WEBUI_DIR/$name-$ver.zip" -d "$R/usr/share/fusion/web/$name"
+    [ -f "$R/usr/share/fusion/web/$name/index.html" ] || { echo "  [customize] HIBA: $name index.html hiányzik"; exit 1; }
+done
+chown -R root:root "$R/usr/share/fusion/web"
+# nginx: csak a FusionOS nyomtató-oldalai
+rm -f "$R/etc/nginx/sites-enabled/default"
+install -m 0644 "$FUSION_ROOT/printer/nginx/fusion-printer.conf" "$R/etc/nginx/sites-available/fusion-printer"
+ln -sf ../sites-available/fusion-printer "$R/etc/nginx/sites-enabled/fusion-printer"
+install -m 0644 "$FUSION_ROOT/printer/nginx/fusion-moonraker.conf" "$R/etc/nginx/snippets/fusion-moonraker.conf"
+in_root nginx -t >/dev/null 2>&1 || { echo "  [customize] HIBA: nginx -t"; in_root nginx -t; exit 1; }
+# szolgáltatások, udev
+install -m 0644 "$FUSION_ROOT"/printer/systemd/*.service "$R/usr/lib/systemd/system/"
+install -m 0644 "$FUSION_ROOT/printer/udev/71-fusion-printer.rules" "$R/usr/lib/udev/rules.d/"
+# a szolgáltatás-felhasználó (a soros porthoz: dialout); adatai a DATA-n
+in_root useradd --system --home-dir /data/printer --no-create-home --shell /usr/sbin/nologin \
+    --comment "FusionOS nyomtató (Klipper)" --user-group -G dialout klipper
+# a Python-környezet próbája a képen belül (a venv a rendszer python3-át használja)
+in_root /usr/lib/fusion/printer/klippy-env/bin/python -c 'import greenlet, cffi, serial, jinja2' \
+    || { echo "  [customize] HIBA: a Klipper Python-környezete nem indul"; exit 1; }
+in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nacl, PIL' 2>/dev/null \
+    || in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, libnacl, PIL' \
+    || { echo "  [customize] HIBA: a Moonraker Python-környezete nem indul"; exit 1; }
+
 echo "  [customize] eszközréteg: a soros portot semmi ne foglalja le"
 for pkg in modemmanager brltty; do
     if in_root dpkg -s "$pkg" >/dev/null 2>&1; then echo "  [customize] HIBA: $pkg a rendszerképben"; exit 1; fi
@@ -139,7 +183,7 @@ echo "Europe/Budapest" > "$R/etc/timezone"
 in_root setupcon --save-only --force >/dev/null 2>&1 || echo "  [customize] FIGYELEM: setupcon --save-only nem sikerült"
 
 echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
-in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm fusion
+in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm,klipper fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
 # az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell
@@ -149,7 +193,8 @@ rm -f "$R/var/lib/dbus/machine-id"
 
 echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
-    fusion-hardware.service fusion-selftest.service >/dev/null 2>&1
+    fusion-hardware.service fusion-selftest.service \
+    fusion-klipper.service fusion-moonraker.service nginx.service >/dev/null 2>&1
 in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.service >/dev/null 2>&1 || true
 # TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et
 # (a biztonsági modellben LATER). E nélkül a boot "Failed to start systemd-tpm2-setup" hibát ír.

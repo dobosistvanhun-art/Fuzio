@@ -80,3 +80,16 @@ libxxf86vm1
 libxkbfile1
 libegl1
 libgl1
+
+# M5 — Klipper + Moonraker (a Python-környezet a build/steps/printer.sh-ból jön)
+python3
+libsodium23
+libffi8
+libjpeg-turbo8
+zlib1g
+nginx
+curl
+# a nyomtató webes felületének ablaka (WebKitGTK) — fusion-web
+python3-gi
+gir1.2-gtk-3.0
+gir1.2-webkit2-4.1

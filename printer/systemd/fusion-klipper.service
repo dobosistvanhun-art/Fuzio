@@ -1,0 +1,25 @@
+[Unit]
+Description=FusionOS nyomtató — Klipper
+Documentation=https://www.klipper3d.org/
+After=network.target
+RequiresMountsFor=/data
+Before=fusion-moonraker.service
+
+[Service]
+Type=simple
+User=klipper
+Group=klipper
+SupplementaryGroups=dialout
+UMask=0002
+# a konfiguráció helye; a boot-teszt ezt a /run/fusion/printer.env-vel írja felül
+Environment=KLIPPER_CONFIG=/data/printer/config/printer.cfg
+EnvironmentFile=-/run/fusion/printer.env
+# rootként: a /data/printer könyvtárai, az alapkonfiguráció és a kliens-makrók (első indításkor)
+ExecStartPre=+/usr/lib/fusion/printer/fusion-printer prepare
+ExecStart=/usr/lib/fusion/printer/klippy-env/bin/python /usr/lib/fusion/printer/klipper/klippy/klippy.py ${KLIPPER_CONFIG} -I /data/printer/comms/klippy.serial -l /data/printer/logs/klippy.log -a /data/printer/comms/klippy.sock
+Restart=always
+RestartSec=10
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

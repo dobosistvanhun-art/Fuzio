@@ -1,0 +1,57 @@
+#!/usr/bin/python3
+# FusionOS — fusion-web: egy webes alkalmazás saját ablakban (böngésző-keret nélkül)
+#
+#   fusion-web [--title CÍM] <url>
+#
+# A "Linux/web runtime" első, egyszerű formája (M5: a nyomtató Fluidd/Mainsail felülete).
+# WebKitGTK; a sütik és a helyi tároló a felhasználó ~/.local/share/fusion/web mappájában
+# maradnak meg (pl. a felület beállításai).
+import argparse
+import os
+import sys
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gtk, WebKit2  # noqa: E402
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="fusion-web")
+    ap.add_argument("--title", default="FusionOS")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=800)
+    ap.add_argument("url")
+    args = ap.parse_args()
+
+    base = os.path.join(os.path.expanduser("~"), ".local", "share", "fusion", "web")
+    os.makedirs(base, exist_ok=True)
+    data = WebKit2.WebsiteDataManager(base_data_directory=base,
+                                      base_cache_directory=os.path.join(base, "cache"))
+    ctx = WebKit2.WebContext.new_with_website_data_manager(data)
+    cookies = ctx.get_cookie_manager()
+    cookies.set_persistent_storage(os.path.join(base, "cookies.sqlite"),
+                                   WebKit2.CookiePersistentStorage.SQLITE)
+
+    view = WebKit2.WebView.new_with_context(ctx)
+    settings = view.get_settings()
+    settings.set_enable_developer_extras(False)
+    settings.set_enable_webgl(True)
+    # a Wine-os OpenGL-hez hasonlóan: a gyorsítás a hardverprofiltól függ; ha gond van, szoftveres
+    if os.environ.get("FUSION_WEB_SOFTWARE") == "1":
+        settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.NEVER)
+
+    win = Gtk.Window(title=args.title)
+    win.set_default_size(args.width, args.height)
+    win.connect("destroy", Gtk.main_quit)
+    view.connect("notify::title", lambda v, _p: win.set_title(
+        f"{args.title} — {v.get_title()}" if v.get_title() else args.title))
+    win.add(view)
+    view.load_uri(args.url)
+    win.show_all()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

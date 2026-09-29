@@ -1,9 +1,10 @@
 
-  FusionOS — fejlesztői konzol (M4)
+  FusionOS — fejlesztői konzol (M5)
   Hardverprofil:  fusion-hwinfo      Grafika: glxinfo -B, vulkaninfo --summary
   Wi-Fi:  fusion-wifi list | fusion-wifi connect "<hálózat>" | fusion-wifi
   Soros eszközök (lézer, nyomtató):  fusion-devices
   Windows-programok:  fwr list | fwr install lightburn <telepítő.exe> | fwr launch lightburn | fwr check
+  Nyomtató (Klipper):  fusion-printer | fusion-printer ui | sudo fusion-printer import <printer.cfg>
   Fusion Desktop újraindítása a tty1-en:  fusion-session
   A rendszer csak olvasható; a változások a FUSION_DATA partícióra kerülnek.
 

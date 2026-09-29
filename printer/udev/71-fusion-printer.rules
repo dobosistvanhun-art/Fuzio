@@ -1,0 +1,3 @@
+# M5: ha a "printer" szerepű soros eszköz (M3 eszközréteg) megjelenik, a Klipper újracsatlakozik
+# (a Klipper magától nem próbálja újra az MCU-t; e nélkül a bedugás után FIRMWARE_RESTART kellene)
+ACTION=="add", SUBSYSTEM=="tty", ENV{FUSION_ROLE}=="printer", TAG+="systemd", ENV{SYSTEMD_WANTS}+="fusion-printer-attach.service"

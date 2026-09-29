@@ -8,6 +8,21 @@ Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
 OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
+## M5 — Klipper (3D nyomtató)
+
+A Klipper és a Moonraker **rendszerszolgáltatás** (`fusion-klipper`, `fusion-moonraker`), a webes
+felületet nginx szolgálja ki: **Fluidd** a 80-as, **Mainsail** a 81-es porton (a választás használat után).
+A Klipper-gazdaprogram ugyanarra a commitra van rögzítve, mint a Minten (`v0.13.0-770-gce7002be`), így a
+nyomtató MCU-ját nem kell újraflashelni. A nyomtató az M3 eszközréteg `printer` szerepe
+(`/dev/fusion/printer`); bedugáskor a Klipper magától újracsatlakozik. Adatok: `/data/printer`.
+
+- `fusion-printer` — állapot, webcímek; `fusion-printer ui [fluidd|mainsail]` — a felület saját ablakban
+- `sudo fusion-printer import <printer.cfg>` — meglévő konfiguráció átvétele (serial és gcodes útvonal átírva)
+- a Python-környezet build-chrootban készül, rögzített requirements-ből (`build/steps/printer.sh`)
+- a QEMU-teszt a Klipper „Linux MCU”-jával (szoftveres MCU) viszi végig a láncot: Klipper ready, G-kód, makrók, mindkét felület
+
+Kézi ellenőrzés: `docs/M5-ellenorzes.md`.
+
 ## M4 — cél és a jelenlegi megvalósítás
 
 **Követelmény:** a Windows-os LightBurn x64 fusson a FusionOS alatt, és a valódi GRBL
@@ -208,6 +223,7 @@ rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (over
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
 fwr/          M4 PoC: fwr, profilok, diagnosztikai Windows-programok; wine-patches/ = kísérleti
+printer/      M5: fusion-printer, szolgáltatások, Moonraker- és nginx-beállítás, alapkonfiguráció (defaults/)
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
 tools/        fusion-hardware-discovery.sh (Phase 0)
