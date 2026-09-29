@@ -240,8 +240,12 @@ _install_or_usb() {  # <mód: usb|install> <eszköz> [kapcsolók]
     sync
     if [ "$DEV_TRAN" = usb ]; then
         ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → a pendrive UEFI-bejegyzése."
+    elif [ "$DEV_TRAN" != loop ] && [ -d /sys/firmware/efi ] && have efibootmgr; then
+        step "UEFI boot-bejegyzés"
+        step_bootentry "$dev" quiet || warn "a boot-bejegyzés nem sikerült — később: sudo build/fusion-build bootentry $dev"
+        ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → „FusionOS”."
     else
-        ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → a(z) $DEV_DESC lemez UEFI-bejegyzése."
+        ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → a(z) $DEV_DESC lemez UEFI-bejegyzése (vagy: sudo build/fusion-build bootentry $dev)."
     fi
 }
 
@@ -299,4 +303,35 @@ step_update() {
     _write_esp "$p1"
     sync
     ok "kész: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — a DATA változatlan. Indítás: F9 → a lemez UEFI-bejegyzése."
+}
+
+# UEFI boot-bejegyzés a FusionOS-lemezhez (a ZBook F9-menüjében „FusionOS” néven jelenik meg).
+# A HP firmware a belső SATA-lemez ESP-jét magától nem ajánlja fel — e nélkül csak a
+# „Boot from EFI file” tallózásával indítható. A jelenlegi első bejegyzés (a Mint) marad az első.
+step_bootentry() {
+    local dev="${1:-}" quiet="${2:-}"
+    [ "$(id -u)" -eq 0 ] || die "root kell:  sudo build/fusion-build bootentry /dev/sdX"
+    [ -d /sys/firmware/efi ] || die "a Mint nem UEFI-módban fut — boot-bejegyzés nem hozható létre"
+    need efibootmgr
+    [ -n "$dev" ] || die "add meg a FusionOS-lemezt, pl.:  sudo build/fusion-build bootentry /dev/sdb"
+    dev=$(readlink -f "$dev")
+    [ "$(_partlabel "$(part_dev "$dev" 1)")" = "$PART_ESP" ] || die "$dev nem FusionOS-lemez (nincs $PART_ESP az 1. partíción)"
+    local old_order old_first n new rest=""
+    old_order=$(efibootmgr | sed -n 's/^BootOrder: //p')
+    # a korábbi FusionOS-bejegyzések törlése (újratelepítéskor megváltozik a partíció azonosítója)
+    for n in $(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *FusionOS\b.*/\1/p'); do
+        efibootmgr -q -b "$n" -B && info "régi FusionOS-bejegyzés törölve: Boot$n"
+        old_order=$(printf '%s' "$old_order" | tr ',' '\n' | grep -vix "$n" | paste -sd, -)
+    done
+    efibootmgr -q -c -d "$dev" -p 1 -L "FusionOS" -l '\EFI\BOOT\BOOTX64.EFI' || die "az efibootmgr nem hozta létre a bejegyzést"
+    new=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *FusionOS\b.*/\1/p' | head -n 1)
+    [ -n "$new" ] || die "a FusionOS-bejegyzés nem látszik az efibootmgr listájában"
+    # sorrend: az eddigi első (a Mint) marad elöl, utána a FusionOS, majd a többi
+    old_first=$(printf '%s' "$old_order" | cut -d, -f1)
+    rest=$(printf '%s' "$old_order" | tr ',' '\n' | sed '1d' | grep -vix "$new" | paste -sd, -)
+    if [ -n "$old_first" ]; then
+        efibootmgr -q -o "$old_first,$new${rest:+,$rest}" || warn "a boot-sorrend nem állítható vissza — ellenőrizd: efibootmgr"
+    fi
+    [ -n "$quiet" ] || efibootmgr | sed -n '/^BootOrder\|FusionOS\|^Boot'"$old_first"'/p' | sed 's/^/      /'
+    ok "UEFI-bejegyzés: Boot$new „FusionOS” — F9 menüben választható; az alapértelmezett indítás változatlan."
 }

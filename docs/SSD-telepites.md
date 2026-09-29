@@ -84,7 +84,10 @@ Moonraker-adatbázis megvan.
 
 ## 4) Indítás
 
-Újraindítás → **F9** → az ADATA SSD UEFI-bejegyzése. (A pendrive maradhat bedugva is: a FusionOS
+A telepítő a végén UEFI-bejegyzést is készít „FusionOS” néven (a Mint marad az alapértelmezett).
+Ha hiányzik, vagy régebbi telepítőt használtál: `sudo build/fusion-build bootentry /dev/sdb`.
+
+Újraindítás → **F9** → **FusionOS**. (A pendrive maradhat bedugva is: a FusionOS
 mindig arról a lemezről veszi a rendszert és a DATA-t, amelyikről elindult.)
 
 - [ ] a Desktop elindul, a Wi-Fi magától kapcsolódik (`fusion-wifi`)

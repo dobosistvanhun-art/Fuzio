@@ -24,6 +24,7 @@
 #                       telepítés lemezre (a lemez törlődik); belső lemezre csak --internal-lal
 #    update <eszköz> [--wifi-file <fájl>]
 #                       rendszerfrissítés meglévő FusionOS-lemezen — a DATA (programok, adatok) megmarad
+#    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
 #    clean              a build/out törlése (a letöltött cache marad)
 # =============================================================================
 set -euo pipefail
@@ -69,7 +70,7 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -90,6 +91,7 @@ case "$cmd" in
     usb)      step_usb "$@" ;;
     install)  step_install "$@" ;;
     update)   step_update "$@" ;;
+    bootentry) step_bootentry "$@" ;;
     clean)    step_clean ;;
     ""|-h|--help|help) usage ;;
     *)        usage; die "ismeretlen parancs: $cmd" ;;
