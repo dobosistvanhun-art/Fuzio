@@ -1,10 +1,13 @@
 <?xml version="1.0"?>
-<!-- FusionOS — ablakkezelő (JWM) beállítás, M6 mérőprototípus.
-     A panelt és a Start menüt a Fusion Shell adja (fusion-shell), a JWM csak az ablakokat
-     kezeli: saját tálca nincs, egy munkaasztal, lapos FusionDark stílus. -->
+<!-- FusionOS — ablakkezelő (JWM) beállítás.
+     A panelt, a Start menüt és az értesítéseket a Fusion Shell adja (fusion-shell), a JWM csak
+     az ablakokat kezeli: saját tálca nincs, egy munkaasztal, lapos FusionDark stílus. -->
 <JWM>
     <RootMenu onroot="3">
-        <Program label="Terminál">xterm -fa 'DejaVu Sans Mono' -fs 11</Program>
+        <Program label="Fájlkezelő">fusion-files</Program>
+        <Program label="Terminál">xterm</Program>
+        <Program label="Beállítások">fusion-settings</Program>
+        <Separator/>
         <Program label="Start menü">fusion-shell menu</Program>
         <Separator/>
         <Restart label="Ablakkezelő újraindítása"/>
@@ -54,4 +57,7 @@
     <Key mask="A" key="F1">exec:fusion-shell menu</Key>
     <Key mask="A" key="F10">maximize</Key>
     <Key key="Super_L">exec:fusion-shell menu</Key>
+    <Key mask="CA" key="e">exec:fusion-files</Key>
+    <Key mask="CA" key="t">exec:xterm</Key>
+    <Key mask="CA" key="s">exec:fusion-settings</Key>
 </JWM>

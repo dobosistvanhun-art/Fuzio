@@ -38,7 +38,7 @@ done
 
 DEPS_CMDS=(apt-get unzip dpkg-deb sha256sum curl strip git patch cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
 DEPS_PKGS="curl unzip binutils git patch systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
-DEPS_OPT_PKGS="qemu-system-x86 ovmf"
+DEPS_OPT_PKGS="qemu-system-x86 ovmf exfatprogs ntfs-3g"
 
 step_deps() {
     step "Build-függőségek"

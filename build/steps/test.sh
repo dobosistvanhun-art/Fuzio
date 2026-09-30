@@ -39,6 +39,32 @@ s.sendall((sys.argv[2] + "\n").encode()); time.sleep(0.8); s.close()
 # (a QEMU usb-serial csak nyitott chardev-vel csatlakozik: ezért "file" háttér, nem "null"),
 # a kihúzás/visszadugás a monitoron át: device_del / device_add
 SERIAL_DEV="usb-serial,chardev=fser0,id=fser0dev,bus=fxhci.0,port=2"
+# teszt-pendrive (M6, automatikus csatolás): ugyanazon az xHCI-n, három partícióval —
+# FAT32 (FUSIONUSB), exFAT (FUSIONEXF), NTFS (FUSIONNTFS); az utóbbi kettő csak, ha a gépen van mkfs.exfat / mkntfs
+STICK_DEV="usb-storage,drive=stick0,bus=fxhci.0,port=3,removable=on"
+
+# _make_stick <kép>: a partíciókat külön fájlban formázzuk, majd a helyükre másoljuk (root nélkül)
+_make_stick() {
+    local img=$1 d parts n=0 off
+    d=$(mktemp -d)
+    rm -f "$img"; truncate -s 200M "$img"
+    printf 'label: gpt\nstart=2048, size=120832, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=FUSIONUSB\nstart=124928, size=65536, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=FUSIONEXF\nstart=192512, size=, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=FUSIONNTFS\n' \
+        | sfdisk -q "$img" >/dev/null
+    truncate -s $((120832 * 512)) "$d/p1"; mkfs.vfat -F 32 -n FUSIONUSB "$d/p1" >/dev/null
+    printf 'FUSION-USB\n' > "$d/f.txt"; mcopy -i "$d/p1" "$d/f.txt" ::/fusion-usb.txt
+    dd if="$d/p1" of="$img" bs=512 seek=2048 conv=notrunc status=none
+    if command -v mkfs.exfat >/dev/null; then
+        truncate -s $((65536 * 512)) "$d/p2"; mkfs.exfat -L FUSIONEXF "$d/p2" >/dev/null
+        dd if="$d/p2" of="$img" bs=512 seek=124928 conv=notrunc status=none
+    fi
+    if command -v mkntfs >/dev/null; then
+        off=$(sfdisk -d "$img" | awk -F'[=,]' '/name="FUSIONNTFS"/ {gsub(/ /,"",$2); gsub(/ /,"",$4); print $2" "$4}')
+        set -- $off
+        truncate -s $(($2 * 512)) "$d/p3"; mkntfs -q -F -Q -L FUSIONNTFS -s 512 -p "$1" -H 16 -S 63 "$d/p3" >/dev/null 2>&1
+        dd if="$d/p3" of="$img" bs=512 seek="$1" conv=notrunc status=none
+    fi
+    rm -rf "$d"
+}
 
 # _qemu_run <cfg-név> <vga> <busz> <napló> <várt záró marker>
 # QEMU_EXTRA (tömb): további QEMU-argumentumok; QEMU_HOTPLUG=1: a FUSION-M3 jelzésekre
@@ -120,7 +146,9 @@ step_test() {
         if [ "$cfg" = std-sata ]; then
             ser=1; serinfo=", + USB-soros eszköz"
             # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
-            QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV")
+            _make_stick "$out/stick.img"
+            QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV"
+                        -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV")
             QEMU_HOTPLUG=1; QEMU_TIMEOUT=2400   # a Wine-környezet létrehozása KVM nélkül lassú
         else
             QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=600
@@ -146,11 +174,22 @@ step_test() {
             _check "$log" "FUSION-M2: WM jwm" "ablakkezelő" || ok_run=0
             _check "$log" "FUSION-M2: XKB hu" "magyar billentyűzet az X-ben" || ok_run=0
             # M6: Fusion Shell — mindkét mérőváltozat: panel (dock, 40 px foglalás), Start menü
-            _check "$log" "FUSION-M6: SHELL qml ready=yes .*panel=1 .*menu=1" "Fusion Shell (QML): panel és Start menü" || ok_run=0
-            _check "$log" "FUSION-M6: SHELL web ready=yes .*panel=1 .*menu=1" "Fusion Shell (web): panel és Start menü" || ok_run=0
-            _check "$log" "FUSION-M6: X11 qml _NET_WM_WINDOW_TYPE_DOCK strut=40" "QML panel: dock, 40 px foglalás" || ok_run=0
-            _check "$log" "FUSION-M6: X11 web _NET_WM_WINDOW_TYPE_DOCK strut=40" "web panel: dock, 40 px foglalás" || ok_run=0
-            _check "$log" "FUSION-M6:   *Start menü nyitás (ms)" "fusion-uimeasure lefutott" || ok_run=0
+            # M6: Fusion Desktop — Shell (panel, Start menü, értesítés), Fájlkezelő, Beállítások
+            _check "$log" "FUSION-M6: SHELL ready=yes .*panel=1 .*menu=1" "Fusion Shell: panel és Start menü" || ok_run=0
+            _check "$log" "FUSION-M6: X11 _NET_WM_WINDOW_TYPE_DOCK strut=40" "panel: dock, 40 px foglalás" || ok_run=0
+            _check "$log" "FUSION-M6: NOTIFY rc=0 last=FusionOS önteszt toasts=[1-9]" "értesítés a D-Buson (org.freedesktop.Notifications) → buborék" || ok_run=0
+            _check "$log" "FUSION-FILES: RESULT ok" "Fájlkezelő: másolás, mozgatás, törlés, archívumok, keresés, összehasonlítás" || ok_run=0
+            _check "$log" "FUSION-M6: FILES window=1" "Fájlkezelő ablak" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: WIFI ok=True device=wlan.*known=.*FusionTeszt" "Beállítások → Wi-Fi (iwd a D-Buson)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs" "Beállítások → Programok (fwr-profilok)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS fwr-lightburn,printer,mainsail,files,settings,terminal" "Start menü programlistája" || ok_run=0
+            _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
+        fi
+        _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
+        if [ "$cfg" = std-usb ]; then
+            _check "$log" "FUSION-M6: MEDIA none" "a FusionOS saját USB-lemeze nem csatolódik automatikusan" || ok_run=0
         fi
         if [ "$ser" = 1 ]; then
             _check "$log" "FUSION-M3: LASER ttyUSB" "/dev/fusion/laser létrejött" || ok_run=0
@@ -175,6 +214,14 @@ step_test() {
             _check "$log" "FUSION-M5: MACRO True" "a kliens-makrók (mainsail.cfg) betöltve" || ok_run=0
             _check "$log" "FUSION-M5: WEB fluidd=fluidd mainsail=Mainsail" "Fluidd (:80) és Mainsail (:81)" || ok_run=0
             _check "$log" "FUSION-M5: PROXY ready ready" "nginx -> Moonraker proxy mindkét felületen" || ok_run=0
+            # M6: a pendrive kötetei automatikusan csatolódnak, a fusion felhasználóé, írhatók; kiadás
+            _check "$log" "FUSION-M6: MEDIA FUSIONUSB fs=vfat uid=1000 file=FUSION-USB write=ok" "USB FAT32: automatikus csatolás, írható" || ok_run=0
+            if command -v mkfs.exfat >/dev/null; then
+                _check "$log" "FUSION-M6: MEDIA FUSIONEXF fs=exfat uid=1000 file=- write=ok" "USB exFAT: automatikus csatolás, írható" || ok_run=0; fi
+            if command -v mkntfs >/dev/null; then
+                _check "$log" "FUSION-M6: MEDIA FUSIONNTFS fs=ntfs3 uid=1000 file=- write=ok" "USB NTFS (ntfs3): automatikus csatolás, írható" || ok_run=0; fi
+            _check "$log" "FUSION-M6: EJECT rc=0 left=biztonságosan eltávolítható" "biztonságos eltávolítás (fusion-admin eject, a fusion felhasználóként)" || ok_run=0
+            _check "$log" "FUSION-M6: SHELL-MEDIA\s*\$" "a Fusion Shell észleli a leválasztást" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
                 warn "hiányzik: a COM3-ra írt sor nem érkezett meg az USB-soros eszközre ($out/serial-$cfg.out)"; ok_run=0
             fi
@@ -189,7 +236,7 @@ step_test() {
         _check "$log" "FUSION-WIFI: MODS iwlwifi iwlmvm" "iwlwifi / iwlmvm driver" || ok_run=0
         _check "$log" "FUSION-WIFI: STATE connected" "fusion-wifi connect (virtuális AP, jelszóval)" || ok_run=0
         _check "$log" "FUSION-WIFI: KNOWN FusionTeszt" "a hálózat megjegyezve" || ok_run=0
-        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4\|FUSION-M5\|FUSION-M6' "$log" | sed 's/^/      /' >&2
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4\|FUSION-M5\|FUSION-M6\|FUSION-FILES\|FUSION-SETTINGS' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else

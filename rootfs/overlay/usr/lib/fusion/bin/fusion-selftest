@@ -163,24 +163,57 @@ CFG
     systemctl restart fusion-klipper
     echo "FUSION-M5: DONE"
 fi
-# --- M6: Fusion Shell (panel + Start menü), mindkét mérőváltozat ---
-if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/shell/fusion-shell ]; then
-    urun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion "$@"; }
-    for v in qml web; do
-        rm -f /run/user/1000/fusion-shell-$v.ready
-        urun fusion-shell use $v >/dev/null
-        i=0; while [ $i -lt 90 ] && [ ! -e /run/user/1000/fusion-shell-$v.ready ]; do sleep 1; i=$((i + 1)); done
-        sleep 2
-        pw=$(urun xwininfo -name "Fusion Panel" 2>/dev/null)
-        strut=$(urun sh -c 'xprop -id $(xwininfo -name "Fusion Panel" | sed -n "s/.*Window id: \(0x[0-9a-f]*\).*/\1/p") _NET_WM_STRUT_PARTIAL _NET_WM_WINDOW_TYPE' 2>/dev/null | tr '\n' ' ')
-        urun fusion-shell menu; sleep 3
-        mv=$(urun xwininfo -name "Fusion Start" 2>/dev/null | grep -c IsViewable)
-        urun fusion-shell menu; sleep 1
-        echo "FUSION-M6: SHELL $v ready=$([ -e /run/user/1000/fusion-shell-$v.ready ] && echo yes || echo no) wait=${i}s panel=$(printf '%s' "$pw" | grep -c IsViewable) width=$(printf '%s' "$pw" | sed -n 's/.*Width: //p') menu=$mv"
-        echo "FUSION-M6: X11 $v $(printf '%s' "$strut" | grep -o '_NET_WM_WINDOW_TYPE_DOCK') strut=$(printf '%s' "$strut" | grep -o 'STRUT_PARTIAL(CARDINAL) = [0-9, ]*' | cut -d= -f2 | cut -d, -f4 | tr -d ' ')"
-    done
-    urun fusion-uimeasure --runs 1 --idle 5 2>&1 | sed 's/^/FUSION-M6:   /'
-    urun fusion-shell use qml >/dev/null
+# --- M6: Fusion Desktop — Fusion Shell (panel, Start menü, értesítések), Fájlkezelő, Beállítások ---
+urun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion \
+         USER=fusion DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus PATH=/usr/local/bin:/usr/bin:/bin "$@"; }
+winview() { urun xwininfo -root -tree 2>/dev/null | grep -F -- "$1" | head -n 1 | awk '{print $1}' | \
+            while read -r w; do urun xwininfo -id "$w" 2>/dev/null | grep -c IsViewable; done; }
+if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-shell ]; then
+    i=0; while [ $i -lt 120 ] && [ ! -e /run/user/1000/fusion-shell.ready ]; do sleep 1; i=$((i + 1)); done
+    sleep 2
+    pw=$(urun xwininfo -name "Fusion Panel" 2>/dev/null)
+    strut=$(urun sh -c 'xprop -id $(xwininfo -name "Fusion Panel" | sed -n "s/.*Window id: \(0x[0-9a-f]*\).*/\1/p") _NET_WM_STRUT_PARTIAL _NET_WM_WINDOW_TYPE' 2>/dev/null | tr '\n' ' ')
+    urun fusion-shell menu; sleep 3
+    mv=$(urun xwininfo -name "Fusion Start" 2>/dev/null | grep -c IsViewable)
+    urun fusion-shell menu; sleep 1
+    echo "FUSION-M6: SHELL ready=$([ -e /run/user/1000/fusion-shell.ready ] && echo yes || echo no) wait=${i}s panel=$(printf '%s' "$pw" | grep -c IsViewable) width=$(printf '%s' "$pw" | sed -n 's/.*Width: //p') menu=$mv"
+    echo "FUSION-M6: X11 $(printf '%s' "$strut" | grep -o '_NET_WM_WINDOW_TYPE_DOCK') strut=$(printf '%s' "$strut" | grep -o 'STRUT_PARTIAL(CARDINAL) = [0-9, ]*' | cut -d= -f2 | cut -d, -f4 | tr -d ' ')"
+    # értesítés a szabványos D-Bus-szolgáltatáson át → buborék + a Shell állapotában
+    urun fusion-notify -i settings "FusionOS önteszt" "értesítés a D-Buson át"; nrc=$?
+    sleep 2
+    last=$(sed -n 's/.*"summary": "\([^"]*\)".*/\1/p' /run/user/1000/fusion-shell.state 2>/dev/null | head -n 1)
+    echo "FUSION-M6: NOTIFY rc=$nrc last=$last toasts=$(sed -n 's/.*"toasts": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
+    # Fájlkezelő: a műveletek (felület nélkül), majd az ablak
+    rm -rf /tmp/fusion-files-test; mkdir -p /tmp/fusion-files-test; chown fusion: /tmp/fusion-files-test
+    urun fusion-files --selftest /tmp/fusion-files-test 2>&1 | sed 's/^/FUSION-M6:   /'
+    urun sh -c 'fusion-files /home/fusion /data >/tmp/fusion-files.log 2>&1 &'
+    i=0; while [ $i -lt 30 ] && [ "$(winview '/home/fusion')" != 1 ]; do sleep 1; i=$((i + 1)); done
+    echo "FUSION-M6: FILES window=$(winview '/home/fusion') wait=${i}s"
+    # Beállítások: minden oldal adatai, majd az ablak (egy példány: a második hívás oldalt vált)
+    urun fusion-settings --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
+    urun sh -c 'fusion-settings system >/tmp/fusion-settings.log 2>&1 &'
+    i=0; while [ $i -lt 30 ] && [ "$(winview 'Rendszer')" != 1 ]; do sleep 1; i=$((i + 1)); done
+    urun fusion-settings wifi; sleep 3
+    echo "FUSION-M6: SETTINGS window=$(winview 'Rendszer') wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
+    echo "FUSION-M6: WINDOWS $(sed -n 's/.*"windows": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
+    cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
+fi
+# automatikus csatolás (cserélhető kötetek) — a teszt USB-meghajtója: FUSIONUSB (vfat), FUSIONEXF (exfat), FUSIONNTFS (ntfs)
+i=0; while [ $i -lt 20 ] && ! ls /run/media/FUSION* >/dev/null 2>&1 && ls /dev/disk/by-label/FUSIONUSB >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
+for m in $(ls -d /run/media/* 2>/dev/null); do
+    echo "FUSION-M6: MEDIA $(basename "$m") fs=$(findmnt -no FSTYPE "$m") uid=$(stat -c %u "$m") file=$(cat "$m/fusion-usb.txt" 2>/dev/null || echo -) write=$(runuser -u fusion -- sh -c "echo ok > '$m/fusion-write.txt' && cat '$m/fusion-write.txt'" 2>/dev/null || echo no)"
+done
+ls -d /run/media/* >/dev/null 2>&1 || echo "FUSION-M6: MEDIA none"
+# a rendszer saját kötetei nem csatolhatók / adhatók ki a segéddel (a sudo szabály a fusion felhasználóé)
+dpart=$(blkid -t PARTLABEL=FUSION_DATA -o device 2>/dev/null | head -n 1)
+g=$(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin mount "$dpart" 2>&1); grc=$?
+echo "FUSION-M6: GUARD rc=$grc $(printf '%s' "$g" | head -n 1)"
+usbdev=$(blkid -t LABEL=FUSIONUSB -o device 2>/dev/null | head -n 1)
+if [ -n "$usbdev" ]; then
+    e=$(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin eject "$usbdev" 2>&1); erc=$?
+    echo "FUSION-M6: EJECT rc=$erc left=$(ls /run/media 2>/dev/null | tr '\n' ' ')$(printf '%s' "$e" | tail -n 1)"
+    sleep 3
+    echo "FUSION-M6: SHELL-MEDIA $(sed -n 's/.*"media": \[\(.*\)\].*/\1/p' /run/user/1000/fusion-shell.state 2>/dev/null | tr -d ' \n')"
 fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

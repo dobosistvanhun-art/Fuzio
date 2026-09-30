@@ -1,12 +1,18 @@
 #!/bin/sh
-# Fusion Desktop — munkamenet (M6 mérőprototípus): JWM (ablakok) + Fusion Shell (panel, Start menü)
+# Fusion Desktop — munkamenet: JWM (ablakok) + Fusion Shell (panel, Start menü, értesítések)
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/fusion"
 setxkbmap hu 2>/dev/null
-xsetroot -solid '#16202b' -cursor_name left_ptr 2>/dev/null
+# háttérszín (Beállítások → Asztal) — csak #rrggbb fogadható el
+bg=$(cat "$CONF/background" 2>/dev/null); case "$bg" in \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;; *) bg='#16202b' ;; esac
+xsetroot -solid "$bg" -cursor_name left_ptr 2>/dev/null
 xset s off -dpms 2>/dev/null
+# terminál: FusionDark színek, DejaVu Sans Mono
+xrdb -nocpp -merge /usr/lib/fusion/session/Xresources 2>/dev/null
+# kijelző-felbontás (Beállítások → Kijelző; csak xrandr-sor lehet benne)
+DSP="$CONF/display.sh"
+if [ -r "$DSP" ] && ! grep -qvE '^(#.*|xrandr --output [A-Za-z0-9_.:+-]+ --mode [A-Za-z0-9_.:+-]+)$' "$DSP"; then
+    sh "$DSP" 2>/dev/null
+fi
 [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
-# a panel és a Start menü (a választott változat: fusion-shell use qml|web)
 fusion-shell run &
-# az állapot-terminál: a nyomtató webszerverét (nginx) megvárja, hogy ne írjon feleslegesen "inactive"-ot
-xterm -geometry 110x32+40+40 -fa 'DejaVu Sans Mono' -fs 11 -title 'FusionOS' \
-      -e sh -c 'fusion-hwinfo; echo; fusion-wifi 2>&1; echo; fusion-devices; echo; fwr list; echo; i=0; while [ $i -lt 20 ] && ! systemctl is-active -q nginx; do sleep 1; i=$((i+1)); done; fusion-printer; echo; echo "  Fusion Shell: fusion-shell use qml|web  |  mérés: fusion-uimeasure  |  Start menü: Alt+F1"; echo; exec bash -l' &
 exec jwm

@@ -27,7 +27,8 @@ SettingsPage {
         InfoRow { label: "Ablakváltás"; value: "Alt+Tab" }
         InfoRow { label: "Ablak bezárása"; value: "Alt+F4" }
         InfoRow { label: "Teljes méret"; value: "Alt+F10" }
-        InfoRow { label: "Fájlkezelő"; value: "Super+E" }
+        InfoRow { label: "Fájlkezelő"; value: "Ctrl+Alt+E" }
+        InfoRow { label: "Beállítások"; value: "Ctrl+Alt+S" }
         InfoRow { label: "Terminál"; value: "Ctrl+Alt+T" }
         InfoRow { label: "Billentyűzetkiosztás"; value: "magyar (hu)" }
     }

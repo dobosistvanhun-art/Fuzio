@@ -1,0 +1,30 @@
+! FusionOS — terminál (xterm): FusionDark színek
+XTerm*faceName: DejaVu Sans Mono
+XTerm*faceSize: 11
+XTerm*locale: true
+XTerm*utf8: 1
+XTerm*termName: xterm-256color
+XTerm*saveLines: 5000
+XTerm*scrollBar: false
+XTerm*selectToClipboard: true
+XTerm*internalBorder: 6
+XTerm*background: #0d1117
+XTerm*foreground: #e6edf3
+XTerm*cursorColor: #2f81f7
+XTerm*title: Terminál
+XTerm*color0: #1b222c
+XTerm*color1: #f85149
+XTerm*color2: #3fb950
+XTerm*color3: #d29922
+XTerm*color4: #58a6ff
+XTerm*color5: #bc8cff
+XTerm*color6: #39c5cf
+XTerm*color7: #c9d1d9
+XTerm*color8: #6e7681
+XTerm*color9: #ff7b72
+XTerm*color10: #56d364
+XTerm*color11: #e3b341
+XTerm*color12: #79c0ff
+XTerm*color13: #d2a8ff
+XTerm*color14: #56d4dd
+XTerm*color15: #f0f6fc

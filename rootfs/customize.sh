@@ -152,18 +152,49 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
     || in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, libnacl, PIL' \
     || { echo "  [customize] HIBA: a Moonraker Python-környezete nem indul"; exit 1; }
 
-echo "  [customize] Fusion Shell (M6 mérőprototípus: qml + web)"
-SH="$R/usr/lib/fusion/shell"
-rm -rf "$SH"; mkdir -p "$SH"
-cp -r "$FUSION_ROOT/shell/qml" "$FUSION_ROOT/shell/web" "$SH/"
-install -m 0644 "$FUSION_ROOT/shell/fusion_shell_core.py" "$FUSION_ROOT/shell/apps.json" "$SH/"
-install -m 0755 "$FUSION_ROOT/shell/fusion-shell" "$FUSION_ROOT/shell/fusion-shell-qml" \
-    "$FUSION_ROOT/shell/fusion-shell-web" "$FUSION_ROOT/shell/fusion-uimeasure" "$SH/"
-chown -R root:root "$SH"
-ln -sf /usr/lib/fusion/shell/fusion-shell "$R/usr/bin/fusion-shell"
-ln -sf /usr/lib/fusion/shell/fusion-uimeasure "$R/usr/bin/fusion-uimeasure"
-in_root python3 -c 'import sys; sys.path.insert(0, "/usr/lib/fusion/shell"); import Xlib, fusion_shell_core; from PyQt6 import QtQuick; import gi; gi.require_version("WebKit2", "4.1"); from gi.repository import WebKit2' \
-    || { echo "  [customize] HIBA: a Fusion Shell modulok nem tölthetők be"; exit 1; }
+echo "  [customize] Fusion Desktop (M6): Fusion Shell, Fájlkezelő, Beállítások"
+DK="$R/usr/lib/fusion/desktop"
+rm -rf "$DK" "$R/usr/lib/fusion/shell"; mkdir -p "$DK"
+for d in lib qml icons shell files settings bin; do
+    cp -r "$FUSION_ROOT/desktop/$d" "$DK/"
+done
+install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
+find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
+chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
+    "$DK/settings/fusion_settings.py" "$DK/bin/fusion-notify"
+chown -R root:root "$DK"
+ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
+ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
+ln -sf /usr/lib/fusion/desktop/settings/fusion_settings.py "$R/usr/bin/fusion-settings"
+ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
+rm -f "$R/usr/bin/fusion-uimeasure"
+# a modulok betölthetők, a QML-fájlok hibátlanul fordulnak (felület nélkül, offscreen)
+in_root env HOME=/root QT_QPA_PLATFORM=offscreen python3 - <<'PY' || { echo "  [customize] HIBA: a Fusion Desktop modulok nem tölthetők be"; exit 1; }
+import sys, os, glob
+sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
+sys.path.insert(0, "/usr/lib/fusion/desktop/files")
+sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
+import fusion_ui, fusion_x11, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
+from PyQt6.QtDBus import QDBusConnection
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtQml import QQmlComponent, QQmlEngine
+from PyQt6.QtCore import QUrl
+app = QGuiApplication(sys.argv)
+eng = QQmlEngine()
+eng.addImportPath("/usr/lib/fusion/desktop/qml")
+bad = 0
+for f in sorted(glob.glob("/usr/lib/fusion/desktop/*/qml/*.qml")):
+    c = QQmlComponent(eng, QUrl.fromLocalFile(f))
+    # a kontextus-objektumok (shell, files, settings) hiánya itt nem hiba: csak a fordítást nézzük
+    if c.isError():
+        bad += 1
+        for e in c.errors():
+            print("  QML:", e.toString())
+print(f"  [customize] QML: {len(glob.glob('/usr/lib/fusion/desktop/*/qml/*.qml'))} fájl, {bad} hibás")
+sys.exit(1 if bad else 0)
+PY
+install -m 0440 "$FUSION_ROOT/rootfs/overlay/etc/sudoers.d/fusion-admin" "$R/etc/sudoers.d/fusion-admin"
+in_root visudo -c -q -f /etc/sudoers.d/fusion-admin || { echo "  [customize] HIBA: sudoers.d/fusion-admin"; exit 1; }
 
 echo "  [customize] eszközréteg: a soros portot semmi ne foglalja le"
 for pkg in modemmanager brltty; do
