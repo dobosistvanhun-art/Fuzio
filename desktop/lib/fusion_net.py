@@ -13,7 +13,7 @@ import subprocess
 IWD = "net.connman.iwd"
 
 
-def _busctl(*args, timeout=10):
+def _busctl(*args, timeout=4):
     try:
         r = subprocess.run(["busctl", "--system", "--json=short"] + list(args),
                            capture_output=True, text=True, timeout=timeout)

@@ -99,7 +99,7 @@ Rectangle {
                     color: menu.confirm === modelData[0] ? "#3b1d1f" : (pma.containsMouse ? Theme.hover : "transparent")
                     FIcon { x: 10; anchors.verticalCenter: parent.verticalCenter; name: modelData[2]; size: 16 }
                     Text { x: 36; anchors.verticalCenter: parent.verticalCenter
-                           text: menu.confirm === modelData[0] ? (modelData[1] + " — biztosan? (kattintson újra)") : modelData[1]
+                           text: menu.confirm === modelData[0] ? (modelData[1] + "? Kattintson újra") : modelData[1]
                            color: menu.confirm === modelData[0] ? Theme.danger : Theme.text; font.family: Theme.font; font.pixelSize: 13 }
                     MouseArea { id: pma; anchors.fill: parent; hoverEnabled: true
                         onClicked: menu.confirm === modelData[0] ? shell.power(modelData[0]) : menu.confirm = modelData[0] }

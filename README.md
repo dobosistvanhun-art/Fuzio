@@ -4,19 +4,25 @@ Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendsz
 A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M4 — LightBurn + COM3 + GRBL, működő proof-of-concept** (folyamatban).
-Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
+**Állapot: M6 — Fusion Desktop** (folyamatban).
+Lezárva: M4 (LightBurn 2.1 + COM3 + GRBL), M5 (Klipper), M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
 OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
-## M6 — Fusion Desktop (mérőprototípus)
+## M6 — Fusion Desktop
 
-A Desktop panelje és Start menüje (Fusion Shell) két felületi technikával készült, közös háttérrésszel
-(EWMH-ablaklista, Wi-Fi, óra, programlista): **QML** (Qt 6 / Qt Quick) és **web** (HTML/CSS a WebKitGTK-ban).
-A ZBookon mérjük (`fusion-uimeasure`), és a mérés alapján dől el, melyikre épül a teljes Fusion Desktop.
-Az ablakokat a JWM kezeli (FusionDark stílus, saját tálca nélkül). Részletek: `docs/M6-meres.md`.
+A felületi technika a ZBookon mért adatok alapján: **Qt 6 / Qt Quick (QML)**, Python háttérrésszel
+(a mérés és a döntés: `docs/M6-meres.md`). Az ablakokat a JWM kezeli (FusionDark, saját tálca nélkül).
+Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 
-- `fusion-shell use qml|web` — változat választása; `fusion-shell menu` (Alt+F1) — Start menü
-- `fusion-uimeasure` — indulási idő, memória, üresjárati CPU, menü-nyitási idő, mindkét változatra
+- **Fusion Shell** (`fusion-shell`): panel (Start, tálca, lézer/nyomtató/meghajtó jelzés, Wi-Fi, értesítések,
+  óra + naptár), Start menü (keresés programokra és beállításokra, kikapcsolás), értesítések a szabványos
+  `org.freedesktop.Notifications` szolgáltatással (`fusion-notify`, `notify-send`), értesítésközpont
+- **Fájlkezelő** (`fusion-files`): kétpaneles; F3–F8, Tab, jelölés, vágólap, húzás, keresés (Alt+F7),
+  könyvtár-összehasonlítás, rejtett fájlok, ZIP/TAR, nézőke és szerkesztő, meghajtók (csatolás, kiadás)
+- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Programok, Asztal, Rendszer
+- **Kötetek**: a cserélhető meghajtók (USB, SD) bedugáskor a `/run/media/<címke>` alá csatolódnak
+  (FAT32, exFAT, NTFS, ext4); a belső lemezek kérésre (Fájlkezelő → meghajtó). A rendszerműveletek
+  a szűk jogú `fusion-admin` segéden át mennek (sudo szabály csak erre).
 
 ## Telepítés az SSD-re és frissítés (a DATA megmarad)
 
@@ -228,6 +234,9 @@ ablakkezelő, magyar kiosztás az X-ben). Az std + SATA futásban egy emulált U
 és a teszt a QEMU monitorán át **kihúzza és visszadugja** — a név ugyanúgy visszatér.
 A Wi-Fi-t virtuális rádiókkal (`mac80211_hwsim`) teszteli: az egyik hozzáférési pont, a másikról
 a `fusion` felhasználó jelszóval kapcsolódik (`fusion-wifi connect`).
+Ugyanitt egy háromkötetes emulált USB-pendrive (FAT32, exFAT, NTFS) automatikus csatolását, írhatóságát
+és a biztonságos eltávolítást is ellenőrzi; std VGA-n a Fusion Desktopot (panel, Start menü, értesítés
+a D-Buson, a Fájlkezelő műveletei és ablaka, a Beállítások oldalai és ablaka).
 Ugyanebben a futásban az `fwr check` is lefut: a Windows-program csak a COM3-at látja a
 SERIALCOMM-ban, megnyitja, és a kiírt sor megérkezik az emulált eszközre; az OpenGL a Wine-on
 át működik. Ezen felül a mérési és a diagnosztikai bejegyzést is elindítja.
@@ -244,7 +253,7 @@ rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (over
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
 fwr/          M4 PoC: fwr, profilok, diagnosztikai Windows-programok; wine-patches/ = kísérleti
-shell/        M6: Fusion Shell (panel, Start menü) — qml/ és web/ változat, közös háttér, fusion-uimeasure
+desktop/      M6: Fusion Desktop — lib/ (közös Python), qml/FusionUI (téma, elemek), icons/, shell/, files/, settings/
 printer/      M5: fusion-printer, szolgáltatások, Moonraker- és nginx-beállítás, alapkonfiguráció (defaults/)
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
@@ -256,7 +265,6 @@ docs/         ellenőrzőlisták
 
 - Mért döntések (ZBook, 2026-09-27): `nvidia-drm.modeset=1`, Xorg root-jog nélkül
   (`docs/M2-ellenorzes.md`, C). Tartalék bejegyzések a boot menüben.
-- A JWM ideiglenes; a Fusion Shell az M6-ban jön. Nincs Wi-Fi (később).
 - NVIDIA csomagforrás: a `470-server` sorozat (a sima `-470` a noble-updates-ben már a
   535-ös driverre mutató átmeneti csomag, az nem támogatja a Keplert).
 - A DATA fájlrendszer-ellenőrzése (fsck) még nincs az initramfs-ben.

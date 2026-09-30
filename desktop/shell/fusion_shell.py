@@ -30,6 +30,7 @@ from fusion_x11 import PANEL_HEIGHT, X11  # noqa: E402
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
                           pyqtSignal, pyqtSlot)
 from PyQt6.QtDBus import QDBusAbstractAdaptor, QDBusConnection, QDBusMessage  # noqa: E402
+from PyQt6.QtGui import QColor  # noqa: E402
 from PyQt6.QtQuick import QQuickView  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -213,6 +214,7 @@ class Shell(QObject):
             v.engine().addImportPath(ui.QML_DIR)
             v.setTitle(title)
             v.setFlags(flags)
+            v.setColor(QColor("#11161c"))      # nincs fehér villanás / rés
             v.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
             v.setSource(QUrl.fromLocalFile(os.path.join(QML, qml)))
             if v.status() == QQuickView.Status.Error:
@@ -345,6 +347,11 @@ class Shell(QObject):
             self.hideMenu()
             if name == "calendar":
                 self.cal.rootObject().reset()
+            # a felugró ablak idejére a buborékok eltűnnek (az értesítésközpontban úgyis látszanak)
+            if self._toasts:
+                self._toasts = []
+                self.toastsChanged.emit()
+                self._show_toast()
             v.show(); v.raise_(); v.requestActivate()
             self._popup = name
             self.popupChanged.emit()

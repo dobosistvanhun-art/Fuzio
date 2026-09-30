@@ -12,6 +12,24 @@ ugyanazzal a tudással és ugyanazzal a háttérrésszel (ablaklista, Wi-Fi, ór
 A ablakokat továbbra is a JWM kezeli (új, lapos FusionDark stílus, saját tálca nélkül); a panelt és a
 Start menüt a Fusion Shell adja.
 
+## Eredmény (ZBook 15 G2, NVIDIA 470, 2026-09-30) — döntés: QML
+
+| | QML (Qt Quick) | Web (WebKitGTK) |
+| --- | --- | --- |
+| indulás (medián) | 562 ms | 640 ms |
+| memória (PSS) | **84 MiB** | 234 MiB |
+| folyamatok | **1** | 4 |
+| CPU üresjáratban | 0,2 % | 0,4 % |
+| Start menü nyitás | 15 ms | 3,6 ms |
+
+- A web az NVIDIA 470-en alapbeállítással **nem rajzolt**: a WebKit DMABUF-rajzolója GBM-puffert kér, a 470-es
+  meghajtóban nincs GBM (`DRM_IOCTL_MODE_CREATE_DUMB failed: Permission denied`). Kerülőút:
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` (a `fusion-web` nézegetőben — Fluidd, Mainsail — ez beépítve).
+- Gyorsaságban nincs érezhető különbség; a QML harmad annyi memóriát kér, egy folyamat, és nem kellett
+  hozzá kerülőút. **Döntés (István, 2026-09-30): QML.** A webes változat és a mérőprogram kikerült a képből.
+
+A mérés leírása (történeti):
+
 ## Frissítés (Mint) — a DATA megmarad
 
 ```bash
