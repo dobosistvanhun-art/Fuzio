@@ -91,6 +91,16 @@ cmd_prepare() {
     if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
+    # félbemaradt környezet (pl. megszakadt első létrehozás): nincs .fwr-stamp, és a program sincs
+    # benne — a sérült állapot frissítése nem segít (pl. csonka DLL-ek), ezért tisztán újra létrejön
+    if [ -d "$WINEPREFIX" ] && [ ! -e "$stamp" ]; then
+        exe_chk=$(win_to_unix "$WINEPREFIX" "$(prof_get "$pf" exe)")
+        if [ -z "$(prof_get "$pf" exe)" ] || [ ! -f "$exe_chk" ]; then
+            say "fwr: a korábbi, félbemaradt környezet törölve — új jön létre"
+            "$WINESERVER" -k 2>/dev/null
+            rm -rf "$WINEPREFIX"
+        fi
+    fi
     if [ ! -r "$WINEPREFIX/system.reg" ]; then
         "$WINE" wineboot -i >> "$LOG" 2>&1 || fail "a környezet létrehozása nem sikerült (napló: $LOG)"
     else

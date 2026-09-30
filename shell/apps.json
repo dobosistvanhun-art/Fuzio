@@ -1,0 +1,9 @@
+[
+  {"id": "terminal",  "name": "Terminál",          "desc": "Parancssor",                         "icon": "terminal", "exec": "xterm -fa 'DejaVu Sans Mono' -fs 11"},
+  {"id": "lightburn", "name": "LightBurn",         "desc": "Lézervágó (Windows)",                "icon": "laser",    "exec": "fwr launch lightburn"},
+  {"id": "printer",   "name": "Nyomtató",          "desc": "Klipper — Fluidd",                   "icon": "printer",  "exec": "fusion-printer ui"},
+  {"id": "mainsail",  "name": "Nyomtató (Mainsail)","desc": "Klipper — Mainsail",               "icon": "printer",  "exec": "fusion-printer ui mainsail"},
+  {"id": "wifi",      "name": "Wi-Fi",             "desc": "Hálózatok",                          "icon": "wifi",     "exec": "xterm -fa 'DejaVu Sans Mono' -fs 11 -title Wi-Fi -e sh -c 'fusion-wifi list; echo; fusion-wifi; exec bash -l'"},
+  {"id": "devices",   "name": "Eszközök",          "desc": "Lézer, nyomtató (soros eszközök)",   "icon": "usb",      "exec": "xterm -fa 'DejaVu Sans Mono' -fs 11 -title Eszközök -e sh -c 'fusion-devices; exec bash -l'"},
+  {"id": "hwinfo",    "name": "Hardver",           "desc": "Hardverprofil, grafika",             "icon": "chip",     "exec": "xterm -fa 'DejaVu Sans Mono' -fs 11 -title Hardver -e sh -c 'fusion-hwinfo; echo; glxinfo -B; exec bash -l'"}
+]

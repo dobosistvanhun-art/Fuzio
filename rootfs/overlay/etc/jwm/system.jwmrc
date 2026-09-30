@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- FusionOS — ablakkezelő (JWM) beállítás, M6 mérőprototípus.
+     A panelt és a Start menüt a Fusion Shell adja (fusion-shell), a JWM csak az ablakokat
+     kezeli: saját tálca nincs, egy munkaasztal, lapos FusionDark stílus. -->
+<JWM>
+    <RootMenu onroot="3">
+        <Program label="Terminál">xterm -fa 'DejaVu Sans Mono' -fs 11</Program>
+        <Program label="Start menü">fusion-shell menu</Program>
+        <Separator/>
+        <Restart label="Ablakkezelő újraindítása"/>
+    </RootMenu>
+    <Desktops width="1" height="1"/>
+    <FocusModel>click</FocusModel>
+    <SnapMode distance="8">border</SnapMode>
+    <MoveMode>opaque</MoveMode>
+    <ResizeMode>opaque</ResizeMode>
+    <DoubleClickSpeed>400</DoubleClickSpeed>
+
+    <WindowStyle decorations="flat">
+        <Font>DejaVu Sans-10:bold</Font>
+        <Width>2</Width>
+        <Height>28</Height>
+        <Corner>0</Corner>
+        <Foreground>#8b949e</Foreground>
+        <Background>#1b222c</Background>
+        <Outline>#2a3441</Outline>
+        <Opacity>1.0</Opacity>
+        <Active>
+            <Foreground>#e6edf3</Foreground>
+            <Background>#243447</Background>
+            <Outline>#2f81f7</Outline>
+            <Opacity>1.0</Opacity>
+        </Active>
+    </WindowStyle>
+    <MenuStyle decorations="flat">
+        <Font>DejaVu Sans-10</Font>
+        <Foreground>#e6edf3</Foreground>
+        <Background>#161b22</Background>
+        <Outline>#2a3441</Outline>
+        <Active>
+            <Foreground>#ffffff</Foreground>
+            <Background>#2f81f7</Background>
+        </Active>
+        <Opacity>1.0</Opacity>
+    </MenuStyle>
+    <PopupStyle>
+        <Font>DejaVu Sans-10</Font>
+        <Foreground>#e6edf3</Foreground>
+        <Background>#161b22</Background>
+    </PopupStyle>
+
+    <Key mask="A" key="Tab">nextstacked</Key>
+    <Key mask="A" key="F4">close</Key>
+    <Key mask="A" key="F1">exec:fusion-shell menu</Key>
+    <Key mask="A" key="F10">maximize</Key>
+    <Key key="Super_L">exec:fusion-shell menu</Key>
+</JWM>

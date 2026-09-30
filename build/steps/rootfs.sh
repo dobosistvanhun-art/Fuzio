@@ -15,7 +15,7 @@ rootfs_stale() {
     nvidia_ko_ready || return 0
     wine_ready || return 0
     printer_ready || return 0
-    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$FUSION_ROOT/printer" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)" \
+    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$FUSION_ROOT/printer" "$FUSION_ROOT/shell" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)" \
               -newer "$img" -type f -print -quit 2>/dev/null)" ]
 }
 

@@ -1,0 +1,147 @@
+#!/usr/bin/python3
+"""FusionOS — Fusion Shell, webes (HTML/CSS a WebKitGTK-ban) változat — M6 mérőprototípus"""
+import json
+import os
+import signal
+import sys
+
+sys.path.insert(0, "/usr/lib/fusion/shell")
+
+import gi  # noqa: E402
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkX11", "3.0")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gdk, GdkX11, GLib, Gtk, WebKit2  # noqa: E402,F401
+
+import fusion_shell_core as core  # noqa: E402
+
+WEB_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "web")
+if not os.path.isdir(WEB_DIR):
+    WEB_DIR = "/usr/lib/fusion/shell/web"
+MENU_W, MENU_H = 420, 520
+
+
+def fusion_version():
+    try:
+        v = dict(l.strip().split("=", 1) for l in open("/usr/lib/fusion/fusion-release") if "=" in l)
+        return "FusionOS " + v.get("FUSION_VERSION", "").strip("'")
+    except Exception:
+        return "FusionOS"
+
+
+def js(view, code):
+    if hasattr(view, "evaluate_javascript"):
+        view.evaluate_javascript(code, -1, None, None, None, None, None)
+    else:
+        view.run_javascript(code, None, None, None)
+
+
+class Shell:
+    def __init__(self):
+        self.core = core.ShellCore()
+        sw, sh = self.core.screen_size()
+        h = core.PANEL_HEIGHT
+        self.ctx = WebKit2.WebContext.get_default()
+
+        # panel
+        self.panel, self.pview = self._window("Fusion Panel", "panel.html")
+        self.panel.set_type_hint(Gdk.WindowTypeHint.DOCK)
+        self.panel.set_accept_focus(False)
+        self.panel.move(0, sh - h)
+        self.panel.set_default_size(sw, h)
+        self.panel.realize()
+        self.core.setup_panel_window(self.panel.get_window().get_xid(), h)
+        self.panel.show_all()
+
+        # Start menü
+        self.menu, self.mview = self._window("Fusion Start", "menu.html")
+        self.menu.move(0, sh - h - MENU_H)
+        self.menu.set_default_size(MENU_W, MENU_H)
+        self.menu.set_keep_above(True)
+        self.menu.set_skip_taskbar_hint(True)
+        self.menu.realize()
+        self.core.setup_menu_window(self.menu.get_window().get_xid())
+        self.menu.connect("focus-out-event", lambda *_: self.hide_menu())
+        self.mview.connect("load-changed", self._menu_loaded)
+
+        self.pview.connect("load-changed", self._panel_loaded)
+        self._loaded = False
+        GLib.timeout_add(500, self.tick)
+        # SIGUSR1: Start menü (a mérőszkript így nyitja)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._sigusr1)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: Gtk.main_quit() or False)
+
+    def _window(self, title, page):
+        ucm = WebKit2.UserContentManager()
+        ucm.register_script_message_handler("fusion")
+        ucm.connect("script-message-received::fusion", self._on_js)
+        view = WebKit2.WebView.new_with_user_content_manager(ucm)
+        s = view.get_settings()
+        s.set_enable_developer_extras(False)
+        s.set_allow_file_access_from_file_urls(True)
+        view.set_background_color(Gdk.RGBA(0.067, 0.086, 0.110, 1.0))
+        win = Gtk.Window(title=title)
+        win.set_decorated(False)
+        win.add(view)
+        view.load_uri("file://" + os.path.join(WEB_DIR, page))
+        return win, view
+
+    def _panel_loaded(self, _v, ev):
+        if ev == WebKit2.LoadEvent.FINISHED:
+            self._loaded = True
+            self.tick(force=True)
+
+    def _menu_loaded(self, _v, ev):
+        if ev == WebKit2.LoadEvent.FINISHED:
+            js(self.mview, "fusion.init(%s, %s)" % (self.core.apps_json(), json.dumps(fusion_version())))
+
+    def _sigusr1(self):
+        self.toggle_menu()
+        return True
+
+    def tick(self, force=False):
+        if self._loaded:
+            s = self.core.poll(force)
+            if s:
+                js(self.pview, "fusion.update(%s)" % s)
+        return True
+
+    def _on_js(self, _ucm, result):
+        v = result.get_js_value() if hasattr(result, "get_js_value") else result
+        msg = v.to_string()
+        if '"ready"' in msg:
+            core.mark_ready("web")
+        elif '"closemenu"' in msg:
+            self.hide_menu()
+        elif '"menu"' in msg:
+            self.toggle_menu()
+        else:
+            self.core.handle(msg)
+            GLib.timeout_add(150, lambda: self.tick() and False)
+
+    def toggle_menu(self):
+        if self.menu.get_visible():
+            self.hide_menu()
+        else:
+            self.menu.show_all()
+            self.menu.present()
+            js(self.mview, "fusion.opened()")
+            js(self.pview, "fusion.menu(true)")
+
+    def hide_menu(self):
+        if self.menu.get_visible():
+            self.menu.hide()
+            js(self.pview, "fusion.menu(false)")
+        return False
+
+
+def main():
+    GLib.set_prgname("fusion-shell-web")
+    Shell()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

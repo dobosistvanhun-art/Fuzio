@@ -1,0 +1,144 @@
+#!/usr/bin/python3
+"""FusionOS — Fusion Shell, QML (Qt 6 / Qt Quick) változat — M6 mérőprototípus"""
+import os
+import signal
+import socket
+import sys
+
+sys.path.insert(0, "/usr/lib/fusion/shell")
+os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+
+from PyQt6.QtCore import QObject, QSocketNotifier, QTimer, QUrl, pyqtSignal, pyqtSlot  # noqa: E402
+from PyQt6.QtGui import QGuiApplication  # noqa: E402
+from PyQt6.QtQuick import QQuickView  # noqa: E402
+from PyQt6.QtCore import Qt  # noqa: E402
+
+import fusion_shell_core as core  # noqa: E402
+
+QML_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "qml")
+if not os.path.isdir(QML_DIR):
+    QML_DIR = "/usr/lib/fusion/shell/qml"
+MENU_W, MENU_H = 420, 520
+
+
+def fusion_version():
+    try:
+        v = dict(l.strip().split("=", 1) for l in open("/usr/lib/fusion/fusion-release") if "=" in l)
+        return "FusionOS " + v.get("FUSION_VERSION", "").strip("'")
+    except Exception:
+        return "FusionOS"
+
+
+class Bridge(QObject):
+    """a QML-ből hívható: bridge.send(json)"""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell = shell
+
+    @pyqtSlot(str)
+    def send(self, msg):
+        self.shell.on_msg(msg)
+
+
+class Shell(QObject):
+    def __init__(self, app):
+        super().__init__()
+        self.core = core.ShellCore()
+        sw, sh = self.core.screen_size()
+        h = core.PANEL_HEIGHT
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus
+
+        self.bridge = Bridge(self)
+        self.panel = QQuickView()
+        self.panel.rootContext().setContextProperty("bridge", self.bridge)
+        self.panel.setTitle("Fusion Panel")
+        self.panel.setFlags(flags)
+        self.panel.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+        self.panel.setSource(QUrl.fromLocalFile(os.path.join(QML_DIR, "Panel.qml")))
+        self.panel.setGeometry(0, sh - h, sw, h)
+        self.core.setup_panel_window(int(self.panel.winId()), h)
+        self.proot = self.panel.rootObject()
+
+        self.menu = QQuickView()
+        self.menu.rootContext().setContextProperty("bridge", self.bridge)
+        self.menu.setTitle("Fusion Start")
+        self.menu.setFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.menu.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+        self.menu.setSource(QUrl.fromLocalFile(os.path.join(QML_DIR, "Menu.qml")))
+        self.menu.setGeometry(0, sh - h - MENU_H, MENU_W, MENU_H)
+        self.core.setup_menu_window(int(self.menu.winId()))
+        self.mroot = self.menu.rootObject()
+        import json
+        self.mroot.setProperty("apps", json.loads(self.core.apps_json()))
+        self.mroot.setProperty("version", fusion_version())
+        self.menu.activeChanged.connect(lambda: (not self.menu.isActive()) and self.menu.isVisible() and self.hide_menu())
+
+        self._ready = False
+        self.panel.frameSwapped.connect(self._first_frame)
+        self.panel.show()
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.tick)
+        self.timer.start(500)
+        self.tick(force=True)
+
+        # SIGUSR1: Start menü (a mérőszkript így nyitja) — önéleszto csatornán, lekérdezés nélkül
+        rsock, wsock = socket.socketpair()
+        rsock.setblocking(False); wsock.setblocking(False)
+        signal.set_wakeup_fd(wsock.fileno())
+        signal.signal(signal.SIGUSR1, lambda *_: None)
+        signal.signal(signal.SIGTERM, lambda *_: app.quit())
+        self._rsock, self._wsock = rsock, wsock
+        self.sn = QSocketNotifier(rsock.fileno(), QSocketNotifier.Type.Read, self)
+        self.sn.activated.connect(self._on_signal)
+
+    def _on_signal(self):
+        try:
+            data = self._rsock.recv(64)
+        except BlockingIOError:
+            return
+        if bytes([signal.SIGUSR1]) in data:
+            self.toggle_menu()
+
+    def _first_frame(self):
+        if not self._ready:
+            self._ready = True
+            core.mark_ready("qml")
+
+    def tick(self, force=False):
+        s = self.core.poll(force)
+        if s:
+            self.proot.setProperty("stateJson", s)
+
+    def on_msg(self, msg):
+        if '"closemenu"' in msg:
+            self.hide_menu()
+        elif '"menu"' in msg:
+            self.toggle_menu()
+        else:
+            self.core.handle(msg)
+            QTimer.singleShot(150, self.tick)
+
+    def toggle_menu(self):
+        if self.menu.isVisible():
+            self.hide_menu()
+        else:
+            self.menu.show(); self.menu.raise_(); self.menu.requestActivate()
+            self.mroot.setProperty("openCount", self.mroot.property("openCount") + 1)
+            self.proot.setProperty("menuOpen", True)
+
+    def hide_menu(self):
+        self.menu.hide()
+        self.proot.setProperty("menuOpen", False)
+
+
+def main():
+    app = QGuiApplication(sys.argv)
+    app.setApplicationName("fusion-shell-qml")
+    app.setDesktopFileName("fusion-shell")
+    shell = Shell(app)  # noqa: F841
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

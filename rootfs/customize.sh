@@ -152,6 +152,19 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
     || in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, libnacl, PIL' \
     || { echo "  [customize] HIBA: a Moonraker Python-környezete nem indul"; exit 1; }
 
+echo "  [customize] Fusion Shell (M6 mérőprototípus: qml + web)"
+SH="$R/usr/lib/fusion/shell"
+rm -rf "$SH"; mkdir -p "$SH"
+cp -r "$FUSION_ROOT/shell/qml" "$FUSION_ROOT/shell/web" "$SH/"
+install -m 0644 "$FUSION_ROOT/shell/fusion_shell_core.py" "$FUSION_ROOT/shell/apps.json" "$SH/"
+install -m 0755 "$FUSION_ROOT/shell/fusion-shell" "$FUSION_ROOT/shell/fusion-shell-qml" \
+    "$FUSION_ROOT/shell/fusion-shell-web" "$FUSION_ROOT/shell/fusion-uimeasure" "$SH/"
+chown -R root:root "$SH"
+ln -sf /usr/lib/fusion/shell/fusion-shell "$R/usr/bin/fusion-shell"
+ln -sf /usr/lib/fusion/shell/fusion-uimeasure "$R/usr/bin/fusion-uimeasure"
+in_root python3 -c 'import sys; sys.path.insert(0, "/usr/lib/fusion/shell"); import Xlib, fusion_shell_core; from PyQt6 import QtQuick; import gi; gi.require_version("WebKit2", "4.1"); from gi.repository import WebKit2' \
+    || { echo "  [customize] HIBA: a Fusion Shell modulok nem tölthetők be"; exit 1; }
+
 echo "  [customize] eszközréteg: a soros portot semmi ne foglalja le"
 for pkg in modemmanager brltty; do
     if in_root dpkg -s "$pkg" >/dev/null 2>&1; then echo "  [customize] HIBA: $pkg a rendszerképben"; exit 1; fi

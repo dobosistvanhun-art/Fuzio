@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="hu"><head><meta charset="utf-8"><title>Fusion Panel</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div id="panel">
+  <div class="start" id="start"><div class="logo">F</div></div>
+  <div class="sep"></div>
+  <div id="tasks"></div>
+  <div id="tray"><div id="wifi" class="off"></div><div id="clock"><b></b><small></small></div></div>
+</div>
+<script>
+const send = (m) => window.webkit.messageHandlers.fusion.postMessage(JSON.stringify(m));
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let first = true;
+window.fusion = {
+  update(st) {
+    const t = document.getElementById("tasks");
+    t.innerHTML = st.windows.map(w =>
+      `<div class="task${w.active ? " active" : ""}${w.hidden ? " hidden" : ""}" data-id="${w.id}"><span>${esc(w.title)}</span></div>`).join("");
+    const wf = document.getElementById("wifi");
+    const on = st.wifi.state === "connected";
+    wf.className = on ? "" : "off";
+    wf.textContent = on ? "Wi-Fi  " + st.wifi.ssid : "Wi-Fi: nincs kapcsolat";
+    document.querySelector("#clock b").textContent = st.clock;
+    document.querySelector("#clock small").textContent = st.date;
+    if (first) { first = false; requestAnimationFrame(() => requestAnimationFrame(() => send({cmd: "ready"}))); }
+  },
+  menu(open) { document.getElementById("start").classList.toggle("open", open); }
+};
+document.getElementById("start").onclick = () => send({cmd: "menu"});
+document.getElementById("tasks").onclick = (e) => {
+  const el = e.target.closest(".task"); if (el) send({cmd: "toggle", id: Number(el.dataset.id)});
+};
+</script>
+</body></html>

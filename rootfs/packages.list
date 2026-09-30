@@ -93,3 +93,13 @@ curl
 python3-gi
 gir1.2-gtk-3.0
 gir1.2-webkit2-4.1
+
+# M6 — Fusion Shell mérőprototípus: két felületi változat (QML és web), közös háttérrész
+python3-xlib
+x11-utils
+python3-pyqt6
+python3-pyqt6.qtquick
+qt6-qpa-plugins
+qml6-module-qtquick
+qml6-module-qtquick-window
+qml6-module-qtqml-workerscript

@@ -145,6 +145,12 @@ step_test() {
             _check "$log" "FUSION-M2: GL renderer=[^ ]" "OpenGL renderer" || ok_run=0
             _check "$log" "FUSION-M2: WM jwm" "ablakkezelő" || ok_run=0
             _check "$log" "FUSION-M2: XKB hu" "magyar billentyűzet az X-ben" || ok_run=0
+            # M6: Fusion Shell — mindkét mérőváltozat: panel (dock, 40 px foglalás), Start menü
+            _check "$log" "FUSION-M6: SHELL qml ready=yes .*panel=1 .*menu=1" "Fusion Shell (QML): panel és Start menü" || ok_run=0
+            _check "$log" "FUSION-M6: SHELL web ready=yes .*panel=1 .*menu=1" "Fusion Shell (web): panel és Start menü" || ok_run=0
+            _check "$log" "FUSION-M6: X11 qml _NET_WM_WINDOW_TYPE_DOCK strut=40" "QML panel: dock, 40 px foglalás" || ok_run=0
+            _check "$log" "FUSION-M6: X11 web _NET_WM_WINDOW_TYPE_DOCK strut=40" "web panel: dock, 40 px foglalás" || ok_run=0
+            _check "$log" "FUSION-M6:   *Start menü nyitás (ms)" "fusion-uimeasure lefutott" || ok_run=0
         fi
         if [ "$ser" = 1 ]; then
             _check "$log" "FUSION-M3: LASER ttyUSB" "/dev/fusion/laser létrejött" || ok_run=0
@@ -183,7 +189,7 @@ step_test() {
         _check "$log" "FUSION-WIFI: MODS iwlwifi iwlmvm" "iwlwifi / iwlmvm driver" || ok_run=0
         _check "$log" "FUSION-WIFI: STATE connected" "fusion-wifi connect (virtuális AP, jelszóval)" || ok_run=0
         _check "$log" "FUSION-WIFI: KNOWN FusionTeszt" "a hálózat megjegyezve" || ok_run=0
-        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4\|FUSION-M5' "$log" | sed 's/^/      /' >&2
+        grep -a 'FUSION-M2: \(XORG\|GL\|VULKAN\)\|FUSION-M3: \(LASER\|DB\|BACK\)\|FUSION-M4\|FUSION-M5\|FUSION-M6' "$log" | sed 's/^/      /' >&2
         if [ "$ok_run" -eq 1 ]; then
             ok "SIKERES ($RUN_SECS mp)"
         else
