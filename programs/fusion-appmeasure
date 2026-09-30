@@ -84,7 +84,7 @@ def check():
     rc, out = sh(["getent", "hosts", "dl.flathub.org"], timeout=10)
     dns = out.split()[0] if rc == 0 and out.split() else "nem sikerült"
     rc, out = sh(["curl", "-fsS", "-m", "10", "-o", "/dev/null", "https://dl.flathub.org/repo/summary.idx"], timeout=20)
-    err = (out.strip().splitlines() or [""])[-1]
+    err = next((l for l in out.strip().splitlines() if l.startswith("curl:")), (out.strip().splitlines() or [""])[0])
     print(f"FUSION-APPM: INTERNET dns={dns} flathub={'ok' if rc == 0 else 'nem érhető el — ' + err}", flush=True)
     print(f"FUSION-APPM: CHECK {'ok' if ok else 'HIBA'}", flush=True)
     return 0 if ok else 1
