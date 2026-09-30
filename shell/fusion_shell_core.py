@@ -83,9 +83,15 @@ class ShellCore:
             return v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v)
         try:
             n = win.get_wm_name()
-            return n.decode("latin-1") if isinstance(n, bytes) else (n or "")
         except Exception:
             return ""
+        if isinstance(n, bytes):
+            n = n.decode("latin-1")
+        # a python-xlib a WM_NAME-et latin-1-ként adja vissza; az UTF-8 címeket (pl. xterm) visszaalakítjuk
+        try:
+            return (n or "").encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return n or ""
 
     def windows(self):
         ids = self._prop(self.root, "_NET_CLIENT_LIST") or []
