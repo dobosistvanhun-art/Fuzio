@@ -73,8 +73,9 @@ def measure(variant, idle):
         os.unlink(ready)
     except OSError:
         pass
+    logf = open(os.path.join(RT, f"fusion-uimeasure-{variant}.log"), "ab")
     t0 = time.time()
-    proc = subprocess.Popen([f"{BIN}/fusion-shell-{variant}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen([f"{BIN}/fusion-shell-{variant}"], stdout=logf, stderr=logf)
     start_ms = None
     while time.time() - t0 < 60:
         if os.path.exists(ready):
@@ -88,6 +89,10 @@ def measure(variant, idle):
         time.sleep(0.01)
     res = {"start_ms": start_ms}
     if start_ms is None:
+        # hiba oka a jegyzőkönyvbe: kilépett (kód) vagy 60 mp alatt sem rajzolt
+        rc = proc.poll()
+        res["hiba"] = f"kilépett ({rc})" if rc is not None else "60 mp alatt sem rajzolt"
+        print(f"    {variant}: nem indult — {res['hiba']}; napló: {logf.name}", flush=True)
         proc.kill()
         return res
     time.sleep(10)                                  # beállás

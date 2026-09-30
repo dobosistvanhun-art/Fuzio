@@ -10,6 +10,9 @@ import argparse
 import os
 import sys
 
+# A WebKit DMABUF-rajzolója GBM-puffert kér a DRM-eszköztől; ahol ezt a meghajtó nem adja
+# (pl. zárt meghajtók GBM nélkül), a WebView semmit sem rajzol. A régi (GLX/EGL) út mindenhol működik.
+os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
