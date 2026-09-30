@@ -100,7 +100,7 @@ def measure(variant, idle):
     for _ in range(5):
         t = time.time()
         proc.send_signal(signal.SIGUSR1)
-        while time.time() - t < 5 and not window_viewable("Fusion Start"):
+        while time.time() - t < 15 and not window_viewable("Fusion Start"):
             time.sleep(0.005)
         lat.append((time.time() - t) * 1000)
         time.sleep(0.5)

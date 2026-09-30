@@ -8,6 +8,16 @@ Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 Lezárva: M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
 OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
+## M6 — Fusion Desktop (mérőprototípus)
+
+A Desktop panelje és Start menüje (Fusion Shell) két felületi technikával készült, közös háttérrésszel
+(EWMH-ablaklista, Wi-Fi, óra, programlista): **QML** (Qt 6 / Qt Quick) és **web** (HTML/CSS a WebKitGTK-ban).
+A ZBookon mérjük (`fusion-uimeasure`), és a mérés alapján dől el, melyikre épül a teljes Fusion Desktop.
+Az ablakokat a JWM kezeli (FusionDark stílus, saját tálca nélkül). Részletek: `docs/M6-meres.md`.
+
+- `fusion-shell use qml|web` — változat választása; `fusion-shell menu` (Alt+F1) — Start menü
+- `fusion-uimeasure` — indulási idő, memória, üresjárati CPU, menü-nyitási idő, mindkét változatra
+
 ## Telepítés az SSD-re és frissítés (a DATA megmarad)
 
 - `sudo build/fusion-build install /dev/sdb --internal --data-from /media/$USER/FUSION_DATA --wifi-file ~/Fusion/wifi.conf`
@@ -234,6 +244,7 @@ rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (over
 hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
 fwr/          M4 PoC: fwr, profilok, diagnosztikai Windows-programok; wine-patches/ = kísérleti
+shell/        M6: Fusion Shell (panel, Start menü) — qml/ és web/ változat, közös háttér, fusion-uimeasure
 printer/      M5: fusion-printer, szolgáltatások, Moonraker- és nginx-beállítás, alapkonfiguráció (defaults/)
 initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
 tests/        automatikus tesztek
