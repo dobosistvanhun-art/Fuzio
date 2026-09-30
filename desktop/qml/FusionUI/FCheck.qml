@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 CheckBox {
     id: c
     font.family: Theme.font; font.pixelSize: Theme.fs

@@ -1,0 +1,203 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-admin: a Fusion Desktop szűk jogú rendszersegédje (root)
+#
+#  A grafikus programok (Fusion Shell, Fájlkezelő, Beállítások) ezen át végeznek
+#  rendszerműveletet: sudo -n /usr/lib/fusion/bin/fusion-admin <parancs> (a sudo
+#  csoportnak jelszó nélkül, /etc/sudoers.d/fusion-admin). Csak az alábbi,
+#  ellenőrzött paraméterű parancsokat ismeri — tetszőleges parancsot nem futtat.
+#
+#    power poweroff|reboot            leállítás / újraindítás
+#    mount <eszköz>                   kötet csatolása a /run/media/<név> alá
+#    unmount <eszköz|csatolási pont>  leválasztás (csak a /run/media alól)
+#    eject <lemez>                    a lemez összes kötetének leválasztása (biztonságos eltávolítás)
+#    automount <kernelnév>            (udev/systemd) cserélhető kötet csatolása bedugáskor
+#    autounmount <kernelnév>          (systemd) kihúzáskor
+#    service-restart klipper|moonraker|nginx
+#    devices-assign <szerep> <eszköz> | devices-forget <szerep>
+#
+#  Csatolás — általános szabályok, eszköztípustól függetlenül:
+#    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
+#    - fájlrendszer: vfat, exfat, ntfs (ntfs3), ext2/3/4, btrfs, xfs, iso9660, udf
+#    - FAT/exFAT/NTFS: a munkamenet felhasználójáé (uid/gid), a jogok 755/644
+#    - ha írhatóan nem csatolható (pl. hibernált Windows NTFS-e), csak olvashatóan
+#  Automatikusan (bedugáskor) csak a cserélhető (USB, SD-kártya) kötetek csatolódnak;
+#  a belső lemezek (pl. a Mint lemeze) csak kérésre (Fájlkezelő → Ez a gép).
+# =============================================================================
+set -u
+MEDIA=/run/media
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+ERR=$(mktemp) || exit 1
+trap 'rm -f "$ERR"' EXIT
+say()  { printf '%s\n' "$*"; }
+fail() { printf 'fusion-admin: %s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || fail "rootként kell futnia (sudo -n $0 …)"
+
+# --- segédek ---
+# a munkamenet felhasználója: a sudo hívója, különben a grafikus munkamenet tulajdonosa
+session_uid() {
+    if [ -n "${SUDO_UID:-}" ]; then echo "$SUDO_UID"; return; fi
+    u=$(loginctl list-sessions --no-legend 2>/dev/null | awk '$3 != "root" && $2 != 0 {print $2; exit}')
+    echo "${u:-1000}"
+}
+
+devpath() {   # eszköz → /dev/<név> (csak blokkeszköz)
+    case "$1" in
+        /dev/*) d=$1 ;;
+        *[!a-zA-Z0-9_-]*|"") fail "érvénytelen eszköznév: $1" ;;
+        *) d=/dev/$1 ;;
+    esac
+    [ -b "$d" ] || fail "nem blokkeszköz: $d"
+    echo "$d"
+}
+
+parent_disk() {   # /dev/sdb1 → sdb ; /dev/nvme0n1p2 → nvme0n1 ; /dev/sdb → sdb
+    local pk
+    pk=$(lsblk -no PKNAME "$1" 2>/dev/null | head -n 1)
+    [ -n "$pk" ] && echo "$pk" || basename "$1"
+}
+
+prop() { blkid -p -o value -s "$2" "$1" 2>/dev/null | head -n 1; }
+
+check_allowed() {   # a rendszer saját kötetei nem csatolhatók / választhatók le innen
+    local d boot disk
+    d=$1
+    boot=$(cat /run/fusion/boot-disk 2>/dev/null)
+    disk=$(parent_disk "$d")
+    [ -n "$boot" ] && [ "$disk" = "$boot" ] && fail "a FusionOS saját lemeze ($boot) — nem kezelhető innen"
+    case "$(prop "$d" PART_ENTRY_NAME)" in FUSION_*) fail "FusionOS-partíció ($(prop "$d" PART_ENTRY_NAME)) — nem csatolható" ;; esac
+    if findmnt -rn -S "$d" -o TARGET 2>/dev/null | grep -qv "^$MEDIA/"; then
+        fail "a rendszer használja: $(findmnt -rn -S "$d" -o TARGET | head -n 1)"
+    fi
+}
+
+mount_name() {   # a csatolási pont neve: címke, különben eszköznév; egyedi
+    local lbl n i
+    lbl=$(prop "$1" LABEL)
+    [ -n "$lbl" ] || lbl=$(prop "$1" PART_ENTRY_NAME)
+    [ -n "$lbl" ] || lbl=$(basename "$1")
+    lbl=$(printf '%s' "$lbl" | tr '/\\ ' '___' | tr -d '\000-\037' | cut -c1-48)
+    case "$lbl" in .|..) lbl=$(basename "$1") ;; esac
+    n=$lbl; i=2
+    while [ -e "$MEDIA/$n" ] && mountpoint -q "$MEDIA/$n"; do n="$lbl-$i"; i=$((i + 1)); done
+    echo "$n"
+}
+
+do_mount() {
+    local d mp fs uid gid t o name
+    d=$(devpath "$1")
+    check_allowed "$d"
+    mp=$(findmnt -rn -S "$d" -o TARGET 2>/dev/null | head -n 1)
+    [ -n "$mp" ] && { say "már csatolva: $mp"; return 0; }
+    fs=$(prop "$d" TYPE)
+    [ -n "$fs" ] || fail "nincs felismerhető fájlrendszer: $d"
+    uid=$(session_uid); gid=$(id -g "$uid" 2>/dev/null || echo "$uid")
+    case "$fs" in
+        vfat)  t=vfat;  o="uid=$uid,gid=$gid,dmask=022,fmask=133,utf8=1,shortname=mixed,flush" ;;
+        exfat) t=exfat; o="uid=$uid,gid=$gid,dmask=022,fmask=133" ;;
+        ntfs)  t=ntfs3; o="uid=$uid,gid=$gid,dmask=022,fmask=133,windows_names" ;;
+        ext2|ext3|ext4|btrfs|xfs) t=$fs; o="" ;;
+        iso9660|udf) t=$fs; o="ro" ;;
+        *) fail "nem támogatott fájlrendszer: $fs ($d)" ;;
+    esac
+    mkdir -p "$MEDIA"
+    name=$(mount_name "$d"); mp="$MEDIA/$name"
+    mkdir -p "$mp"
+    o="nosuid,nodev${o:+,$o}"
+    if mount -t "$t" -o "$o" "$d" "$mp" 2>"$ERR"; then
+        say "csatolva: $d -> $mp ($fs)"
+    elif mount -t "$t" -o "ro,$o" "$d" "$mp" 2>>"$ERR"; then
+        say "csatolva CSAK OLVASHATÓAN: $d -> $mp ($fs) — $(tail -n 1 "$ERR")"
+    else
+        rmdir "$mp" 2>/dev/null
+        fail "nem csatolható: $d ($fs): $(tail -n 1 "$ERR")"
+    fi
+    # a csatolási pont gyökere a felhasználóé (ext4 esetén is látszódjon, írható legyen az üres kötet)
+    case "$fs" in ext2|ext3|ext4|btrfs|xfs)
+        [ "$(stat -c %u "$mp")" = 0 ] && [ -z "$(ls -A "$mp" 2>/dev/null | grep -v '^lost+found$')" ] && chown "$uid:$gid" "$mp" ;;
+    esac
+    return 0
+}
+
+do_unmount() {
+    local d mp users
+    case "$1" in
+        "$MEDIA"/*) mp=$1 ;;
+        *) d=$(devpath "$1"); mp=$(findmnt -rn -S "$d" -o TARGET 2>/dev/null | grep "^$MEDIA/" | head -n 1)
+           [ -n "$mp" ] || { say "nincs csatolva: $d"; return 0; } ;;
+    esac
+    mp=$(realpath -m "$mp")
+    case "$mp" in "$MEDIA"/?*) ;; *) fail "csak a $MEDIA alatti kötetek választhatók le: $mp" ;; esac
+    mountpoint -q "$mp" || { rmdir "$mp" 2>/dev/null; say "nincs csatolva: $mp"; return 0; }
+    sync
+    if [ "${LAZY:-0}" = 1 ]; then umount -l "$mp"; else
+        if ! umount "$mp" 2>"$ERR"; then
+            users=$(fuser -m "$mp" 2>/dev/null | tr -s ' ' '\n' | grep -o '[0-9]*' | while read -r p; do cat "/proc/$p/comm" 2>/dev/null; done | sort -u | tr '\n' ' ')
+            fail "foglalt, nem választható le: $mp${users:+ (használja: $users)}"
+        fi
+    fi
+    rmdir "$mp" 2>/dev/null
+    say "leválasztva: $mp"
+}
+
+do_eject() {
+    local d disk mp
+    d=$(devpath "$1")
+    disk=/dev/$(parent_disk "$d")
+    check_allowed "$disk"
+    # a lemez és partícióinak csatolásai (sdb, sdb1…; nvme0n1, nvme0n1p1…; mmcblk0, mmcblk0p1…)
+    for mp in $(awk -v d="$disk" 'index($1, d) == 1 && $2 ~ "^'"$MEDIA"'/" {print $2}' /proc/self/mounts); do
+        do_unmount "$mp" || exit 1
+    done
+    sync
+    say "biztonságosan eltávolítható: $disk"
+}
+
+# cserélhető-e: USB-n / SD-kártyán lévő, vagy a kernel szerint cserélhető lemez
+removable() {
+    local k
+    k=$(parent_disk "/dev/$1")
+    [ "$(cat "/sys/block/$k/removable" 2>/dev/null)" = 1 ] && return 0
+    case "$k" in mmcblk*) return 0 ;; esac
+    readlink -f "/sys/block/$k" | grep -q '/usb[0-9]*/' && return 0
+    return 1
+}
+
+do_automount() {
+    local k fs
+    k=$1
+    case "$k" in *[!a-zA-Z0-9_-]*|"") fail "érvénytelen név: $k" ;; esac
+    removable "$k" || { say "nem cserélhető kötet, kihagyva: $k"; return 0; }
+    fs=$(prop "/dev/$k" TYPE)
+    case "$fs" in vfat|exfat|ntfs|ext2|ext3|ext4|btrfs|xfs|iso9660|udf) ;; *) say "nincs csatolható fájlrendszer: $k"; return 0 ;; esac
+    ( check_allowed "/dev/$k" ) 2>/dev/null || { say "rendszerkötet, kihagyva: $k"; return 0; }
+    do_mount "$k"
+}
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+    power)
+        case "${1:-}" in poweroff|reboot) exec systemctl "$1" ;; *) fail "használat: power poweroff|reboot" ;; esac ;;
+    mount)       [ $# -eq 1 ] || fail "használat: mount <eszköz>"; do_mount "$1" ;;
+    unmount)     [ $# -eq 1 ] || fail "használat: unmount <eszköz|csatolási pont>"; do_unmount "$1" ;;
+    eject)       [ $# -eq 1 ] || fail "használat: eject <lemez>"; do_eject "$1" ;;
+    automount)   [ $# -eq 1 ] || fail "használat: automount <kernelnév>"; do_automount "$1" ;;
+    autounmount) [ $# -eq 1 ] || fail "használat: autounmount <kernelnév>"
+                 for mp in $(awk -v d="/dev/$1" '$1 == d {print $2}' /proc/self/mounts | grep "^$MEDIA/"); do LAZY=1 do_unmount "$mp"; done ;;
+    service-restart)
+        case "${1:-}" in
+            klipper|moonraker) exec systemctl restart "fusion-$1" ;;
+            nginx) exec systemctl restart nginx ;;
+            *) fail "használat: service-restart klipper|moonraker|nginx" ;;
+        esac ;;
+    devices-assign)
+        [ $# -eq 2 ] || fail "használat: devices-assign <szerep> <eszköz>"
+        case "$1$2" in *[!a-zA-Z0-9_-]*) fail "érvénytelen paraméter" ;; esac
+        exec /usr/lib/fusion/devices/fusion-devd assign "$1" "$2" ;;
+    devices-forget)
+        [ $# -eq 1 ] || fail "használat: devices-forget <szerep>"
+        case "$1" in *[!a-zA-Z0-9_-]*) fail "érvénytelen paraméter" ;; esac
+        exec /usr/lib/fusion/devices/fusion-devd forget "$1" ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget" ;;
+esac

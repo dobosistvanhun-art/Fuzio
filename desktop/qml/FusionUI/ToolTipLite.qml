@@ -1,6 +1,6 @@
 // egyszerű buborék (késleltetve jelenik meg, a szülő fölött)
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 ToolTip {
     id: tt
     property bool show: false

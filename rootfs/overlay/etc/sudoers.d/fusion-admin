@@ -1,0 +1,2 @@
+# FusionOS — a Fusion Desktop rendszersegédje jelszó nélkül (csak ez a program, ellenőrzött parancsokkal)
+%sudo ALL=(root) NOPASSWD: /usr/lib/fusion/bin/fusion-admin

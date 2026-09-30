@@ -1,6 +1,6 @@
 // párbeszédablak (az ablakon belül, modális): FDialog { title: "…"; buttons: [["Mégse",""],["OK","primary"]] }
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: d

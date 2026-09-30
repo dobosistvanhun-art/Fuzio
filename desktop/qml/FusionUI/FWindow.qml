@@ -1,6 +1,6 @@
 // a Fusion-programok főablaka: FusionDark paletta a Qt Quick Controls elemeinek is
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 ApplicationWindow {
     color: Theme.bg
