@@ -5,7 +5,7 @@
 ```bash
 cd ~/Fusion && \
 rm -rf fusionos-regi && mv fusionos fusionos-regi && \
-tar xzf fusionos-m6c.tar.gz && \
+tar xzf fusionos-m6e.tar.gz && \
 cp -r fusionos-regi/build/cache fusionos/build/ && \
 cd fusionos && \
 build/fusion-build deps --install && \

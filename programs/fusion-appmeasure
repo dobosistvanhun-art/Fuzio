@@ -39,14 +39,19 @@ def sh(cmd, timeout=None, env=None):
 
 
 def du(path):
-    tot = 0
+    """foglalt hely MiB-ban; a kemény hivatkozások (a Flatpak tárolója és kicsomagolt fája) csak egyszer számítanak"""
+    tot, seen = 0, set()
     for root, dirs, files in os.walk(path):
         for f in files:
             try:
                 st = os.lstat(os.path.join(root, f))
-                tot += st.st_blocks * 512
             except OSError:
-                pass
+                continue
+            key = (st.st_dev, st.st_ino)
+            if key in seen:
+                continue
+            seen.add(key)
+            tot += st.st_blocks * 512
     return tot / 1048576.0
 
 
@@ -183,7 +188,7 @@ def run_once(cmd, title_pattern, settle):
 
 
 def measure_flatpak(runs, log):
-    r = {"name": "Flatpak (Flathub)"}
+    r = {"name": "Flatpak"}
     sh(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB], timeout=120)
     t = time.time()
     rc, out = sh(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", FF_FLATPAK], timeout=3600)
@@ -195,7 +200,7 @@ def measure_flatpak(runs, log):
     rc, out = sh(["flatpak", "list", "--user", "--columns=application,version"])
     log.append("flatpak list:\n" + out)
     gl = [l.split()[0] for l in out.splitlines() if "GL.nvidia" in l]
-    r["gl_ext"] = ", ".join(gl) or "nincs (a Flathubon nincs a meghajtóhoz illő kiegészítő?)"
+    r["gl_ext"] = ", ".join(g.replace("org.freedesktop.Platform.GL.", "") for g in gl) or "nincs"
     r["size_mib"] = du(os.path.join(HOME, ".local/share/flatpak"))
     prof = os.path.join(HOME, ".var/app", FF_FLATPAK, "fusion-meres-profil")
     shutil.rmtree(prof, ignore_errors=True)
@@ -206,7 +211,7 @@ def measure_flatpak(runs, log):
 
 
 def measure_tarball(runs, log):
-    r = {"name": "Mozilla-csomag (tarball a DATA-n)"}
+    r = {"name": "Mozilla-csomag"}
     d = os.path.join(TEST_DIR, "firefox-tarball")
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(d, exist_ok=True)
@@ -216,15 +221,22 @@ def measure_tarball(runs, log):
     if rc != 0:
         r["error"] = "a letöltés nem sikerült: " + out.strip()[-200:]
         return r
-    rc, out = sh(["tar", "-xf", arc, "-C", d], timeout=600)
+    # kicsomagolás a Python saját tömörítőivel (xz / bz2 / gz) — külső program nem kell
+    import tarfile
+    try:
+        with tarfile.open(arc) as tf:
+            tf.extractall(d, filter="tar")
+        err = ""
+    except (tarfile.TarError, OSError, EOFError) as e:
+        err = str(e)
     os.unlink(arc)
     r["install_s"] = time.time() - t
     exe = os.path.join(d, "firefox", "firefox")
-    if rc != 0 or not os.path.exists(exe):
-        r["error"] = "a kicsomagolás nem sikerült: " + out.strip()[-200:]
+    if err or not os.path.exists(exe):
+        r["error"] = "a kicsomagolás nem sikerült: " + (err or "nincs firefox/firefox")[-200:]
         return r
     r["size_mib"] = du(d)
-    r["gl_ext"] = "— (a rendszer GL-jét használja)"
+    r["gl_ext"] = "rendszer GL-je"
     prof = tempfile.mkdtemp(prefix="ff-meres-")
     cmd = [exe, "--new-instance", "--no-remote", "--profile", prof, "about:blank"]
     r["runs"] = [run_once(cmd, "Mozilla Firefox", 8) for _ in range(runs)]
@@ -239,9 +251,10 @@ def report(results):
 
     def f(v, fmt):
         return fmt.format(v) if v is not None else "—"
-    lines = [f"Fusion Programkezelő — Firefox mérés ({time.strftime('%Y-%m-%d %H:%M')}, NVIDIA {nvidia_version() or '-'})", ""]
+    lines = [f"Fusion Programkezelő — Firefox mérés ({time.strftime('%Y-%m-%d %H:%M')}, NVIDIA {nvidia_version() or '-'})",
+             "(Flatpak = Flathub; Mozilla-csomag = tarball a DATA-n)", ""]
     cols = [r["name"] for r in results]
-    lines.append(f"{'':28}" + "".join(f"{c:>34}" for c in cols))
+    lines.append(f"{'':24}" + "".join(f"{c:>22}" for c in cols))
     rows = [("telepítés (mp)", lambda r: f(r.get("install_s"), "{:.0f}")),
             ("méret a DATA-n (MiB)", lambda r: f(r.get("size_mib"), "{:.0f}")),
             ("első indulás (ms)", lambda r: f((r.get("runs") or [{}])[0].get("start_ms"), "{:.0f}")),
@@ -251,7 +264,7 @@ def report(results):
             ("grafika", lambda r: ", ".join(sorted({x.get('gl', '—') for x in r.get('runs', []) if x.get('gl')})) or "—"),
             ("GL-kiegészítő", lambda r: r.get("gl_ext", "—"))]
     for name, fn in rows:
-        lines.append(f"{name:28}" + "".join(f"{fn(r)[:33]:>34}" for r in results))
+        lines.append(f"{name:24}" + "".join(f"{fn(r)[-21:] if name == 'GL-kiegészítő' else fn(r)[:21]:>22}" for r in results))
     for r in results:
         if r.get("error"):
             lines.append(f"  {r['name']}: {r['error']}")
