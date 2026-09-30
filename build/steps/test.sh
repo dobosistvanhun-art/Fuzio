@@ -180,7 +180,8 @@ step_test() {
             _check "$log" "FUSION-M6: NOTIFY rc=0 last=FusionOS önteszt toasts=[1-9]" "értesítés a D-Buson (org.freedesktop.Notifications) → buborék" || ok_run=0
             _check "$log" "FUSION-FILES: RESULT ok" "Fájlkezelő: másolás, mozgatás, törlés, archívumok, keresés, összehasonlítás" || ok_run=0
             _check "$log" "FUSION-M6: FILES window=1" "Fájlkezelő ablak" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: WIFI ok=True device=wlan.*known=.*FusionTeszt" "Beállítások → Wi-Fi (iwd a D-Buson)" || ok_run=0
+            _check "$log" "FUSION-WIFI: FUSION-SETTINGS: WIFI ok=True device=wlan[0-9] state=connected ssid=FusionTeszt networks=.*FusionTeszt\\*" "Beállítások → Wi-Fi: állapot és hálózatlista (iwd a D-Buson)" || ok_run=0
+            _check "$log" "FUSION-M6:   FUSION-SETTINGS: WIFI ok=True .*known=.*FusionTeszt" "Beállítások → Wi-Fi: megjegyzett hálózat" || ok_run=0
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs" "Beállítások → Programok (fwr-profilok)" || ok_run=0

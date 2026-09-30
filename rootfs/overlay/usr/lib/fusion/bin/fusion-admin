@@ -101,6 +101,7 @@ do_mount() {
         iso9660|udf) t=$fs; o="ro" ;;
         *) fail "nem támogatott fájlrendszer: $fs ($d)" ;;
     esac
+    modprobe -q "$t" 2>/dev/null || true      # exfat / ntfs3: modulként
     mkdir -p "$MEDIA"
     name=$(mount_name "$d"); mp="$MEDIA/$name"
     mkdir -p "$mp"
@@ -108,10 +109,10 @@ do_mount() {
     if mount -t "$t" -o "$o" "$d" "$mp" 2>"$ERR"; then
         say "csatolva: $d -> $mp ($fs)"
     elif mount -t "$t" -o "ro,$o" "$d" "$mp" 2>>"$ERR"; then
-        say "csatolva CSAK OLVASHATÓAN: $d -> $mp ($fs) — $(tail -n 1 "$ERR")"
+        say "csatolva CSAK OLVASHATÓAN: $d -> $mp ($fs) — $(grep -v 'dmesg(1)' "$ERR" | head -n 1)"
     else
         rmdir "$mp" 2>/dev/null
-        fail "nem csatolható: $d ($fs): $(tail -n 1 "$ERR")"
+        fail "nem csatolható: $d ($fs): $(grep -v 'dmesg(1)' "$ERR" | head -n 1 | sed 's/^mount: [^:]*: //')"
     fi
     # a csatolási pont gyökere a felhasználóé (ext4 esetén is látszódjon, írható legyen az üres kötet)
     case "$fs" in ext2|ext3|ext4|btrfs|xfs)

@@ -101,6 +101,8 @@ if modprobe mac80211_hwsim radios=2 2>/dev/null; then
     printf '%s\n' "$out" | sed 's/^/FUSION-WIFI:   /'
     echo "FUSION-WIFI: STATE $(runuser -u fusion -- fusion-wifi 2>/dev/null | sed -n 's/^  Állapot: *//p')"
     runuser -u fusion -- fusion-wifi known 2>/dev/null | grep -q FusionTeszt && echo "FUSION-WIFI: KNOWN FusionTeszt"
+    # a Beállítások Wi-Fi oldalának háttere (iwd a D-Buson, a fusion felhasználóként)
+    runuser -u fusion -- env HOME=/home/fusion fusion-settings --selftest 2>&1 | grep 'WIFI' | sed 's/^/FUSION-WIFI: /'
     iwctl ap "$ap" stop >/dev/null 2>&1; modprobe -r mac80211_hwsim 2>/dev/null
 else
     echo "FUSION-WIFI: HWSIM none"
@@ -193,8 +195,9 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-settings --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
     urun sh -c 'fusion-settings system >/tmp/fusion-settings.log 2>&1 &'
     i=0; while [ $i -lt 30 ] && [ "$(winview 'Rendszer')" != 1 ]; do sleep 1; i=$((i + 1)); done
+    sw=$(winview 'Rendszer')
     urun fusion-settings wifi; sleep 3
-    echo "FUSION-M6: SETTINGS window=$(winview 'Rendszer') wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
+    echo "FUSION-M6: SETTINGS window=$sw wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
     echo "FUSION-M6: WINDOWS $(sed -n 's/.*"windows": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
     cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
 fi

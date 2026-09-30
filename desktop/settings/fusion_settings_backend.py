@@ -191,7 +191,7 @@ def system():
     ncpu = os.cpu_count() or 0
     up = float(_read("/proc/uptime", "0").split()[0] or 0)
     disks = []
-    for mp, name in (("/data", "Adatok (DATA)"), ("/", "Rendszer")):
+    for mp, name in (("/data", "Adatok (DATA)"),):
         try:
             s = os.statvfs(mp)
             tot, free = s.f_blocks * s.f_frsize, s.f_bavail * s.f_frsize
