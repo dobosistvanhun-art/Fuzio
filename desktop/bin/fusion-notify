@@ -1,0 +1,27 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-notify: értesítés küldése a Fusion Shellnek
+#
+#    fusion-notify [-i ikon] [-u low|normal|critical] [-a program] [-t ms] <cím> [szöveg]
+#
+#  A szabványos org.freedesktop.Notifications szolgáltatáson át (a notify-send is ide küld).
+#  Ikon: a Fusion ikonkészlet neve (laser, printer, wifi, usb, settings, files, …).
+# =============================================================================
+set -u
+icon=""; urg=1; app="FusionOS"; tmo=-1
+while getopts "i:u:a:t:" o; do
+    case "$o" in
+        i) icon=$OPTARG ;;
+        u) case "$OPTARG" in low) urg=0 ;; critical) urg=2 ;; *) urg=1 ;; esac ;;
+        a) app=$OPTARG ;;
+        t) tmo=$OPTARG ;;
+        *) echo "használat: fusion-notify [-i ikon] [-u low|normal|critical] [-a program] [-t ms] <cím> [szöveg]" >&2; exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+[ $# -ge 1 ] || { echo "használat: fusion-notify [-i ikon] [-u …] <cím> [szöveg]" >&2; exit 2; }
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ ! -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus" ] || \
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+exec busctl --user -- call org.freedesktop.Notifications /org/freedesktop/Notifications \
+    org.freedesktop.Notifications Notify susssasa{sv}i \
+    "$app" 0 "$icon" "$1" "${2:-}" 0 1 urgency y "$urg" "$tmo" >/dev/null

@@ -79,7 +79,7 @@ def admin(*args, timeout=60):
 
 def notify(summary, body="", icon="", app="FusionOS", timeout_ms=-1):
     """értesítés a Fusion Shellnek (org.freedesktop.Notifications)"""
-    return run(["busctl", "--user", "call", "org.freedesktop.Notifications",
+    return run(["busctl", "--user", "--", "call", "org.freedesktop.Notifications",
                 "/org/freedesktop/Notifications", "org.freedesktop.Notifications", "Notify",
                 "susssasa{sv}i", app, "0", icon, summary, body, "0", "0", str(timeout_ms)], timeout=5)
 

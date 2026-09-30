@@ -7,6 +7,7 @@ hálózatokat az iwd a DATA-n tárolja, legközelebb magától kapcsolódik.
 Jogosultság: az iwd D-Bus-szabálya a sudo és a netdev csoportnak engedi.
 """
 import json
+import os
 import subprocess
 
 IWD = "net.connman.iwd"
@@ -52,7 +53,8 @@ def state():
     """{"ok", "error", "device", "path", "state", "ssid", "ip", "scanning", "known": [...]}"""
     objs, err = objects()
     if objs is None:
-        return {"ok": False, "error": err or "az iwd nem érhető el", "state": "nincs", "ssid": "", "device": ""}
+        return {"ok": False, "error": "a Wi-Fi szolgáltatás (iwd) nem érhető el" + (f": {err}" if err else ""),
+                "state": "nincs", "ssid": "", "device": ""}
     st = {"ok": True, "error": "", "device": "", "path": "", "state": "nincs eszköz", "ssid": "", "ip": "",
           "scanning": False, "powered": False, "known": []}
     for path, ifaces in sorted(objs.items()):
@@ -162,7 +164,8 @@ def wired():
     out = []
     for i in data:
         name = i.get("ifname", "")
-        if name == "lo" or name.startswith(("wlan", "wlp", "hwsim")):
+        # csak valódi (eszközhöz tartozó) vezetékes csatolók; a Wi-Fi-t a fenti rész mutatja
+        if name == "lo" or not os.path.exists(f"/sys/class/net/{name}/device") or os.path.exists(f"/sys/class/net/{name}/wireless"):
             continue
         ip = next((a["local"] + "/" + str(a["prefixlen"]) for a in i.get("addr_info", []) if a.get("family") == "inet"), "")
         out.append({"name": name, "state": i.get("operstate", "").lower(), "ip": ip})
