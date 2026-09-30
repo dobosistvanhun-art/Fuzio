@@ -89,6 +89,8 @@ libjpeg-turbo8
 zlib1g
 nginx
 curl
+# a HTTPS-hez (Flathub, letöltések, a Windows-programok tanúsítványai a Wine-on át) — minbase-ben nincs
+ca-certificates
 # a nyomtató webes felületének ablaka (WebKitGTK) — fusion-web
 python3-gi
 gir1.2-gtk-3.0

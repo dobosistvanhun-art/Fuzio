@@ -75,8 +75,17 @@ def check():
     print(f"FUSION-APPM: NVIDIA {nv or 'nincs'}" + (f" → GL-kiegészítő: org.freedesktop.Platform.GL.nvidia-{nv.replace('.', '-')}" if nv else ""), flush=True)
     st = os.statvfs("/data" if os.path.isdir("/data") else HOME)
     print(f"FUSION-APPM: DATA szabad {st.f_bavail * st.f_frsize / 1073741824:.1f} GiB (a méréshez ~2 GiB kell)", flush=True)
-    rc, _ = sh(["curl", "-fsS", "-m", "8", "-o", "/dev/null", "https://dl.flathub.org/repo/summary.idx"])
-    print(f"FUSION-APPM: INTERNET flathub={'ok' if rc == 0 else 'nem érhető el'}", flush=True)
+    ca = os.path.exists("/etc/ssl/certs/ca-certificates.crt")
+    print(f"FUSION-APPM: CA {'ok' if ca else 'nincs (HTTPS nem fog menni)'}", flush=True)
+    ok &= ca
+    w = os.access("/data/programs", os.W_OK) if os.path.isdir("/data/programs") else False
+    print(f"FUSION-APPM: PROGRAMS-DIR {'ok' if w else 'nem írható: /data/programs'}", flush=True)
+    ok &= w
+    rc, out = sh(["getent", "hosts", "dl.flathub.org"], timeout=10)
+    dns = out.split()[0] if rc == 0 and out.split() else "nem sikerült"
+    rc, out = sh(["curl", "-fsS", "-m", "10", "-o", "/dev/null", "https://dl.flathub.org/repo/summary.idx"], timeout=20)
+    err = (out.strip().splitlines() or [""])[-1]
+    print(f"FUSION-APPM: INTERNET dns={dns} flathub={'ok' if rc == 0 else 'nem érhető el — ' + err}", flush=True)
     print(f"FUSION-APPM: CHECK {'ok' if ok else 'HIBA'}", flush=True)
     return 0 if ok else 1
 
@@ -281,12 +290,18 @@ def main():
     if check() != 0:
         print("\nAz előfeltételek hiányosak — a mérés így is megpróbálja.", flush=True)
     log, results = [], []
-    if a.only in (None, "flatpak"):
-        print("\n[1/2] Firefox Flatpakként (Flathub) — letöltés, telepítés, mérés…", flush=True)
-        results.append(measure_flatpak(a.runs, log))
-    if a.only in (None, "tarball"):
-        print("[2/2] Firefox a Mozilla saját csomagjából — letöltés, kicsomagolás, mérés…", flush=True)
-        results.append(measure_tarball(a.runs, log))
+    for key, title, fn in (("flatpak", "[1/2] Firefox Flatpakként (Flathub) — letöltés, telepítés, mérés…", measure_flatpak),
+                           ("tarball", "[2/2] Firefox a Mozilla saját csomagjából — letöltés, kicsomagolás, mérés…", measure_tarball)):
+        if a.only not in (None, key):
+            continue
+        print(("\n" if key == "flatpak" else "") + title, flush=True)
+        try:
+            r = fn(a.runs, log)
+        except Exception as e:           # egy változat hibája ne vigye el a másikat és a jelentést
+            r = {"name": key, "error": f"{e.__class__.__name__}: {e}"}
+        if r.get("error"):
+            print("   hiba: " + r["error"], flush=True)
+        results.append(r)
     text = report(results)
     print("\n" + text)
     for d in ("/data/fusion", HOME):

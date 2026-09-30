@@ -192,6 +192,8 @@ step_test() {
             _check "$log" "FUSION-M6: SESSION-ENV 2" "a munkamenet-busz szolgáltatásai látják a kijelzőt (DISPLAY, XDG_CURRENT_DESKTOP)" || ok_run=0
             _check "$log" "FUSION-APPM: FLATPAK Flatpak 1\\." "Flatpak a képben" || ok_run=0
             _check "$log" "FUSION-APPM: SANDBOX ok" "homokozó (bubblewrap) a fusion felhasználóként" || ok_run=0
+            _check "$log" "FUSION-APPM: CA ok" "tanúsítványok a HTTPS-hez (ca-certificates)" || ok_run=0
+            _check "$log" "FUSION-APPM: PROGRAMS-DIR ok" "/data/programs a fusion felhasználóé" || ok_run=0
             _check "$log" "FUSION-APPM: PORTAL ok conf=ok" "asztali portálok telepítve, FusionOS-beállítás" || ok_run=0
             _check "$log" "FUSION-M6: PORTAL filechooser=v u [0-9]" "a portál elindul és fájlválasztót kínál (D-Bus)" || ok_run=0
         fi
