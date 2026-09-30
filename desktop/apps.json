@@ -1,0 +1,14 @@
+[
+  {"id": "printer",   "name": "Nyomtató",            "desc": "Klipper — Fluidd",                 "icon": "printer",  "type": "web",    "exec": "fusion-printer ui", "keywords": "klipper fluidd 3d moonraker"},
+  {"id": "mainsail",  "name": "Nyomtató (Mainsail)", "desc": "Klipper — Mainsail",               "icon": "printer",  "type": "web",    "exec": "fusion-printer ui mainsail", "keywords": "klipper 3d"},
+  {"id": "files",     "name": "Fájlkezelő",          "desc": "Kétpaneles fájlkezelő",            "icon": "files",    "type": "fusion", "exec": "fusion-files", "keywords": "fájlok mappa files explorer commander"},
+  {"id": "settings",  "name": "Beállítások",         "desc": "Wi-Fi, kijelző, eszközök, rendszer", "icon": "settings", "type": "fusion", "exec": "fusion-settings", "keywords": "settings vezérlőpult"},
+  {"id": "terminal",  "name": "Terminál",            "desc": "Parancssor",                       "icon": "terminal", "type": "linux",  "exec": "xterm", "keywords": "shell bash konzol parancssor"},
+
+  {"id": "s-wifi",     "name": "Wi-Fi",              "desc": "Beállítások — hálózatok",          "icon": "wifi",     "exec": "fusion-settings wifi",     "search_only": true, "keywords": "wifi wlan hálózat internet jelszó"},
+  {"id": "s-display",  "name": "Kijelző",            "desc": "Beállítások — felbontás",          "icon": "settings", "exec": "fusion-settings display",  "search_only": true, "keywords": "képernyő monitor felbontás"},
+  {"id": "s-devices",  "name": "Eszközök",           "desc": "Beállítások — lézer, nyomtató, USB", "icon": "usb",    "exec": "fusion-settings devices",  "search_only": true, "keywords": "usb soros lézer grbl com port"},
+  {"id": "s-printer",  "name": "Klipper szolgáltatás","desc": "Beállítások — nyomtató",          "icon": "printer",  "exec": "fusion-settings printer",  "search_only": true, "keywords": "klipper moonraker nyomtató szolgáltatás"},
+  {"id": "s-programs", "name": "Programok",          "desc": "Beállítások — Windows-programok telepítése", "icon": "app", "exec": "fusion-settings programs", "search_only": true, "keywords": "telepítés windows exe lightburn"},
+  {"id": "s-system",   "name": "Rendszer",           "desc": "Beállítások — névjegy, hardver, lemezek", "icon": "chip", "exec": "fusion-settings system", "search_only": true, "keywords": "névjegy verzió hardver lemez memória"}
+]

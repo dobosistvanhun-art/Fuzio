@@ -1,0 +1,13 @@
+module FusionUI
+singleton Theme 1.0 Theme.qml
+FIcon 1.0 FIcon.qml
+FButton 1.0 FButton.qml
+FToolButton 1.0 FToolButton.qml
+FTextField 1.0 FTextField.qml
+FWindow 1.0 FWindow.qml
+FDialog 1.0 FDialog.qml
+FSeparator 1.0 FSeparator.qml
+FLabel 1.0 FLabel.qml
+FCheck 1.0 FCheck.qml
+FSignal 1.0 FSignal.qml
+ToolTipLite 1.0 ToolTipLite.qml

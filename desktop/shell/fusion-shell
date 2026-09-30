@@ -1,0 +1,52 @@
+#!/bin/sh
+# =============================================================================
+#  FusionOS — fusion-shell: a Fusion Desktop panelje, Start menüje és értesítései
+#
+#    fusion-shell                 állapot
+#    fusion-shell menu            Start menü nyitása/zárása (Super, Alt+F1)
+#    fusion-shell run             (a munkamenet indítja) a Shell, összeomlás után újraindítással
+#    fusion-shell stop            leállítás (a run-ciklus is kilép)
+#    fusion-shell restart         újraindítás (pl. frissítés után)
+# =============================================================================
+set -u
+RT="${XDG_RUNTIME_DIR:-/tmp}"
+PIDF="$RT/fusion-shell.pid"
+STOPF="$RT/fusion-shell.stop"
+STATEF="$RT/fusion-shell.state"
+MAIN=/usr/lib/fusion/desktop/shell/fusion_shell.py
+
+say()  { printf '%s\n' "$*"; }
+fail() { printf 'fusion-shell: %s\n' "$*" >&2; exit 1; }
+pid() { p=$(cat "$PIDF" 2>/dev/null); [ -n "$p" ] && kill -0 "$p" 2>/dev/null && echo "$p"; }
+
+case "${1:-status}" in
+    status)
+        p=$(pid) || true
+        if [ -n "${p:-}" ]; then say "Fusion Shell: fut (pid $p)"; else say "Fusion Shell: nem fut"; fi
+        [ -n "${p:-}" ] && [ -r "$STATEF" ] && say "  állapot: $(cat "$STATEF")"
+        ;;
+    menu)
+        p=$(pid) || true; [ -n "${p:-}" ] || fail "a Fusion Shell nem fut"
+        kill -USR1 "$p"
+        ;;
+    stop)
+        : > "$STOPF"; p=$(pid) || true; [ -n "${p:-}" ] && kill "$p"; true
+        ;;
+    restart)
+        p=$(pid) || true; [ -n "${p:-}" ] && kill "$p"; true   # a run-ciklus újraindítja
+        ;;
+    run)
+        rm -f "$STOPF"
+        LOG="$HOME/.local/share/fusion/shell.log"; mkdir -p "$(dirname "$LOG")"
+        while [ ! -e "$STOPF" ]; do
+            [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 1000000 ] && mv -f "$LOG" "$LOG.old"
+            python3 "$MAIN" >> "$LOG" 2>&1 &
+            echo $! > "$PIDF"
+            wait $!
+            [ -e "$STOPF" ] && break
+            sleep 1
+        done
+        rm -f "$PIDF" "$STOPF"
+        ;;
+    *) fail "ismeretlen parancs: $1 (status, menu, run, stop, restart)" ;;
+esac
