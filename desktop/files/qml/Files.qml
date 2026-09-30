@@ -22,6 +22,7 @@ FWindow {
     Component.onCompleted: {
         lp.go(startPaths[0]); rp.go(startPaths[1])
         act.focusList()
+        win.raise(); win.requestActivate()
     }
 
     // --- műveletek ---
@@ -34,8 +35,15 @@ FWindow {
         if (k === "elf" || it.name.toLowerCase().endsWith(".appimage")) { files.runFile(it.full); say("indítva: " + it.name); return }
         openViewer(it.full)
     }
-    function openViewer(path) { viewerComp.createObject(null, { path: path }) }
-    function openEditor(path) { editorComp.createObject(null, { path: path }) }
+    // a külön ablakokra hivatkozást tartunk, különben a JavaScript szemétgyűjtője bezárhatná őket
+    property var kids: []
+    function keep(o) {
+        if (!o) return
+        kids = kids.concat([o])
+        o.closing.connect(function () { win.kids = win.kids.filter(k => k !== o) })
+    }
+    function openViewer(path) { keep(viewerComp.createObject(null, { path: path })) }
+    function openEditor(path) { keep(editorComp.createObject(null, { path: path })) }
 
     function doAction(a) {
         var sel = act.selection(), it = act.current()
@@ -64,7 +72,7 @@ FWindow {
             var arcs = sel.filter(p => /\.(zip|tar|tgz|txz|tbz2|tar\.gz|tar\.xz|tar\.bz2)$/i.test(p))
             if (!arcs.length) { say("nincs kijelölt archívum (zip, tar, tar.gz, tar.xz, tar.bz2)"); return }
             ask("Kicsomagolás", arcs.length + " archívum kicsomagolása ide:", other.model.path, function (v) { files.extract(arcs, v, "all") }); break
-        case "search": searchComp.createObject(null, { root: act.model.path, panel: act }); break
+        case "search": keep(searchComp.createObject(null, { root: act.model.path, panel: act })); break
         case "compare": say(files.compare()); break
         case "hidden": leftModel.showHidden = !leftModel.showHidden; rightModel.showHidden = leftModel.showHidden; break
         case "refresh": leftModel.reloadKeep(); rightModel.reloadKeep(); files.refreshVolumes(); break

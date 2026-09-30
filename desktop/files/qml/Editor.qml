@@ -18,6 +18,7 @@ FWindow {
         area.text = info.text || ""
         loading = false; modified = false
         area.forceActiveFocus(); area.cursorPosition = 0
+        ed.raise(); ed.requestActivate()
     }
     onClosing: (close) => {
         if (modified && !allowClose) { close.accepted = false; askSave.open(); return }
@@ -76,7 +77,7 @@ FWindow {
             selectByMouse: true; persistentSelection: true
             tabStopDistance: 32
             background: Rectangle { color: Theme.base }
-            onTextChanged: if (!ed.loading) ed.modified = true
+            onTextChanged: if (ed && !ed.loading) ed.modified = true
         }
     }
     FDialog {

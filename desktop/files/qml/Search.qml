@@ -10,7 +10,7 @@ FWindow {
     width: 760; height: 620
     visible: true
     title: "Keresés — " + root
-    Component.onCompleted: nameField.forceActiveFocus()
+    Component.onCompleted: { nameField.forceActiveFocus(); s.raise(); s.requestActivate() }
     onClosing: { files.stopSearch(); destroy() }
     Shortcut { sequence: "Esc"; onActivated: s.close() }
     function start() { files.startSearch(whereField.text, nameField.text, textField.text); list.currentIndex = 0 }

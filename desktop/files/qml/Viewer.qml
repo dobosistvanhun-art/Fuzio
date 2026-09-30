@@ -11,7 +11,7 @@ FWindow {
     width: 1000; height: 760
     visible: true
     title: "Megtekintés — " + (info.name || "")
-    Component.onCompleted: { info = files.readFile(path); if (info.kind !== "image") body.forceActiveFocus() }
+    Component.onCompleted: { info = files.readFile(path); if (info.kind !== "image") body.forceActiveFocus(); v.raise(); v.requestActivate() }
     onClosing: destroy()
 
     Shortcut { sequences: ["Esc", "F3", "F10"]; onActivated: v.close() }

@@ -28,6 +28,7 @@ FWindow {
             win.raise(); win.requestActivate()
         }
     }
+    Component.onCompleted: { win.raise(); win.requestActivate() }
     Shortcut { sequence: "Esc"; onActivated: win.close() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
 
