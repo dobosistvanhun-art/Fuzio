@@ -110,3 +110,11 @@ qml6-module-qtquick-layouts
 libqt6svg6
 # a fusion-admin: foglalt kötet kiírása (fuser); a Wi-Fi-t a Beállítások a D-Buson kérdezi (busctl)
 psmisc
+
+# M6 — Fusion Programkezelő, mérési szakasz: Linux-programok Flatpakként (Flathub), homokozó, portálok
+# (a Firefox-mérés: fusion-appmeasure; a döntés a mérés után)
+flatpak
+bubblewrap
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+fuse3

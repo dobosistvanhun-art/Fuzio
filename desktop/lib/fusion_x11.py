@@ -17,7 +17,8 @@ ATOMS = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING"
          "_NET_WM_WINDOW_TYPE_POPUP_MENU", "_NET_WM_WINDOW_TYPE_UTILITY",
          "_NET_WM_STATE", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER",
          "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
-         "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID")
+         "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID",
+         "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW")
 
 
 class X11:
@@ -51,6 +52,14 @@ class X11:
         win.change_property(self.a["_NET_WM_STRUT"], Xatom.CARDINAL, 32, [0, 0, 0, height])
         win.change_property(self.a["_NET_WM_STRUT_PARTIAL"], Xatom.CARDINAL, 32,
                             [0, 0, 0, height, 0, 0, 0, 0, 0, 0, 0, w - 1])
+        win.change_property(self.a["_NET_WM_DESKTOP"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
+        self.d.flush()
+
+    def setup_desktop(self, xid):
+        """az irányítópult: asztal típusú ablak — minden más ablak alatt, a tálcán nem látszik"""
+        win = self.d.create_resource_object("window", xid)
+        self._set_atoms(win, "_NET_WM_WINDOW_TYPE", ["_NET_WM_WINDOW_TYPE_DESKTOP"])
+        self._set_atoms(win, "_NET_WM_STATE", ["_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_STATE_BELOW"])
         win.change_property(self.a["_NET_WM_DESKTOP"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
         self.d.flush()
 
@@ -95,7 +104,7 @@ class X11:
         for i in ids:
             win = self.d.create_resource_object("window", int(i))
             types = self._prop(win, "_NET_WM_WINDOW_TYPE") or []
-            if self.a["_NET_WM_WINDOW_TYPE_DOCK"] in types or self.a["_NET_WM_WINDOW_TYPE_NOTIFICATION"] in types:
+            if any(self.a[t] in types for t in ("_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_NOTIFICATION", "_NET_WM_WINDOW_TYPE_DESKTOP")):
                 continue
             state = self._prop(win, "_NET_WM_STATE") or []
             if self.a["_NET_WM_STATE_SKIP_TASKBAR"] in state:

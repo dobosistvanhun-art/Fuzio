@@ -117,6 +117,7 @@ if [ -x /usr/lib/fusion/wine/bin/wine ]; then
         printf '%s\n' "$out" | sed 's/^/FUSION-M4:   /'
         echo "FUSION-M4: CHECK rc=$rc"
         echo "FUSION-M4: PREFIX $(ls -d /data/fwr/fwr-check/drive_c 2>/dev/null) owner=$(stat -c %U /data/fwr/fwr-check 2>/dev/null)"
+        echo "FUSION-M4: SYSTRAY showsystray=$(grep -c '"ShowSystray"=dword:00000000' /data/fwr/fwr-check/user.reg 2>/dev/null) notray=$(grep -c '"NoTrayItemsDisplay"=dword:00000001' /data/fwr/fwr-check/user.reg 2>/dev/null)"
     fi
 fi
 # --- M5: Klipper + Moonraker + webes felület (Fluidd, Mainsail) ---
@@ -199,6 +200,14 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-settings wifi; sleep 3
     echo "FUSION-M6: SETTINGS window=$sw wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
     echo "FUSION-M6: WINDOWS $(sed -n 's/.*"windows": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
+    # irányítópult: asztal típusú ablak a többi alatt
+    dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')
+    echo "FUSION-M6: DASHBOARD viewable=$([ -n "$dw" ] && urun xwininfo -id "$dw" | grep -c IsViewable) type=$([ -n "$dw" ] && urun xprop -id "$dw" _NET_WM_WINDOW_TYPE | grep -o '_NET_WM_WINDOW_TYPE_DESKTOP')"
+    # Fusion Programkezelő, mérési szakasz: Flatpak, homokozó, portál (internet nélkül ellenőrizhető rész)
+    echo "FUSION-M6: USERNS restrict=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)"
+    echo "FUSION-M6: SESSION-ENV $(runuser -u fusion -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment 2>/dev/null | grep -c '^XDG_CURRENT_DESKTOP=FusionOS\|^DISPLAY=:0')"
+    urun fusion-appmeasure --check 2>&1 | sed 's/^/FUSION-M6:   /'
+    echo "FUSION-M6: PORTAL filechooser=$(urun busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.DBus.Properties Get ss org.freedesktop.portal.FileChooser version 2>&1 | head -n 1)"
     cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
 fi
 # automatikus csatolás (cserélhető kötetek) — a teszt USB-meghajtója: FUSIONUSB (vfat), FUSIONEXF (exfat), FUSIONNTFS (ntfs)

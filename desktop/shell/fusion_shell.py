@@ -21,11 +21,13 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 import fusion_ui as ui  # noqa: E402  (a környezeti változókat a Qt betöltése előtt állítja)
 import fusion_apps  # noqa: E402
 import fusion_net  # noqa: E402
 from fusion_x11 import PANEL_HEIGHT, X11  # noqa: E402
+from dashboard import Dashboard  # noqa: E402
 
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
                           pyqtSignal, pyqtSlot)
@@ -146,6 +148,7 @@ class Shell(QObject):
         self._apps = []
         self._first = True
         self.reload_apps()
+        self.dash = Dashboard(lambda icon, title, body="", urg=1: self.local_note(icon, title, body, None, urg))
 
     # --- tulajdonságok a QML-nek ---
     @pyqtProperty("QVariant", notify=windowsChanged)
@@ -204,7 +207,7 @@ class Shell(QObject):
     def build_windows(self):
         sw, sh = self.x.screen_size()
         self.sw, self.sh = sw, sh
-        ctx = [("shell", self)]
+        ctx = [("shell", self), ("dash", self.dash)]
 
         def view(qml, title, flags):
             v = QQuickView()
@@ -222,6 +225,13 @@ class Shell(QObject):
             return v
 
         F = Qt.WindowType
+        # irányítópult: asztal típusú ablak a panel fölötti teljes területen, minden más ablak alatt
+        self.desk = view("Desktop.qml", "Fusion Irányítópult", F.FramelessWindowHint | F.WindowStaysOnBottomHint)
+        self.desk.setGeometry(0, 0, sw, sh - PANEL_HEIGHT)
+        self.x.setup_desktop(int(self.desk.winId()))
+        self.dash.tick_slow()
+        if self.dash.enabled:
+            self.desk.show()
         self.panel = view("Panel.qml", "Fusion Panel", F.FramelessWindowHint | F.WindowStaysOnTopHint | F.WindowDoesNotAcceptFocus)
         self.panel.setGeometry(0, sh - PANEL_HEIGHT, sw, PANEL_HEIGHT)
         self.x.setup_panel(int(self.panel.winId()), PANEL_HEIGHT)
@@ -553,6 +563,13 @@ class Shell(QObject):
             self._devices, self._media = devs, media
             self.devicesChanged.emit()
 
+    def tick_dash(self):
+        self.dash.tick_slow()
+        if self.dash.enabled and not self.desk.isVisible():
+            self.desk.show()
+        elif not self.dash.enabled and self.desk.isVisible():
+            self.desk.hide()
+
     def startup_notes(self):
         if os.path.exists("/run/fusion/image-changed"):
             self.local_note("download", "FusionOS frissült", ui.fusion_version())
@@ -561,6 +578,7 @@ class Shell(QObject):
     def write_state(self, last=None):
         st = {"pid": os.getpid(), "ready": getattr(self, "_ready", False), "menu": self._menu_open,
               "popup": self._popup, "windows": len(self._windows), "notifications": len(self._notes),
+              "dashboard": bool(getattr(self, "desk", None) and self.desk.isVisible()), "printer": self.dash.printer.get("state", ""),
               "unread": self.unread, "toasts": len(self._toasts),
               "wifi": self._wifi.get("state", ""), "devices": [d["role"] for d in self._devices if d["present"]],
               "media": [m["path"] for m in self._media]}
@@ -601,7 +619,8 @@ def main():
     shell.startup_notes()
     shell.write_state()
     timers = []
-    for ms, fn in ((1000, shell.tick_clock), (500, shell.poll_windows), (2000, shell.tick_devices), (5000, shell.tick_wifi)):
+    for ms, fn in ((1000, shell.tick_clock), (500, shell.poll_windows), (2000, shell.tick_devices), (5000, shell.tick_wifi),
+                   (2000, shell.dash.tick_fast), (5000, shell.tick_dash)):
         t = QTimer(app)
         t.timeout.connect(fn)
         t.start(ms)

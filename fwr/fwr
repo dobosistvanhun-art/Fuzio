@@ -91,6 +91,9 @@ cmd_prepare() {
     if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
+    # grafikus munkamenetben értesítés (az előkészítés néhány másodperc — ne tűnjön lefagyásnak)
+    [ -n "${DISPLAY:-}" ] && command -v fusion-notify >/dev/null && \
+        fusion-notify -i laser "$(prof_get "$pf" name): előkészítés…" "a futtatókörnyezet frissül, a program utána indul" 2>/dev/null
     # félbemaradt környezet (pl. megszakadt első létrehozás): nincs .fwr-stamp, és a program sincs
     # benne — a sérült állapot frissítése nem segít (pl. csonka DLL-ek), ezért tisztán újra létrejön
     if [ -d "$WINEPREFIX" ] && [ ! -e "$stamp" ]; then
@@ -123,6 +126,14 @@ cmd_prepare() {
         echo
         echo "[HKEY_CURRENT_USER\\Software\\Wine]"
         echo "\"Version\"=\"$(prof_get "$pf" windows)\""
+        # a Wine saját tálcaikon-ablaka (a Fusion Desktopban nincs rendszertálca, ezért a Wine
+        # egy külön felugró ablakba tenné a program tálcaikonjait) — kikapcsolva
+        echo
+        echo "[HKEY_CURRENT_USER\\Software\\Wine\\Explorer]"
+        echo "\"ShowSystray\"=dword:00000000"
+        echo
+        echo "[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer]"
+        echo "\"NoTrayItemsDisplay\"=dword:00000001"
     } > "$reg"
     "$WINE" regedit /S 'C:\fusion-settings.reg' >> "$LOG" 2>&1 \
         || fail "a beállítások írása nem sikerült (napló: $LOG)"

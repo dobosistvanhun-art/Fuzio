@@ -8,6 +8,13 @@ SettingsPage {
     title: "Asztal"
     property string bg: settings.background()
     Section {
+        title: "IRÁNYÍTÓPULT"
+        Item { width: parent.width; height: 48
+            FCheck { x: 14; anchors.verticalCenter: parent.verticalCenter; checked: settings.dashboard()
+                     text: "Irányítópult az asztalon (lézer, nyomtató, hálózat, rendszer, meghajtók, programok)"
+                     onToggled: settings.setDashboard(checked) } }
+    }
+    Section {
         title: "HÁTTÉRSZÍN"
         Flow {
             width: parent.width; padding: 14; spacing: 10

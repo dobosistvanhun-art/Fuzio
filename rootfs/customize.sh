@@ -193,6 +193,9 @@ for f in sorted(glob.glob("/usr/lib/fusion/desktop/*/qml/*.qml")):
 print(f"  [customize] QML: {len(glob.glob('/usr/lib/fusion/desktop/*/qml/*.qml'))} fájl, {bad} hibás")
 sys.exit(1 if bad else 0)
 PY
+mkdir -p "$R/usr/lib/fusion/programs"
+install -m 0755 "$FUSION_ROOT/programs/fusion-appmeasure" "$R/usr/lib/fusion/programs/fusion-appmeasure"
+ln -sf /usr/lib/fusion/programs/fusion-appmeasure "$R/usr/bin/fusion-appmeasure"
 install -m 0440 "$FUSION_ROOT/rootfs/overlay/etc/sudoers.d/fusion-admin" "$R/etc/sudoers.d/fusion-admin"
 in_root visudo -c -q -f /etc/sudoers.d/fusion-admin || { echo "  [customize] HIBA: sudoers.d/fusion-admin"; exit 1; }
 

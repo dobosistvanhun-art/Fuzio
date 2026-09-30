@@ -366,6 +366,16 @@ class Settings(QObject):
                 f.write(color + "\n")
             ui.run(["xsetroot", "-solid", color], timeout=3)
 
+    @pyqtSlot(result=bool)
+    def dashboard(self):
+        return _read(os.path.join(ui.CONFIG, "dashboard"), "on") != "off"
+
+    @pyqtSlot(bool)
+    def setDashboard(self, on):
+        os.makedirs(ui.CONFIG, exist_ok=True)
+        with open(os.path.join(ui.CONFIG, "dashboard"), "w") as f:
+            f.write("on\n" if on else "off\n")
+
     # --- Rendszer ---
     @pyqtSlot()
     def systemRefresh(self):

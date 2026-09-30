@@ -187,6 +187,13 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs" "Beállítások → Programok (fwr-profilok)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: APPS fwr-lightburn,printer,mainsail,files,settings,terminal" "Start menü programlistája" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
+            _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
+            _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
+            _check "$log" "FUSION-M6: SESSION-ENV 2" "a munkamenet-busz szolgáltatásai látják a kijelzőt (DISPLAY, XDG_CURRENT_DESKTOP)" || ok_run=0
+            _check "$log" "FUSION-APPM: FLATPAK Flatpak 1\\." "Flatpak a képben" || ok_run=0
+            _check "$log" "FUSION-APPM: SANDBOX ok" "homokozó (bubblewrap) a fusion felhasználóként" || ok_run=0
+            _check "$log" "FUSION-APPM: PORTAL ok conf=ok" "asztali portálok telepítve, FusionOS-beállítás" || ok_run=0
+            _check "$log" "FUSION-M6: PORTAL filechooser=v u [0-9]" "a portál elindul és fájlválasztót kínál (D-Bus)" || ok_run=0
         fi
         _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
         if [ "$cfg" = std-usb ]; then
@@ -206,6 +213,7 @@ step_test() {
             _check "$log" "FUSION-M4:   *GL_RENDERER: llvmpipe" "OpenGL a Wine-on át (WGL)" || ok_run=0
             _check "$log" "FUSION-M4:   *CAM: MediaFrameSourceGroup.FindAllAsync OK" "Windows kamera-felsoroló (WinRT) — LightBurn 2.x induláshoz" || ok_run=0
             _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
+            _check "$log" "FUSION-M4: SYSTRAY showsystray=1 notray=1" "a Wine saját tálcaablaka kikapcsolva" || ok_run=0
             # M5: Klipper + Moonraker + webes felület; szoftveres MCU-val a teljes lánc
             _check "$log" "FUSION-M5: SERVICES klipper=active moonraker=active nginx=active" "Klipper, Moonraker, nginx fut" || ok_run=0
             _check "$log" "FUSION-M5: CONFIG serial: /dev/fusion/printer" "alapkonfiguráció: a nyomtató a /dev/fusion/printer szerepen" || ok_run=0

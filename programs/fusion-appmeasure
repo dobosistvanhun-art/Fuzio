@@ -1,0 +1,306 @@
+#!/usr/bin/python3
+"""FusionOS — fusion-appmeasure: a Fusion Programkezelő Linux-formátumának mérése (döntés előtt)
+
+    fusion-appmeasure --check            előfeltételek (internet nélkül is): Flatpak, homokozó,
+                                         portál, NVIDIA-verzió → a szükséges GL-kiegészítő neve
+    fusion-appmeasure firefox [--runs N] a Firefox két formában: Flatpak (Flathub) és a Mozilla
+                                         saját csomagja (tarball a DATA-n) — telepítés, méret,
+                                         indulás, memória, grafika (NVIDIA / szoftveres)
+    fusion-appmeasure --clean            a mérés telepítéseinek törlése
+
+Az eredmény a képernyőre és a /data/fusion/appmeasure-<idő>.txt fájlba kerül. Internet kell (Flathub,
+download.mozilla.org). A mérés idejére megnyílik és bezáródik néhány Firefox-ablak — ne nyúlj a géphez.
+A kézi részt (fájl megnyitása Ctrl+O-val a Flatpakos Firefoxban → a portál) a végén kéri.
+"""
+import argparse
+import glob
+import os
+import shutil
+import signal
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+
+FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+FF_FLATPAK = "org.mozilla.firefox"
+FF_URL = "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=hu"
+TEST_DIR = os.environ.get("FUSION_APPMEASURE_DIR", "/data/programs/_meres")
+HOME = os.path.expanduser("~")
+
+
+def sh(cmd, timeout=None, env=None):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env, errors="replace")
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, str(e)
+
+
+def du(path):
+    tot = 0
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            try:
+                st = os.lstat(os.path.join(root, f))
+                tot += st.st_blocks * 512
+            except OSError:
+                pass
+    return tot / 1048576.0
+
+
+def nvidia_version():
+    try:
+        return open("/sys/module/nvidia/version").read().strip()
+    except OSError:
+        return ""
+
+
+def check():
+    """előfeltételek — a QEMU-teszt is ezt futtatja (FUSION-APPM sorok)"""
+    ok = True
+    rc, out = sh(["flatpak", "--version"])
+    print(f"FUSION-APPM: FLATPAK {out.strip() if rc == 0 else 'nincs'}", flush=True)
+    ok &= rc == 0
+    rc, out = sh(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "true"])
+    print(f"FUSION-APPM: SANDBOX {'ok' if rc == 0 else 'HIBA ' + out.strip().splitlines()[-1] if out.strip() else 'HIBA'}", flush=True)
+    ok &= rc == 0
+    portal = os.path.exists("/usr/libexec/xdg-desktop-portal") and os.path.exists("/usr/libexec/xdg-desktop-portal-gtk")
+    conf = os.path.exists("/usr/share/xdg-desktop-portal/fusionos-portals.conf")
+    print(f"FUSION-APPM: PORTAL {'ok' if portal else 'nincs'} conf={'ok' if conf else 'nincs'} "
+          f"desktop={os.environ.get('XDG_CURRENT_DESKTOP', '-')}", flush=True)
+    ok &= portal and conf
+    nv = nvidia_version()
+    print(f"FUSION-APPM: NVIDIA {nv or 'nincs'}" + (f" → GL-kiegészítő: org.freedesktop.Platform.GL.nvidia-{nv.replace('.', '-')}" if nv else ""), flush=True)
+    st = os.statvfs("/data" if os.path.isdir("/data") else HOME)
+    print(f"FUSION-APPM: DATA szabad {st.f_bavail * st.f_frsize / 1073741824:.1f} GiB (a méréshez ~2 GiB kell)", flush=True)
+    rc, _ = sh(["curl", "-fsS", "-m", "8", "-o", "/dev/null", "https://dl.flathub.org/repo/summary.idx"])
+    print(f"FUSION-APPM: INTERNET flathub={'ok' if rc == 0 else 'nem érhető el'}", flush=True)
+    print(f"FUSION-APPM: CHECK {'ok' if ok else 'HIBA'}", flush=True)
+    return 0 if ok else 1
+
+
+# --- ablak, folyamatfa, memória, grafika ---
+def window_ids(pattern):
+    rc, out = sh(["xwininfo", "-root", "-tree"], timeout=5)
+    return [l.split()[0] for l in out.splitlines() if pattern.lower() in l.lower() and '"' in l]
+
+
+def viewable(pattern):
+    for w in window_ids(pattern):
+        rc, out = sh(["xwininfo", "-id", w], timeout=5)
+        if "IsViewable" in out and "Width: 1\n" not in out:
+            return True
+    return False
+
+
+def tree(pid):
+    """a folyamat és minden leszármazottja (a Flatpak homokozója új munkamenetet nyit, ezért fa szerint)"""
+    out, todo = [], [pid]
+    while todo:
+        p = todo.pop()
+        out.append(p)
+        for t in glob.glob(f"/proc/{p}/task/*/children"):
+            try:
+                todo += [int(x) for x in open(t).read().split()]
+            except (OSError, ValueError):
+                pass
+    return out
+
+
+def pss_mib(pids):
+    tot = 0
+    for p in pids:
+        try:
+            with open(f"/proc/{p}/smaps_rollup") as f:
+                for line in f:
+                    if line.startswith("Pss:"):
+                        tot += int(line.split()[1])
+        except OSError:
+            pass
+    return tot / 1024.0
+
+
+def gl_kind(pids):
+    """melyik GL-könyvtár töltődött be a folyamatokba: NVIDIA (hardveres) vagy Mesa szoftveres"""
+    nv = mesa = False
+    for p in pids:
+        try:
+            with open(f"/proc/{p}/maps") as f:
+                m = f.read()
+        except OSError:
+            continue
+        if "libGLX_nvidia" in m or "libnvidia-glcore" in m or "libnvidia-eglcore" in m:
+            nv = True
+        if "swrast_dri" in m or "libgallium" in m or "llvmpipe" in m or "kms_swrast" in m:
+            mesa = True
+    return "NVIDIA" if nv else ("szoftveres (Mesa)" if mesa else "nincs GL")
+
+
+def run_once(cmd, title_pattern, settle):
+    t0 = time.time()
+    proc = subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    start = None
+    while time.time() - t0 < 90:
+        if viewable(title_pattern):
+            start = (time.time() - t0) * 1000
+            break
+        if proc.poll() is not None and not viewable(title_pattern):
+            break
+        time.sleep(0.05)
+    res = {"start_ms": start}
+    if start is not None:
+        time.sleep(settle)
+        pids = tree(proc.pid)
+        res["pss_mib"] = pss_mib(pids)
+        res["procs"] = len(pids)
+        res["gl"] = gl_kind(pids)
+    for p in reversed(tree(proc.pid)):
+        try:
+            os.kill(p, signal.SIGTERM)
+        except OSError:
+            pass
+    try:
+        proc.wait(10)
+    except subprocess.TimeoutExpired:
+        for p in tree(proc.pid):
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+    time.sleep(2)
+    return res
+
+
+def measure_flatpak(runs, log):
+    r = {"name": "Flatpak (Flathub)"}
+    sh(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB], timeout=120)
+    t = time.time()
+    rc, out = sh(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", FF_FLATPAK], timeout=3600)
+    r["install_s"] = time.time() - t
+    log.append("flatpak install:\n" + out[-3000:])
+    if rc != 0:
+        r["error"] = "a telepítés nem sikerült: " + (out.strip().splitlines() or ["?"])[-1]
+        return r
+    rc, out = sh(["flatpak", "list", "--user", "--columns=application,version"])
+    log.append("flatpak list:\n" + out)
+    gl = [l.split()[0] for l in out.splitlines() if "GL.nvidia" in l]
+    r["gl_ext"] = ", ".join(gl) or "nincs (a Flathubon nincs a meghajtóhoz illő kiegészítő?)"
+    r["size_mib"] = du(os.path.join(HOME, ".local/share/flatpak"))
+    prof = os.path.join(HOME, ".var/app", FF_FLATPAK, "fusion-meres-profil")
+    shutil.rmtree(prof, ignore_errors=True)
+    os.makedirs(prof, exist_ok=True)
+    cmd = ["flatpak", "run", FF_FLATPAK, "--new-instance", "--no-remote", "--profile", prof, "about:blank"]
+    r["runs"] = [run_once(cmd, "Mozilla Firefox", 8) for _ in range(runs)]
+    return r
+
+
+def measure_tarball(runs, log):
+    r = {"name": "Mozilla-csomag (tarball a DATA-n)"}
+    d = os.path.join(TEST_DIR, "firefox-tarball")
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d, exist_ok=True)
+    arc = os.path.join(d, "firefox.tar")
+    t = time.time()
+    rc, out = sh(["curl", "-fL", "-sS", "-o", arc, FF_URL], timeout=1800)
+    if rc != 0:
+        r["error"] = "a letöltés nem sikerült: " + out.strip()[-200:]
+        return r
+    rc, out = sh(["tar", "-xf", arc, "-C", d], timeout=600)
+    os.unlink(arc)
+    r["install_s"] = time.time() - t
+    exe = os.path.join(d, "firefox", "firefox")
+    if rc != 0 or not os.path.exists(exe):
+        r["error"] = "a kicsomagolás nem sikerült: " + out.strip()[-200:]
+        return r
+    r["size_mib"] = du(d)
+    r["gl_ext"] = "— (a rendszer GL-jét használja)"
+    prof = tempfile.mkdtemp(prefix="ff-meres-")
+    cmd = [exe, "--new-instance", "--no-remote", "--profile", prof, "about:blank"]
+    r["runs"] = [run_once(cmd, "Mozilla Firefox", 8) for _ in range(runs)]
+    shutil.rmtree(prof, ignore_errors=True)
+    return r
+
+
+def report(results):
+    def med(r, k):
+        xs = [x[k] for x in r.get("runs", []) if x.get(k) is not None]
+        return statistics.median(xs) if xs else None
+
+    def f(v, fmt):
+        return fmt.format(v) if v is not None else "—"
+    lines = [f"Fusion Programkezelő — Firefox mérés ({time.strftime('%Y-%m-%d %H:%M')}, NVIDIA {nvidia_version() or '-'})", ""]
+    cols = [r["name"] for r in results]
+    lines.append(f"{'':28}" + "".join(f"{c:>34}" for c in cols))
+    rows = [("telepítés (mp)", lambda r: f(r.get("install_s"), "{:.0f}")),
+            ("méret a DATA-n (MiB)", lambda r: f(r.get("size_mib"), "{:.0f}")),
+            ("első indulás (ms)", lambda r: f((r.get("runs") or [{}])[0].get("start_ms"), "{:.0f}")),
+            ("indulás, medián (ms)", lambda r: f(med(r, "start_ms"), "{:.0f}")),
+            ("memória PSS (MiB)", lambda r: f(med(r, "pss_mib"), "{:.0f}")),
+            ("folyamatok", lambda r: f(med(r, "procs"), "{:.0f}")),
+            ("grafika", lambda r: ", ".join(sorted({x.get('gl', '—') for x in r.get('runs', []) if x.get('gl')})) or "—"),
+            ("GL-kiegészítő", lambda r: r.get("gl_ext", "—"))]
+    for name, fn in rows:
+        lines.append(f"{name:28}" + "".join(f"{fn(r)[:33]:>34}" for r in results))
+    for r in results:
+        if r.get("error"):
+            lines.append(f"  {r['name']}: {r['error']}")
+    lines += ["", "Kézi rész (a döntéshez ez is kell):",
+              "  1. flatpak run org.mozilla.firefox → Ctrl+O: megjelenik-e a fájlválasztó (portál)?",
+              "  2. Mindkét Firefoxban: about:support → Grafika → Összeállítás (Compositing): WebRender vagy WebRender (Software)?",
+              "  3. Egy YouTube-videó: akad-e (hang még nincs a rendszerben)?"]
+    return "\n".join(lines)
+
+
+def clean():
+    sh(["flatpak", "uninstall", "--user", "-y", "--noninteractive", "--all"], timeout=600)
+    shutil.rmtree(os.path.join(HOME, ".var/app", FF_FLATPAK), ignore_errors=True)
+    shutil.rmtree(TEST_DIR, ignore_errors=True)
+    print("a mérés telepítései törölve")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="fusion-appmeasure")
+    ap.add_argument("what", nargs="?", default="")
+    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--clean", action="store_true")
+    ap.add_argument("--runs", type=int, default=3)
+    ap.add_argument("--only", choices=["flatpak", "tarball"], default=None)
+    a = ap.parse_args()
+    if a.check:
+        return check()
+    if a.clean:
+        return clean()
+    if a.what != "firefox":
+        ap.print_help()
+        return 2
+    if not os.environ.get("DISPLAY"):
+        sys.exit("fusion-appmeasure: a Fusion Desktopban (grafikus munkamenetben) kell futtatni")
+    if check() != 0:
+        print("\nAz előfeltételek hiányosak — a mérés így is megpróbálja.", flush=True)
+    log, results = [], []
+    if a.only in (None, "flatpak"):
+        print("\n[1/2] Firefox Flatpakként (Flathub) — letöltés, telepítés, mérés…", flush=True)
+        results.append(measure_flatpak(a.runs, log))
+    if a.only in (None, "tarball"):
+        print("[2/2] Firefox a Mozilla saját csomagjából — letöltés, kicsomagolás, mérés…", flush=True)
+        results.append(measure_tarball(a.runs, log))
+    text = report(results)
+    print("\n" + text)
+    for d in ("/data/fusion", HOME):
+        try:
+            os.makedirs(d, exist_ok=True)
+            fn = os.path.join(d, time.strftime("appmeasure-%Y%m%d-%H%M.txt"))
+            with open(fn, "w") as f:
+                f.write(text + "\n\n--- napló ---\n" + "\n".join(log) + "\n")
+            print(f"\nmentve: {fn}")
+            break
+        except OSError:
+            continue
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
