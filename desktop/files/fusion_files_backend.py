@@ -783,6 +783,16 @@ def volumes():
                         "dev": n.get("path", ""), "mounted": bool(mps), "media": usb or bool(mps and mps[0].startswith("/run/media/")),
                         "info": f"{n.get('path', '')} · {n.get('fstype', '')} · {ui.human_size(int(n.get('size') or 0))}"})
     walk(devs)
+    # Google Drive (rclone-csatolás) — ha be van jelentkezve
+    try:
+        import fusion_drive
+        if fusion_drive.configured():
+            m = fusion_drive.mounted()
+            out.insert(2, {"name": "Google Drive", "path": fusion_drive.MOUNT if m else "", "icon": "cloud", "dev": "gdrive:",
+                           "mounted": m, "media": False,
+                           "info": fusion_drive.MOUNT if m else "nincs csatolva — kattintásra csatolás (internet kell)"})
+    except Exception:
+        pass
     return out
 
 
@@ -1139,6 +1149,11 @@ class Files(QObject):
 
     @pyqtSlot(str, result="QVariant")
     def mountVolume(self, dev):
+        if dev == "gdrive:":
+            import fusion_drive
+            ok, msg = fusion_drive.start()
+            self.refreshVolumes()
+            return {"ok": ok, "path": msg if ok else "", "msg": "" if ok else "Google Drive: " + msg}
         rc, out = ui.admin("mount", dev)
         self.refreshVolumes()
         path = ""

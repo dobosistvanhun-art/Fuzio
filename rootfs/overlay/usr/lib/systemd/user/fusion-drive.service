@@ -1,0 +1,25 @@
+# FusionOS — Google Drive a Fájlkezelőben: rclone-csatolás a ~/GoogleDrive mappába
+# (Beállítások → Google Drive kapcsolja be / ki; a bejelentkezés jegye: ~/.config/fusion/rclone.conf)
+[Unit]
+Description=FusionOS — Google Drive (rclone mount)
+ConditionPathExists=%h/.config/fusion/rclone.conf
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+ExecStartPre=/bin/mkdir -p %h/GoogleDrive %h/.cache/fusion/drive %h/.local/share/fusion
+ExecStartPre=-/bin/fusermount3 -uz %h/GoogleDrive
+ExecStart=/usr/bin/rclone mount gdrive: %h/GoogleDrive \
+    --config %h/.config/fusion/rclone.conf \
+    --vfs-cache-mode full --vfs-cache-max-size 2G --vfs-cache-max-age 72h \
+    --cache-dir %h/.cache/fusion/drive \
+    --dir-cache-time 30s --poll-interval 30s \
+    --volname "Google Drive" \
+    --log-level NOTICE --log-file %h/.local/share/fusion/drive.log
+ExecStop=/bin/fusermount3 -uz %h/GoogleDrive
+# internet nélkül nem indul: újrapróbálkozás (a már letöltött fájlok a gyorsítótárban maradnak)
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

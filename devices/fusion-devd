@@ -230,6 +230,21 @@ cmd_list() {
     fi
 }
 
+# keepawake <devpath>: a szerepet kapott eszköz USB-ja soha ne aludjon el (autosuspend tiltva) —
+# biztosíték arra az esetre, ha valami (energiakezelő) bekapcsolná az USB-altatást
+cmd_keepawake() {
+    [ $# -eq 1 ] || exit 2
+    d="$SYSFS$1"
+    while [ -n "$d" ] && [ "$d" != "$SYSFS" ] && [ "$d" != "/" ]; do
+        if [ -r "$d/idVendor" ] && [ -w "$d/power/control" ]; then
+            echo on > "$d/power/control" 2>/dev/null
+            exit 0
+        fi
+        d=$(dirname "$d")
+    done
+    exit 0
+}
+
 retrigger() { $UDEVADM trigger --action=change --subsystem-match=tty >/dev/null 2>&1 || true; $UDEVADM settle --timeout=5 >/dev/null 2>&1 || true; }
 
 cmd_assign() {
@@ -266,6 +281,7 @@ case "$(basename "$0"):${1:-}" in
     *:record) shift; cmd_record "$@" ;;
     *:assign) shift; cmd_assign "$@" ;;
     *:forget) shift; cmd_forget "$@" ;;
+    *:keepawake) shift; cmd_keepawake "$@" ;;
     *)
         echo "Használat: fusion-devices [list] | assign <szerep> <eszköz> | forget <szerep>" >&2
         exit 2 ;;

@@ -127,6 +127,8 @@ pipewire-alsa
 wireplumber
 pulseaudio-utils
 alsa-utils
+# Google Drive a Fájlkezelőben: rclone (FUSE-csatolás)
+rclone
 bubblewrap
 xdg-desktop-portal
 xdg-desktop-portal-gtk

@@ -22,6 +22,9 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Hang, Programkezelő, Programbolt, Asztal, Rendszer
 - **Programbolt** (Start → Programbolt): a Flathub katalógusa (népszerű, kategóriák, keresés, részletek,
   képernyőképek) — a telepítést a Programkezelő végzi. Ellenőrzés: `docs/M6h-programbolt-hang.md`
+- **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
+  bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
+  alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`
 - **Hang**: PipeWire (PulseAudio-felülettel, a Flatpak-programoknak is), WirePlumber; a panelen hangerő-felugró,
   hangerő-billentyűk, Beállítások → Hang, `fusion-sound`
 - **Irányítópult** az asztalon: lézer, 3D nyomtató (Klipper, nyomtatás állása, hőmérsékletek), hálózat,

@@ -205,6 +205,10 @@ step_test() {
             _check "$log" "FUSION-SOUND: TEST rc=0" "próbahang lejátszása" || ok_run=0
             _check "$log" "FUSION-SOUND: FLATPAK-SOCKET yes" "PulseAudio-foglalat a Flatpak-programoknak" || ok_run=0
             _check "$log" "FUSION-SOUND: KEYS 4" "hangerő-billentyűk (JWM)" || ok_run=0
+            _check "$log" "FUSION-DRIVE: RCLONE v1\.[0-9]* status=1" "Google Drive: rclone a képben, kezdetben nincs bejelentkezés" || ok_run=0
+            _check "$log" "FUSION-DRIVE: LOGIN url=ok redirect=307:accounts.google.com" "bejelentkezés: a helyi kiszolgáló a Google-oldalra irányít" || ok_run=0
+            _check "$log" "FUSION-DRIVE: MOUNT 1 read=felho write=helyrol .*volume=Google Drive\* unit=active" "csatolás (ál-Drive): olvasás, írás, Fájlkezelő-kötet, szolgáltatás" || ok_run=0
+            _check "$log" "FUSION-DRIVE: LOGOUT mounted=0 conf=nincs enabled=disabled" "leválasztás: csatolás, jegy, automatikus indítás le" || ok_run=0
         fi
         _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
         if [ "$cfg" = std-usb ]; then
@@ -217,6 +221,9 @@ step_test() {
             _check "$log" "FUSION-M3: GONE" "kihúzáskor a név eltűnik" || ok_run=0
             _check "$log" "FUSION-M3: BACK ttyUSB" "visszadugás után ugyanazzal a névvel visszatér" || ok_run=0
             _check "$log" "FUSION-M3: REOPEN fusion ok" "visszadugás után is megnyitható" || ok_run=0
+            _check "$log" "FUSION-M3: KEEPAWAKE inhibit=1 usbpower=on unit=active" "a lézer USB-ja nem altatható, a gép nem alszik el (fedél sem)" || ok_run=0
+            _check "$log" "FUSION-M3: KEEPAWAKE-GONE inhibit=0" "kihúzás után az alvás újra engedélyezett" || ok_run=0
+            _check "$log" "FUSION-M3: KEEPAWAKE-BACK inhibit=1" "visszadugás után újra ébren tart" || ok_run=0
             # M4 PoC (kísérleti futtató): a Windows-program csak a COM3-at látja, és azon át ír a lézer-eszközre
             _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
             _check "$log" "FUSION-M4:   *SERIALCOMM: COM3\s*\$" "a SERIALCOMM-ban csak a COM3 (automatikus portkeresés kikapcsolva)" || ok_run=0
@@ -229,7 +236,7 @@ step_test() {
             _check "$log" "FUSION-PROG: SYNC win64 prefix=/data/fwr/lightburn port=laser icon=icon.png" "a régi helyű LightBurn leírást kap, újratelepítés nélkül" || ok_run=0
             _check "$log" "FUSION-PROG: ASSOC-LBRN lightburn" "a .lbrn fájlt a LightBurn nyitja" || ok_run=0
             _check "$log" "FUSION-PROG: WIN rc=0 name=FusionTeszt exe=C:.Program Files.FusionTeszt.fusionteszt.exe icon=icon.png owner=fusion" "általános Windows-telepítő: a program a parancsikonból felismerve, ikon a programból" || ok_run=0
-            _check "$log" "FUSION-PROG: DESKTOP Exec=fusion-run fusionteszt %F" "XDG-bejegyzés (fusion-run)" || ok_run=0
+            _check "$log" "FUSION-PROG: DESKTOP Exec=fusion-run fusionteszt %U" "XDG-bejegyzés (fusion-run)" || ok_run=0
             _check "$log" "FUSION-PROG: RUN rc=0 .* args=.*P:.proba teszt.lbrn" "indítás fájllal: a Windows-program a P: meghajtón kapja" || ok_run=0
             _check "$log" "FUSION-PROG: DETECT archive win64" "telepítőfájl felismerése" || ok_run=0
             _check "$log" "FUSION-PROG: NATIVE assoc=fprobaprog out=/tmp/x.fprb" "Linux-program archívumból, fájltársítás (X-Fusion-Open)" || ok_run=0

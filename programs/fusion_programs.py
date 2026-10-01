@@ -914,7 +914,7 @@ def sync_desktop():
             if mt and mt not in mimes:
                 mimes.append(mt)
         lines = ["[Desktop Entry]", "Type=Application", f"Name={m.get('name', m['id'])}",
-                 f"Exec=fusion-run {m['id']} %F", f"Comment={m.get('comment', '')}",
+                 f"Exec=fusion-run {m['id']} %U", f"Comment={m.get('comment', '')}",
                  f"Icon={icon_path(m) or 'application-x-executable'}", "Terminal=false",
                  f"Categories={m.get('categories', '').replace('; ', ';')};" if m.get("categories") else "Categories=",
                  f"MimeType={';'.join(mimes)};" if mimes else "MimeType=", "X-Fusion-Program=" + m["id"]]
@@ -977,7 +977,12 @@ def assoc(path, explicit_only=False):
 # ---------------------------------------------------------------------------
 # indítás
 # ---------------------------------------------------------------------------
+def is_url(a):
+    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", a)) and not a.startswith("file://")
+
+
 def command(pid, files=()):
+    """files: fájlok vagy webcímek (http://…) — a webcím változatlanul megy tovább"""
     m = manifest(pid)
     if not m:
         raise ProgramError("nincs ilyen program: " + pid)
@@ -985,6 +990,9 @@ def command(pid, files=()):
     if t == "win64":
         args = []
         for f in files:
+            if is_url(f):
+                args.append(f)
+                continue
             w = unix_to_win(m, f)
             if not w:
                 raise ProgramError(f"a fájl nincs a program látókörében: {f} (megosztott mappák: " +
@@ -992,9 +1000,14 @@ def command(pid, files=()):
             args.append(w)
         return ["fwr", "launch", pid] + args, None
     if t == "flatpak":
-        if files:
-            return ["flatpak", "run", "--file-forwarding", m["appid"], "@@"] + list(files) + ["@@"], None
-        return ["flatpak", "run", m["appid"]], None
+        paths = [f for f in files if not is_url(f)]
+        urls = [f for f in files if is_url(f)]
+        cmd = ["flatpak", "run"]
+        if paths:      # a fájlok a dokumentum-portálon át jutnak be a homokozóba
+            cmd += ["--file-forwarding", m["appid"], "@@"] + paths + ["@@"]
+        else:
+            cmd += [m["appid"]]
+        return cmd + urls, None
     exe = os.path.join(m["dir"], m.get("exec", ""))
     if not os.path.isfile(exe):
         raise ProgramError("a program indítófájlja hiányzik: " + exe)

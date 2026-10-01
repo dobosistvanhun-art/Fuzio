@@ -66,6 +66,7 @@ G = {
     "calendar": "M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4",
     "package": "M12 3l8 4v10l-8 4-8-4V7z M4 7l8 4 8-4 M12 11v10 M8 5l8 4",
     "store": "M5 8h14l-1.2 12H6.2z M9 8V6.5a3 3 0 0 1 6 0V8",
+    "cloud": "M7 18.5h10.5a4 4 0 0 0 .4-7.98A6 6 0 0 0 6.3 9.6 4.5 4.5 0 0 0 7 18.5z",
     "volume": "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12",
     "volume-low": "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7",
     "volume-mute": "M4 9h4l5-4v14l-5-4H4z M16 9l5 6 M21 9l-5 6",
@@ -107,6 +108,7 @@ APPS = {
     "app": ("app", "#374151"),
     "package": ("package", "#be185d"),
     "store": ("store", "#0f766e"),
+    "cloud": ("cloud", "#2563eb"),
     "volume": ("volume", "#7c3aed"),
 }
 

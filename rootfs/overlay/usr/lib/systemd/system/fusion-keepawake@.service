@@ -1,0 +1,9 @@
+# FusionOS — amíg a szerepet kapott eszköz (pl. lézer, 3D nyomtató) csatlakozik, a gép nem alszik el,
+# a fedél lecsukására sem (a kijelzőt a Fusion Shell kapcsolja ki). Az eszköz kihúzásakor magától leáll.
+[Unit]
+Description=FusionOS — %i csatlakoztatva: a gép ébren marad
+BindsTo=dev-fusion-%i.device
+After=dev-fusion-%i.device
+
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:handle-lid-switch --who=FusionOS --why="%i csatlakoztatva — munka közben nem alhat el" --mode=block /bin/sleep infinity

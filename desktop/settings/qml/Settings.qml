@@ -15,6 +15,7 @@ FWindow {
         { id: "display", title: "Kijelző", icon: "display", qml: "DisplayPage.qml" },
         { id: "devices", title: "Eszközök", icon: "usb", qml: "DevicesPage.qml" },
         { id: "printer", title: "Nyomtató (Klipper)", icon: "printer", qml: "PrinterPage.qml" },
+        { id: "drive", title: "Google Drive", icon: "cloud", qml: "DrivePage.qml" },
         { id: "sound", title: "Hang", icon: "volume", qml: "SoundPage.qml" },
         { id: "programs", title: "Programkezelő", icon: "package", qml: "ProgramsPage.qml" },
         { id: "store", title: "Programbolt", icon: "store", qml: "StorePage.qml" },

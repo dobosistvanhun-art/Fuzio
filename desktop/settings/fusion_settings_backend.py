@@ -20,6 +20,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 import fusion_apps  # noqa: F401  (a programlista — a fusion_programs útvonalát is beállítja)
 import fusion_net
 import fusion_sound
+import fusion_drive
 import fusion_programs as fp
 import fusion_store as store
 import fusion_ui as ui
@@ -469,6 +470,53 @@ class Settings(QObject):
     @pyqtSlot(str)
     def flathubSearch(self, term):
         self._async("flathub", lambda: {"results": fp.flatpak_search(term), "term": term})
+
+    # --- Google Drive ---
+    @pyqtSlot()
+    def driveRefresh(self):
+        def f():
+            st = fusion_drive.status(with_account=True)
+            st["cacheText"] = ui.human_size(fusion_drive.cache_size())
+            acc = st.get("account") or {}
+            st["quotaText"] = (ui.human_size(acc["used"]) + " / " + ui.human_size(acc["total"])) if acc.get("total") else \
+                (ui.human_size(acc["used"]) + " használatban" if acc.get("used") else "")
+            return st
+        self._async("drive", f)
+
+    @pyqtSlot()
+    def driveConnect(self):
+        if getattr(self, "_login", None) and self._login.proc and self._login.proc.poll() is None:
+            return
+        self._login = fusion_drive.Login(lambda kind, text: self.result.emit("drive-login", {"kind": kind, "text": text}))
+        self._login.start()
+
+    @pyqtSlot()
+    def driveCancel(self):
+        if getattr(self, "_login", None):
+            self._login.cancel()
+
+    @pyqtSlot(str)
+    def driveOpenUrl(self, url):
+        if url.startswith("http://127.0.0.1:"):
+            fusion_drive.open_browser(url)
+
+    @pyqtSlot()
+    def driveDisconnect(self):
+        self._async("drive-action", lambda: {"ok": fusion_drive.disconnect(), "msg": "A Google Drive leválasztva (a felhőben lévő fájlok érintetlenek)."})
+
+    @pyqtSlot(bool)
+    def driveMount(self, on):
+        def f():
+            if on:
+                ok, msg = fusion_drive.start()
+                return {"ok": ok, "msg": "Csatolva: " + msg if ok else "Hiba: " + msg}
+            return {"ok": fusion_drive.stop(), "msg": "A csatolás megszüntetve."}
+        self._async("drive-action", f)
+
+    @pyqtSlot(bool)
+    def driveAutostart(self, on):
+        self._async("drive-action", lambda: {"ok": fusion_drive.set_autostart(on),
+                                              "msg": "Bejelentkezéskor " + ("csatolódik." if on else "nem csatolódik.")})
 
     # --- Hang ---
     @pyqtSlot()

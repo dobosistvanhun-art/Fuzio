@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+"""FusionOS — Google Drive parancssorból
+
+    fusion-drive                 állapot
+    fusion-drive open            a Drive a Fájlkezelőben (ha nincs bejelentkezve: Beállítások → Google Drive)
+    fusion-drive mount | unmount csatolás most / megszüntetése
+    fusion-drive login           bejelentkezés a böngészőben (a végén csatol)
+    fusion-drive logout          leválasztás erről a gépről (a felhőben lévő fájlok maradnak)
+"""
+import os
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+import fusion_drive as gd  # noqa: E402
+
+
+def spawn(cmd):
+    subprocess.Popen(cmd, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def main(a):
+    cmd = a[0] if a else "status"
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    if cmd == "status":
+        st = gd.status(with_account=True)
+        if not st["configured"]:
+            print("Google Drive: nincs bejelentkezve (fusion-drive login, vagy Beállítások → Google Drive)")
+            return 1
+        acc = st.get("account") or {}
+        print(f"Google Drive: {acc.get('email') or 'bejelentkezve'}")
+        print(f"  mappa:     {st['path']} — {'csatolva' if st['mounted'] else 'nincs csatolva'} (szolgáltatás: {st['service']})")
+        print(f"  automatikus csatolás: {'be' if st['enabled'] else 'ki'}")
+        if st["error"]:
+            print("  utolsó hiba: " + st["error"])
+        return 0
+    if cmd == "open":
+        if gd.configured() and (gd.mounted() or gd.start()[0]):
+            spawn(["fusion-files", gd.MOUNT])
+        else:
+            spawn(["fusion-settings", "drive"])
+        return 0
+    if cmd == "mount":
+        ok, msg = gd.start()
+        print(msg)
+        return 0 if ok else 1
+    if cmd == "unmount":
+        return 0 if gd.stop() else 1
+    if cmd == "logout":
+        return 0 if gd.disconnect() else 1
+    if cmd == "login":
+        done = threading.Event()
+        res = {}
+
+        def ev(kind, text):
+            if kind == "url":
+                print("Ha a böngésző nem nyílt meg: " + text, flush=True)
+            elif kind == "info":
+                print(text, flush=True)
+            else:
+                res["ok"] = kind == "done"
+                print(text, flush=True)
+                done.set()
+        gd.Login(ev).start()
+        done.wait()
+        return 0 if res.get("ok") else 1
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

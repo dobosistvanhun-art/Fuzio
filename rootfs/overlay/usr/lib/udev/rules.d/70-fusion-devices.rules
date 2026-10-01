@@ -8,6 +8,10 @@ ENV{ID_BUS}!="usb", GOTO="fusion_devices_end"
 
 IMPORT{program}="/usr/lib/fusion/devices/fusion-devd udev"
 ENV{FUSION_ROLE}=="?*", SYMLINK+="fusion/$env{FUSION_ROLE}", TAG+="uaccess"
+# biztosíték: a szerepet kapott eszköz USB-ja nem altatható (a LightBurn / Klipper munka közben nem szakadhat meg)
+ENV{FUSION_ROLE}=="?*", RUN+="/usr/lib/fusion/devices/fusion-devd keepawake $env{DEVPATH}"
+# amíg szerepet kapott eszköz (lézer, nyomtató) csatlakozik, a gép nem alszik el — a fedél lecsukására sem
+ENV{FUSION_ROLE}=="?*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="fusion-keepawake@$env{FUSION_ROLE}.service"
 ENV{FUSION_ROLE_NEW}=="1", RUN+="/usr/lib/fusion/devices/fusion-devd record $env{FUSION_ROLE} $env{FUSION_DEVICE_KEY} $env{DEVPATH}"
 
 LABEL="fusion_devices_end"

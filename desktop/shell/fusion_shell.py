@@ -14,6 +14,7 @@ csatlakozott/levált, USB-meghajtó, Wi-Fi-kapcsolat, rendszerfrissítés.
 Jelzések: SIGUSR1 = Start menü nyitása/zárása (fusion-shell menu, Super / Alt+F1).
 Állapot a tesztekhez: $XDG_RUNTIME_DIR/fusion-shell.state (JSON).
 """
+import glob
 import json
 import os
 import signal
@@ -153,6 +154,7 @@ class Shell(QObject):
         self._hidden_at = {}
         self._apps = []
         self._programs_mtime = None
+        self._lid = ""
         self._sound = {"ok": False, "volume": 0, "mute": False, "sinks": [], "sources": [], "icon": "volume-mute"}
         self._soundReady.connect(self._set_sound)
         self._sound_dirty = threading.Event()
@@ -639,6 +641,32 @@ class Shell(QObject):
                 elif old.get("state") == "connected":
                     self.local_note("wifi", "Wi-Fi: a kapcsolat megszakadt", old.get("ssid", ""), "fusion-settings wifi")
 
+    def tick_lid(self, devs):
+        """fedél: ha lecsukták, de a gép ébren marad (lézer / nyomtató csatlakozik → fusion-keepawake),
+        a kijelző kikapcsol; felnyitáskor visszakapcsol"""
+        state = ""
+        for f in glob.glob("/proc/acpi/button/lid/*/state"):
+            try:
+                state = open(f).read().split(":")[-1].strip()
+            except OSError:
+                pass
+        if not state or state == self._lid:
+            return
+        prev, self._lid = self._lid, state
+        if state == "closed" and prev == "open":
+            # külső kijelzővel a munka a külső képernyőn folytatódik — ott nem kapcsolunk ki semmit
+            rc, out = ui.run(["xrandr", "--query"], timeout=3)
+            if out.count(" connected") <= 1:
+                ui.run(["xset", "+dpms"], timeout=3)
+                ui.run(["xset", "dpms", "force", "off"], timeout=3)
+            names = [d["name"] for d in devs if d["present"]]
+            if names:
+                self.local_note("laser" if any(d["role"] == "laser" and d["present"] for d in devs) else "printer",
+                                "Fedél lecsukva — a gép ébren marad", ", ".join(names) + " csatlakoztatva; a kijelző kikapcsolt")
+        elif prev == "closed":
+            ui.run(["xset", "dpms", "force", "on"], timeout=3)
+            ui.run(["xset", "s", "off", "-dpms"], timeout=3)
+
     def tick_devices(self):
         devs = []
         for role in ("laser", "printer"):
@@ -656,6 +684,7 @@ class Shell(QObject):
                         media.append({"name": os.path.basename(mp), "path": mp})
         except OSError:
             pass
+        self.tick_lid(devs)
         if devs != self._devices or media != self._media:
             if not self._first:
                 old = {d["role"]: d for d in self._devices}

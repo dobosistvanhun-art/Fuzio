@@ -2,7 +2,7 @@
 """FusionOS — Beállítások (fusion-settings)
 
     fusion-settings [oldal] [paraméter]
-        oldal: wifi | display | devices | printer | sound | programs | store | desktop | system
+        oldal: wifi | display | devices | printer | drive | sound | programs | store | desktop | system
         store search:<szó>: a Programbolt ezzel a kereséssel nyílik
         programs <fájl>: a Programkezelő ezzel a telepítővel / programfájllal nyílik
     fusion-settings --selftest      az oldalak adatainak lekérdezése felület nélkül (FUSION-SETTINGS sorok)
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "display", "devices", "printer", "sound", "programs", "store", "desktop", "system"]
+PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "system"]
 
 
 def selftest():

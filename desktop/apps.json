@@ -5,6 +5,7 @@
   {"id": "settings",  "name": "Beállítások",         "desc": "Wi-Fi, kijelző, eszközök, rendszer", "icon": "settings", "type": "fusion", "exec": "fusion-settings", "keywords": "settings vezérlőpult"},
   {"id": "programs",  "name": "Programkezelő",       "desc": "Programok telepítése, eltávolítása", "icon": "package", "type": "fusion", "exec": "fusion-settings programs", "keywords": "telepítés eltávolítás program windows linux flatpak flathub appimage exe"},
   {"id": "store",     "name": "Programbolt",         "desc": "Linux-programok a Flathubról",     "icon": "store",    "type": "fusion", "exec": "fusion-settings store", "keywords": "bolt áruház flathub flatpak letöltés program telepítés app store"},
+  {"id": "drive",     "name": "Google Drive",        "desc": "A Drive a Fájlkezelőben",          "icon": "cloud",    "type": "fusion", "exec": "fusion-drive open", "keywords": "google drive felhő cloud szinkron gdrive"},
   {"id": "terminal",  "name": "Terminál",            "desc": "Parancssor",                       "icon": "terminal", "type": "linux",  "exec": "xterm", "keywords": "shell bash konzol parancssor"},
 
   {"id": "s-wifi",     "name": "Wi-Fi",              "desc": "Beállítások — hálózatok",          "icon": "wifi",     "exec": "fusion-settings wifi",     "search_only": true, "keywords": "wifi wlan hálózat internet jelszó"},
