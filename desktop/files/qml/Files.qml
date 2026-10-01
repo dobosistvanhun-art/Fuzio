@@ -32,7 +32,9 @@ FWindow {
         if (it.isDir) { p.go(it.full); return }
         var k = files.kind(it.full)
         if (k === "exe") { files.installProgram(it.full); say("Telepítő: a telepítés a Programkezelőben folytatódik"); return }
-        var prog = files.openWithProgram(it.full)
+        // Fusion-társítás (pl. .lbrn → LightBurn) mindig; a programok MIME-igénye csak akkor, ha a
+        // beépített nézőke nem tudja megmutatni (kép, szöveg, archívum marad a nézőkében)
+        var prog = files.openWithProgram(it.full, k === "image" || k === "text" || k === "archive")
         if (prog) { say("megnyitás: " + prog); return }
         if (k === "elf") { files.runFile(it.full); say("indítva: " + it.name); return }
         openViewer(it.full)

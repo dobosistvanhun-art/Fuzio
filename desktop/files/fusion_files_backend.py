@@ -1061,13 +1061,13 @@ class Files(QObject):
         """telepítés: a Programkezelő nyílik ezzel a fájllal"""
         ui.spawn(["fusion-settings", "programs", path])
 
-    @pyqtSlot(str, result=str)
-    def openWithProgram(self, path):
+    @pyqtSlot(str, bool, result=str)
+    def openWithProgram(self, path, explicit_only):
         """ha egy telepített program megnyitja ezt a fájltípust (Programkezelő → társítás): indítás, a program neve"""
         if fp is None:
             return ""
         try:
-            progs = fp.assoc(path)
+            progs = fp.assoc(path, explicit_only)
         except Exception:
             return ""
         if not progs:

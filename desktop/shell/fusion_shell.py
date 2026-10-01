@@ -18,6 +18,7 @@ import json
 import os
 import signal
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
@@ -146,6 +147,8 @@ class Shell(QObject):
         self._popup = ""             # "center" | "calendar" | ""
         self._hidden_at = {}
         self._apps = []
+        self._programs_mtime = None
+        self._syncing = False
         self._first = True
         self.reload_apps()
         self.dash = Dashboard(lambda icon, title, body="", urg=1: self.local_note(icon, title, body, None, urg))
@@ -306,6 +309,27 @@ class Shell(QObject):
             self.menu.hide()
         self._set_menu(False)
         self.write_state()
+
+    def tick_programs(self):
+        """a Programkezelő változásai: új / eltávolított program (a /data/programs mappája), illetve
+        kívülről (parancssorból) telepített Flatpak — ez utóbbi előbb leírást kap (sync, külön szálon)"""
+        try:
+            m = os.stat(fusion_apps.fp.PROGRAMS).st_mtime_ns if fusion_apps.fp else 0
+        except OSError:
+            m = 0
+        if fusion_apps.fp and fusion_apps.fp.changed_outside() and not self._syncing:
+            self._syncing = True
+
+            def work():
+                try:
+                    fusion_apps.fp.sync()
+                except Exception:
+                    pass
+                self._syncing = False
+            threading.Thread(target=work, daemon=True).start()
+        if m != self._programs_mtime:
+            self._programs_mtime = m
+            self.reload_apps()
 
     def reload_apps(self):
         apps = fusion_apps.load()
@@ -620,7 +644,7 @@ def main():
     shell.write_state()
     timers = []
     for ms, fn in ((1000, shell.tick_clock), (500, shell.poll_windows), (2000, shell.tick_devices), (5000, shell.tick_wifi),
-                   (2000, shell.dash.tick_fast), (5000, shell.tick_dash)):
+                   (2000, shell.dash.tick_fast), (5000, shell.tick_dash), (3000, shell.tick_programs)):
         t = QTimer(app)
         t.timeout.connect(fn)
         t.start(ms)

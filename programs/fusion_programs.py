@@ -36,6 +36,9 @@ FWR_DATA = os.environ.get("FWR_DATA", "/data/fwr")
 HOME = os.path.expanduser("~")
 APPS_DIR = os.path.join(HOME, ".local/share/applications")
 FLATPAK_EXPORTS = os.path.join(HOME, ".local/share/flatpak/exports/share")
+FLATPAK_SYSTEM_EXPORTS = "/var/lib/flatpak/exports/share"
+# ezek változása jelzi, hogy kívülről (parancssorból) települt / tűnt el egy Flatpak
+WATCH_DIRS = (os.path.join(FLATPAK_EXPORTS, "applications"), os.path.join(FLATPAK_SYSTEM_EXPORTS, "applications"))
 FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
 ASSOC_FILE = os.path.join(HOME, ".config/fusion/associations.json")
 TYPE_NAMES = {"win64": "Windows", "flatpak": "Linux (Flatpak)", "appimage": "Linux (AppImage)", "native": "Linux"}
@@ -569,26 +572,41 @@ def flatpak_ensure_remote(log=None):
         raise ProgramError("a Flathub nem érhető el: " + out.strip().splitlines()[-1] if out.strip() else "a Flathub nem érhető el")
 
 
-def flatpak_apps():
-    rc, out = _run(["flatpak", "list", "--user", "--app", "--columns=application,version"])
-    res = []
+def flatpak_apps(detail=False):
+    """a telepített Flatpak-alkalmazások: [(azonosító, változat)] — a felhasználói és a rendszerszintű is
+    (detail=True: {azonosító: (változat, "user"|"system")})"""
+    rc, out = _run(["flatpak", "list", "--app", "--columns=application,version,installation"])
+    if rc != 0 and detail:
+        raise ProgramError("flatpak list: " + (out.strip().splitlines() or ["?"])[-1])
+    res = {}
     for line in out.splitlines():
         parts = line.split("\t") if "\t" in line else line.split()
         if parts and "." in parts[0] and not line.startswith("$"):
-            res.append((parts[0], parts[1] if len(parts) > 1 else ""))
-    return res
+            inst = parts[2].strip() if len(parts) > 2 else "user"
+            # ha mindkét helyen ott van, a felhasználói az irányadó
+            if parts[0] not in res or inst == "user":
+                res[parts[0]] = (parts[1].strip() if len(parts) > 1 else "", "system" if inst == "system" else "user")
+    if detail:
+        return res
+    return [(a, v[0]) for a, v in res.items()]
 
 
-def _flatpak_manifest(appid, version="", source="flathub"):
-    d = _xdg_desktop(os.path.join(FLATPAK_EXPORTS, "applications", appid + ".desktop"))
+def _flatpak_scope(m):
+    return "--system" if m.get("installation") == "system" else "--user"
+
+
+def _flatpak_manifest(appid, version="", source="flathub", installation="user"):
+    exports = FLATPAK_SYSTEM_EXPORTS if installation == "system" else FLATPAK_EXPORTS
+    d = _xdg_desktop(os.path.join(exports, "applications", appid + ".desktop"))
     name = _desktop_name(d) or appid.split(".")[-1]
     existing = next((p for p in programs() if p.get("appid") == appid), None)
     pid = existing["id"] if existing else new_id(appid.split(".")[-1])
-    icons = glob.glob(os.path.join(FLATPAK_EXPORTS, "icons/hicolor/*/apps", appid + ".*"))
+    icons = glob.glob(os.path.join(exports, "icons/hicolor/*/apps", appid + ".*"))
     m = {"id": pid, "name": name, "type": "flatpak", "appid": appid, "version": version,
          "comment": d.get("Comment[hu]") or d.get("Comment", ""),
          "categories": d.get("Categories", "").strip(";").replace(";", "; "),
          "mime": d.get("MimeType", "").strip(";"), "source": source,
+         "installation": "system" if installation == "system" else "",
          "installed": (existing or {}).get("installed") or time.strftime("%Y-%m-%d")}
     os.makedirs(os.path.join(PROGRAMS, pid), exist_ok=True)
     best = _best_icon(icons)
@@ -787,11 +805,11 @@ def remove(pid, data=False, log=None):
         raise ProgramError("nincs ilyen program: " + pid)
     t = m.get("type")
     if t == "flatpak":
-        args = ["uninstall", "--user", "-y", "--noninteractive"] + (["--delete-data"] if data else []) + [m["appid"]]
+        args = ["uninstall", _flatpak_scope(m), "-y", "--noninteractive"] + (["--delete-data"] if data else []) + [m["appid"]]
         rc, out = _flatpak(args, log, 600)
         if rc != 0 and "not installed" not in out:
             raise ProgramError("a Flatpak-eltávolítás nem sikerült: " + (out.strip().splitlines() or ["?"])[-1])
-        _flatpak(["uninstall", "--user", "-y", "--noninteractive", "--unused"], log, 600)
+        _flatpak(["uninstall", _flatpak_scope(m), "-y", "--noninteractive", "--unused"], log, 600)
     elif t == "win64":
         prefix = m.get("prefix", "")
         shared = [p for p in programs() if p["id"] != pid and p.get("prefix") == prefix]
@@ -812,11 +830,11 @@ def update(pid, log=None):
     if not m:
         raise ProgramError("nincs ilyen program: " + pid)
     if m.get("type") == "flatpak":
-        rc, out = _flatpak(["update", "--user", "-y", "--noninteractive", m["appid"]], log, 3600)
+        rc, out = _flatpak(["update", _flatpak_scope(m), "-y", "--noninteractive", m["appid"]], log, 3600)
         if rc != 0:
             raise ProgramError("a frissítés nem sikerült: " + (out.strip().splitlines() or ["?"])[-1])
         ver = dict(flatpak_apps()).get(m["appid"], m.get("version", ""))
-        _flatpak_manifest(m["appid"], ver, m.get("source", "flathub"))
+        _flatpak_manifest(m["appid"], ver, m.get("source", "flathub"), m.get("installation") or "user")
         sync_desktop()
         return "kész" + (f" ({ver})" if ver else "")
     if m.get("type") == "win64":
@@ -826,12 +844,25 @@ def update(pid, log=None):
 
 def sync(log=None):
     """a már telepített Flatpakok (pl. parancssorból) és a régi helyű Windows-programok leírást kapnak"""
-    known = {p.get("appid") for p in programs() if p.get("type") == "flatpak"}
-    if shutil.which("flatpak"):
-        for appid, ver in flatpak_apps():
+    try:
+        have = flatpak_apps(detail=True) if shutil.which("flatpak") else None
+    except ProgramError as e:      # a Flatpak most nem kérdezhető le: ne vegyünk ki semmit
+        _log(log, str(e))
+        have = None
+    if have is not None:
+        known = {}
+        for p in programs():
+            if p.get("type") == "flatpak":
+                known[p.get("appid")] = p
+        for appid, (ver, inst) in sorted(have.items()):
             if appid not in known:
-                m = _flatpak_manifest(appid, ver)
+                m = _flatpak_manifest(appid, ver, "flatpak (parancssor)", inst)
                 _log(log, f"Felvéve: {m['name']} ({appid})")
+        # kívülről eltávolított Flatpak: a leírása is megy (az adatai a Flatpaké, azokhoz nem nyúlunk)
+        for appid, p in known.items():
+            if appid and appid not in have:
+                shutil.rmtree(p["dir"], ignore_errors=True)
+                _log(log, f"Kivéve (már nincs telepítve): {p.get('name', appid)}")
     # régi helyű (fwr) Windows-programok: leírás a meglévő környezetre — újratelepítés nélkül
     for r in recipes():
         pid = r["id"]
@@ -850,6 +881,23 @@ def sync(log=None):
                 write_manifest(m)
             _log(log, f"Átköltöztetve: {m.get('name', pid)} (a meglévő környezet marad: {prefix})")
     sync_desktop()
+
+
+_watch_state = None
+
+
+def changed_outside():
+    """volt-e kívülről (parancssorból) Flatpak-telepítés / -eltávolítás a legutóbbi hívás óta — olcsó (mtime)"""
+    global _watch_state
+    st = []
+    for d in WATCH_DIRS:
+        try:
+            st.append(os.stat(d).st_mtime_ns)
+        except OSError:
+            st.append(0)
+    first, changed = _watch_state is None, st != _watch_state
+    _watch_state = st
+    return changed and not first
 
 
 def sync_desktop():
@@ -906,8 +954,10 @@ def associate(key, pid):
     sync_desktop()
 
 
-def assoc(path):
-    """melyik program nyitja meg a fájlt: [(id, név)], az alapértelmezett elöl"""
+def assoc(path, explicit_only=False):
+    """melyik program nyitja meg a fájlt: [(id, név)], az alapértelmezett elöl
+    explicit_only: csak a Fusion-társítás (open = kiterjesztés) vagy a felhasználó választása számít,
+    a programok MIME-típus-igénye nem (pl. ne a Firefox nyisson meg minden képet)"""
     low = path.lower()
     ext = "." + low.rsplit(".", 1)[1] if "." in os.path.basename(low) else ""
     mt = mimetypes.guess_type(path)[0] or ""
@@ -916,7 +966,8 @@ def assoc(path):
     for m in programs():
         exts = m.get("open", "").lower().split()
         mimes = [x.strip() for x in m.get("mime", "").replace(",", ";").split(";") if x.strip()]
-        if (ext and ext in exts) or (mt and mt in mimes):
+        pref_id = user.get(ext) or user.get(mt)
+        if (ext and ext in exts) or (mt and mt in mimes and (not explicit_only or pref_id == m["id"])):
             res.append((m["id"], m.get("name", m["id"])))
     pref = user.get(ext) or user.get(mt)
     res.sort(key=lambda x: x[0] != pref)

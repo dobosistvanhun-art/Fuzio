@@ -1,4 +1,4 @@
-# M6f — Fusion Programkezelő: ellenőrzés a ZBookon (0.0.18)
+# M6f — Fusion Programkezelő: ellenőrzés a ZBookon (0.0.19)
 
 A Programkezelő a programok egységes kezelője: **minden program egy leírás a DATA-n**
 (`/data/programs/<id>/program.fusion`), a felület (Start → **Programkezelő**, Beállítások → Programkezelő,
@@ -50,10 +50,17 @@ parancssorból telepített Firefox (Flatpak) is bekerül a listába.
 
 - [ ] Programkezelő → Flathub: keresés pl. `inkscape` → **Telepítés** (internet kell, percekig tarthat) →
       értesítés; a Start menüben megjelenik, indul
+- [ ] Terminálból telepített Flatpak (`flatpak install flathub …`) **néhány másodpercen belül** megjelenik a
+      Start menüben és az irányítópulton (0.0.19 — a 0.0.18 csak a következő bejelentkezéskor vette fel);
+      a terminálból eltávolított eltűnik
 - [ ] Fájlkezelőben egy `.exe` / `.msi` / `.AppImage` / `.flatpakref` fájlon **Enter** → a Programkezelő
       ezzel a fájllal nyílik; tar.gz-n jobb gomb → „Telepítés a Programkezelővel”
 
 ## D) Fájltársítás
+
+A Fusion-társítás (`open =`, pl. `.lbrn` → LightBurn) Enterre mindig érvényes. A Linux-programok MIME-igénye
+(pl. az Inkscape-é a PDF-re) csak ott, ahol a beépített nézőke nem tudja megmutatni a fájlt — kép, szöveg,
+archívum Enterre a nézőkében nyílik (F3 ugyanaz).
 
 - [ ] Fájlkezelő: egy `.lbrn` / `.lbrn2` fájlon **Enter** → a LightBurn nyitja meg — a fájl a `~/Projektek`
       mappában legyen (a LightBurn ezt látja **P:** meghajtóként; más mappából „nincs a program látókörében”

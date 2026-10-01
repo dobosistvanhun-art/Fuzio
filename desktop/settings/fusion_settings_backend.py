@@ -342,6 +342,10 @@ class Settings(QObject):
     @pyqtSlot()
     def programsRefresh(self):
         def f():
+            try:
+                fp.sync()      # a parancssorból telepített / eltávolított Flatpakok is látszódjanak
+            except Exception:
+                pass
             roles = []
             for rf in sorted(glob.glob(os.path.join(ROLES_DIR, "*.role"))):
                 r = _kv(rf)
