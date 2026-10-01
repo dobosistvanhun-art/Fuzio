@@ -60,12 +60,22 @@ cmd_connect() {
         printf 'Jelszó (%s): ' "$ssid"
         stty -echo 2>/dev/null; read -r pass; stty echo 2>/dev/null; printf '\n'
     fi
-    iwctl station "$DEV" scan >/dev/null 2>&1; sleep 2
-    if [ -n "$pass" ]; then
-        iwctl --passphrase "$pass" station "$DEV" connect "$ssid" 2>&1 | nocolor
-    else
-        iwctl station "$DEV" connect "$ssid" 2>&1 | nocolor
-    fi
+    # keresés, és várás, amíg a hálózat megjelenik (lassabb gépen / sok hálózatnál a keresés tovább tart)
+    try=0
+    while :; do
+        iwctl station "$DEV" scan >/dev/null 2>&1
+        i=0
+        while [ $i -lt 12 ] && ! iwctl station "$DEV" get-networks 2>/dev/null | nocolor | grep -qF " $ssid "; do sleep 1; i=$((i + 1)); done
+        if [ -n "$pass" ]; then
+            out=$(iwctl --passphrase "$pass" station "$DEV" connect "$ssid" 2>&1 | nocolor)
+        else
+            out=$(iwctl station "$DEV" connect "$ssid" 2>&1 | nocolor)
+        fi
+        case "$out" in *"Invalid network name"*|*"not found"*) ;; *) break ;; esac
+        try=$((try + 1)); [ $try -lt 3 ] || break
+        sleep 2
+    done
+    [ -n "$out" ] && printf '%s\n' "$out"
     i=0
     while [ $i -lt 20 ] && [ "$(show State)" != "connected" ]; do sleep 1; i=$((i + 1)); done
     if [ "$(show State)" = "connected" ]; then
