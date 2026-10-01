@@ -134,7 +134,7 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     echo "FUSION-PROG: SYNC $(sed -n 's/^type = //p' $P/lightburn/program.fusion 2>/dev/null) prefix=$(sed -n 's/^prefix = //p' $P/lightburn/program.fusion 2>/dev/null) port=$(sed -n 's/^port.COM3 = //p' $P/lightburn/program.fusion 2>/dev/null) icon=$(sed -n 's/^icon = //p' $P/lightburn/program.fusion 2>/dev/null)"
     echo "FUSION-PROG: ASSOC-LBRN $(prun fusion-programs assoc /home/fusion/x.lbrn | cut -f1 | tr '\n' ' ')"
     # 2) általános Windows-telepítő: a program a Start menü parancsikonjából ismerhető fel
-    out=$(timeout 900 prun fusion-programs install /usr/lib/fusion/programs/tests/fusionteszt-setup.exe 2>&1); rc=$?
+    out=$(prun timeout 900 fusion-programs install /usr/lib/fusion/programs/tests/fusionteszt-setup.exe 2>&1); rc=$?
     printf '%s\n' "$out" | tail -n 8 | sed 's/^/FUSION-PROG:   /'
     m=$P/fusionteszt/program.fusion
     echo "FUSION-PROG: WIN rc=$rc name=$(sed -n 's/^name = //p' $m 2>/dev/null) exe=$(sed -n 's/^exe = //p' $m 2>/dev/null) icon=$(sed -n 's/^icon = //p' $m 2>/dev/null) owner=$(stat -c %U $P/fusionteszt 2>/dev/null)"
@@ -144,7 +144,7 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     args=$P/fusionteszt/win64/drive_c/users/Public/fusionteszt-args.txt
     rm -f "$args"
     prun fusion-run fusionteszt "/home/fusion/Projektek/proba teszt.lbrn"; rrc=$?
-    i=0; while [ $i -lt 120 ] && [ ! -s "$args" ]; do sleep 1; i=$((i + 1)); done
+    i=0; while [ $rrc -eq 0 ] && [ $i -lt 120 ] && [ ! -s "$args" ]; do sleep 1; i=$((i + 1)); done
     sleep 2
     echo "FUSION-PROG: RUN rc=$rrc wait=${i}s window=$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"') args=$(tr -d '\r\n' < "$args" 2>/dev/null)"
     # 3) Linux-program archívumban (.desktop + X-Fusion-Open társítás)

@@ -49,9 +49,9 @@ sudo build/fusion-build update /dev/sdb      # megerősítés: sdb
 - [ ] **Kijelző**: a panel felbontása; más módra váltás → 15 mp alatt „Megtartás”, különben visszaáll
 - [ ] **Eszközök**: Lézer (GRBL) szerep — csatlakoztatva: ttyUSB0 → /dev/fusion/laser, COM3
 - [ ] **Nyomtató**: Klipper ready, a három szolgáltatás active; Fluidd / Mainsail gomb
-- [ ] **Programok**: LightBurn — Telepítve; Indítás gomb
+- [ ] **Programkezelő**: LightBurn — Windows, Indítás gomb (részletek: `docs/M6f-programkezelo.md`)
 - [ ] **Asztal**: háttérszín váltás (újraindítás után is megmarad)
-- [ ] **Rendszer**: verzió 0.0.14, A slot, sdb, memória, lemezek
+- [ ] **Rendszer**: verzió 0.0.18, A slot, sdb, memória, lemezek
 
 ## D) Visszajelzés
 

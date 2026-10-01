@@ -19,11 +19,15 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
   `org.freedesktop.Notifications` szolgáltatással (`fusion-notify`, `notify-send`), értesítésközpont
 - **Fájlkezelő** (`fusion-files`): kétpaneles; F3–F8, Tab, jelölés, vágólap, húzás, keresés (Alt+F7),
   könyvtár-összehasonlítás, rejtett fájlok, ZIP/TAR, nézőke és szerkesztő, meghajtók (csatolás, kiadás)
-- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Programok, Asztal, Rendszer
+- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Programkezelő, Asztal, Rendszer
 - **Irányítópult** az asztalon: lézer, 3D nyomtató (Klipper, nyomtatás állása, hőmérsékletek), hálózat,
   rendszer, meghajtók, programok — Beállítások → Asztal
-- **Fusion Programkezelő** (terv: projekt → `claude/Programkezelo-architektura.md`): mérési szakasz —
-  Flatpak, portálok, `fusion-appmeasure` (Firefox: Flatpak vs. Mozilla-csomag), `docs/M6c-programkezelo-meres.md`
+- **Fusion Programkezelő** (Start → Programkezelő; `fusion-programs`, `fusion-run`): minden program egy
+  leírás a DATA-n (`/data/programs/<id>/program.fusion`) — telepítés fájlból (Windows .exe/.msi, AppImage,
+  Linux-archívum, Flatpak) és a Flathubról, eltávolítás, frissítés, Start menü, ikon, fájltársítás,
+  Windows-programoknál eszköz-hozzáférés (COM3 lézer, COM4 nyomtató). A Linux-programok fő formátuma a
+  **Flatpak**; a Windows-futtató ma az fwr (kísérleti M4-megoldás). Ellenőrzés: `docs/M6f-programkezelo.md`,
+  terv: projekt → `claude/Programkezelo-architektura.md`, mérés: `docs/M6c-programkezelo-meres.md`
 - **Kötetek**: a cserélhető meghajtók (USB, SD) bedugáskor a `/run/media/<címke>` alá csatolódnak
   (FAT32, exFAT, NTFS, ext4); a belső lemezek kérésre (Fájlkezelő → meghajtó). A rendszerműveletek
   a szűk jogú `fusion-admin` segéden át mennek (sudo szabály csak erre).
