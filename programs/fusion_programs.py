@@ -489,19 +489,34 @@ def install_windows(installer, log=None, name=None, portable=False):
     m["source"] = "file:" + os.path.basename(installer)
     exe_known = m.get("exe", "") if recipe else ""
     old_exe = m.pop("exe", None) if not recipe else None
+    existed = os.path.exists(os.path.join(PROGRAMS, pid, "program.fusion"))
     write_manifest(m)
+    try:
+        return _install_windows_run(installer, m, pid, recipe, name, portable, old_exe, exe_known, log)
+    except ProgramError:
+        if not existed:      # sikertelen új telepítés: ne maradjon félkész bejegyzés
+            shutil.rmtree(os.path.join(PROGRAMS, pid), ignore_errors=True)
+        raise
 
+
+def _install_windows_run(installer, m, pid, recipe, name, portable, old_exe, exe_known, log):
     prefix = m["prefix"]
     if portable:
-        _run(["fwr", "prepare", pid], log)
+        rc, out = _run(["fwr", "prepare", pid], log)
+        if rc != 0:
+            raise ProgramError("a Windows-környezet nem hozható létre")
         dst_dir = os.path.join(prefix, "drive_c", "Program Files", pid)
         os.makedirs(dst_dir, exist_ok=True)
         dst = os.path.join(dst_dir, os.path.basename(installer))
         shutil.copy2(installer, dst)
         m["exe"] = "C:\\Program Files\\" + pid + "\\" + os.path.basename(installer)
     else:
-        before_lnk = _start_menu_lnks(prefix) if os.path.isdir(prefix) else set()
-        before_exe = _program_exes(prefix) if os.path.isdir(prefix) else set()
+        # előbb a környezet (a Windows saját programjai ne számítsanak újnak), utána a pillanatkép
+        rc, out = _run(["fwr", "prepare", pid], log)
+        if rc != 0:
+            raise ProgramError("a Windows-környezet nem hozható létre (napló: ~/.local/share/fusion/fwr/" + pid + ".log)")
+        before_lnk = _start_menu_lnks(prefix)
+        before_exe = _program_exes(prefix)
         _log(log, "A telepítő elindul — a telepítő ablakában fejezze be a telepítést.")
         rc, out = _run(["fwr", "install", pid, installer], log)
         if rc != 0:

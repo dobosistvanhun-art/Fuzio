@@ -186,7 +186,8 @@ cmd_install() {
     wine_env "$id" "$pf"
     # a telepítő a környezeten belülre kerül (a Linux-fájlrendszer nem látszik)
     tmp="$WINEPREFIX/drive_c/fusion-install"
-    rm -rf "$tmp"; mkdir -p "$tmp"; cp "$inst" "$tmp/"
+    rm -rf "$tmp"; mkdir -p "$tmp"
+    cp "$inst" "$tmp/" || { rm -rf "$tmp"; fail "a telepítő nem másolható a környezetbe (elfogyott a hely?)"; }
     name=$(basename "$inst")
     say "fwr: $(prof_get "$pf" name) telepítése: $name"
     case "$name" in
