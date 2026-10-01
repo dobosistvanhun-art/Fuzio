@@ -186,7 +186,7 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
@@ -205,7 +205,7 @@ step_test() {
             _check "$log" "FUSION-SOUND: TEST rc=0" "próbahang lejátszása" || ok_run=0
             _check "$log" "FUSION-SOUND: FLATPAK-SOCKET yes" "PulseAudio-foglalat a Flatpak-programoknak" || ok_run=0
             _check "$log" "FUSION-SOUND: KEYS 4" "hangerő-billentyűk (JWM)" || ok_run=0
-            _check "$log" "FUSION-DRIVE: RCLONE v1\.[0-9]* status=1" "Google Drive: rclone a képben, kezdetben nincs bejelentkezés" || ok_run=0
+            _check "$log" "FUSION-DRIVE: RCLONE v1\.[0-9.]*[^ ]* status=1" "Google Drive: rclone a képben, kezdetben nincs bejelentkezés" || ok_run=0
             _check "$log" "FUSION-DRIVE: LOGIN url=ok redirect=307:accounts.google.com" "bejelentkezés: a helyi kiszolgáló a Google-oldalra irányít" || ok_run=0
             _check "$log" "FUSION-DRIVE: MOUNT 1 read=felho write=helyrol .*volume=Google Drive\* unit=active" "csatolás (ál-Drive): olvasás, írás, Fájlkezelő-kötet, szolgáltatás" || ok_run=0
             _check "$log" "FUSION-DRIVE: LOGOUT mounted=0 conf=nincs enabled=disabled" "leválasztás: csatolás, jegy, automatikus indítás le" || ok_run=0
