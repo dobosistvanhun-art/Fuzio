@@ -161,17 +161,26 @@ done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
-    "$DK/settings/fusion_settings.py" "$DK/bin/fusion-notify"
+    "$DK/settings/fusion_settings.py" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound"
 chown -R root:root "$DK"
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
 ln -sf /usr/lib/fusion/desktop/settings/fusion_settings.py "$R/usr/bin/fusion-settings"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
+ln -sf /usr/lib/fusion/desktop/bin/fusion-sound "$R/usr/bin/fusion-sound"
+# hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
+in_root systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
+for u in pipewire.socket pipewire-pulse.socket wireplumber.service; do
+    [ -e "$R/etc/systemd/user/sockets.target.wants/$u" ] || [ -e "$R/etc/systemd/user/pipewire.service.wants/$u" ] \
+        || [ -e "$R/usr/lib/systemd/user/sockets.target.wants/$u" ] || [ -e "$R/usr/lib/systemd/user/pipewire.service.wants/$u" ] \
+        || { echo "  [customize] HIBA: a(z) $u nincs engedélyezve"; exit 1; }
+done
 rm -f "$R/usr/bin/fusion-uimeasure"
 echo "  [customize] Fusion Programkezelő: fusion-programs, fusion-run (leírások: /data/programs/<id>/program.fusion)"
 PG="$R/usr/lib/fusion/programs"
 rm -rf "$PG"; mkdir -p "$PG/tests"
 install -m 0644 "$FUSION_ROOT/programs/fusion_programs.py" "$PG/fusion_programs.py"
+install -m 0644 "$FUSION_ROOT/programs/fusion_store.py" "$PG/fusion_store.py"
 for f in fusion-programs fusion-run fusion-appmeasure; do
     install -m 0755 "$FUSION_ROOT/programs/$f" "$PG/$f"
     ln -sf "/usr/lib/fusion/programs/$f" "$R/usr/bin/$f"
@@ -185,7 +194,7 @@ sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
 sys.path.insert(0, "/usr/lib/fusion/desktop/files")
 sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
 import fusion_ui, fusion_x11, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
-import fusion_programs
+import fusion_programs, fusion_store, fusion_sound
 assert fusion_apps.fp is fusion_programs, "a Programkezelő modulja nem töltődött be"
 from PyQt6.QtDBus import QDBusConnection
 from PyQt6.QtGui import QGuiApplication

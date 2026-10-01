@@ -1,0 +1,72 @@
+#!/usr/bin/python3
+"""FusionOS — hang parancssorból (a hangerő-billentyűk is ezt hívják)
+
+    fusion-sound                 állapot: kiszolgáló, kimenetek, bemenetek, hangerő
+    fusion-sound up | down       hangerő ±5% (legfeljebb 100%)
+    fusion-sound mute            némítás be/ki
+    fusion-sound set <0-150>     hangerő %-ban
+    fusion-sound out <név>       alapértelmezett kimenet
+    fusion-sound mic-mute        mikrofon némítása be/ki
+    fusion-sound test [<név>]    próbahang
+    fusion-sound --json          állapot JSON-ban
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+import fusion_sound as snd  # noqa: E402
+
+
+def show(st):
+    if not st["ok"]:
+        print("A hangkiszolgáló nem fut: " + st["error"])
+        return 1
+    print(f"Kiszolgáló: {st['server']}")
+    print(f"Hangerő:    {st['volume']}%{' (némítva)' if st['mute'] else ''}")
+    print("Kimenetek:")
+    for s in st["sinks"]:
+        print(f"  {'*' if s['name'] == st['sink'] else ' '} {s['desc']}  [{s['name']}]  {s['volume']}%"
+              + (f"  port: {s['port']}" if s['port'] else ""))
+    if not st["sinks"]:
+        print("    (nincs — hangkártya / meghajtó?)")
+    print("Bemenetek:")
+    for s in st["sources"]:
+        print(f"  {'*' if s['name'] == st['source'] else ' '} {s['desc']}  [{s['name']}]  {s['volume']}%"
+              + (" (némítva)" if s["mute"] else ""))
+    if not st["sources"]:
+        print("    (nincs)")
+    return 0
+
+
+def main(a):
+    cmd = a[0] if a else "status"
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    if cmd == "--json":
+        print(json.dumps(snd.state(), ensure_ascii=False))
+        return 0
+    if cmd == "status":
+        return show(snd.state())
+    if cmd in ("up", "down"):
+        st = snd.step(5 if cmd == "up" else -5)
+        return 0 if st["ok"] else 1
+    if cmd == "mute":
+        return 0 if snd.toggle_mute() else 1
+    if cmd == "mic-mute":
+        return 0 if snd.toggle_mute(source=True) else 1
+    if cmd == "set" and len(a) == 2 and a[1].isdigit():
+        return 0 if snd.set_volume(int(a[1])) else 1
+    if cmd == "out" and len(a) == 2:
+        return 0 if snd.set_default(a[1]) else 1
+    if cmd == "test":
+        rc = snd.test_sound(a[1] if len(a) > 1 else "")
+        print("próbahang: " + ("lejátszva" if rc == 0 else f"hiba ({rc})"))
+        return rc
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

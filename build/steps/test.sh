@@ -87,6 +87,7 @@ _qemu_run() {
         -drive file="$img",format=raw,if=none,id=disk0,snapshot=on \
         "${diskdev[@]}" \
         -nic user,model=e1000e \
+        -audiodev none,id=snd0 -device ich9-intel-hda -device hda-duplex,audiodev=snd0 \
         -vga "$vga" -display none -serial "file:$log" -no-reboot \
         -monitor "unix:$out/qemu-$cfg.mon,server,nowait" \
         "${QEMU_EXTRA[@]}" >/dev/null 2>&1 &
@@ -185,7 +186,7 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
@@ -196,6 +197,14 @@ step_test() {
             _check "$log" "FUSION-APPM: PROGRAMS-DIR ok" "/data/programs a fusion felhasználóé" || ok_run=0
             _check "$log" "FUSION-APPM: PORTAL ok conf=ok" "asztali portálok telepítve, FusionOS-beállítás" || ok_run=0
             _check "$log" "FUSION-M6: PORTAL filechooser=v u [0-9]" "a portál elindul és fájlválasztót kínál (D-Bus)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: STORE categories=10 text=ok" "Programbolt: kategóriák, leírás-átalakítás" || ok_run=0
+            _check "$log" "FUSION-SOUND: KERNEL cards=[1-9] hda=1" "hang: HDA-hangkártya a kernelben" || ok_run=0
+            _check "$log" "FUSION-SOUND: SERVER ok=True PulseAudio_(on_PipeWire.* sinks=[1-9]" "hang: PipeWire fut, van kimenet" || ok_run=0
+            _check "$log" "FUSION-SOUND: SET volume=40 shell=40" "hangerő állítása; a panel látja" || ok_run=0
+            _check "$log" "FUSION-SOUND: MUTE True False" "némítás be/ki" || ok_run=0
+            _check "$log" "FUSION-SOUND: TEST rc=0" "próbahang lejátszása" || ok_run=0
+            _check "$log" "FUSION-SOUND: FLATPAK-SOCKET yes" "PulseAudio-foglalat a Flatpak-programoknak" || ok_run=0
+            _check "$log" "FUSION-SOUND: KEYS 4" "hangerő-billentyűk (JWM)" || ok_run=0
         fi
         _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
         if [ "$cfg" = std-usb ]; then

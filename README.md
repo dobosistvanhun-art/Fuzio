@@ -19,7 +19,11 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
   `org.freedesktop.Notifications` szolgáltatással (`fusion-notify`, `notify-send`), értesítésközpont
 - **Fájlkezelő** (`fusion-files`): kétpaneles; F3–F8, Tab, jelölés, vágólap, húzás, keresés (Alt+F7),
   könyvtár-összehasonlítás, rejtett fájlok, ZIP/TAR, nézőke és szerkesztő, meghajtók (csatolás, kiadás)
-- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Programkezelő, Asztal, Rendszer
+- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Hang, Programkezelő, Programbolt, Asztal, Rendszer
+- **Programbolt** (Start → Programbolt): a Flathub katalógusa (népszerű, kategóriák, keresés, részletek,
+  képernyőképek) — a telepítést a Programkezelő végzi. Ellenőrzés: `docs/M6h-programbolt-hang.md`
+- **Hang**: PipeWire (PulseAudio-felülettel, a Flatpak-programoknak is), WirePlumber; a panelen hangerő-felugró,
+  hangerő-billentyűk, Beállítások → Hang, `fusion-sound`
 - **Irányítópult** az asztalon: lézer, 3D nyomtató (Klipper, nyomtatás állása, hőmérsékletek), hálózat,
   rendszer, meghajtók, programok — Beállítások → Asztal
 - **Fusion Programkezelő** (Start → Programkezelő; `fusion-programs`, `fusion-run`): minden program egy

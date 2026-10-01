@@ -13,12 +13,16 @@ Rectangle {
         property string tip: ""
         property bool on: false
         signal clicked()
+        signal middle()
+        signal wheel(int delta)
         default property alias content: inner.data
         height: 32; width: inner.childrenRect.width + 16; radius: Theme.radius
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         color: on ? Theme.selected : (tma.containsMouse ? Theme.hover : "transparent")
         Item { id: inner; x: 8; width: childrenRect.width; height: parent.height }
-        MouseArea { id: tma; anchors.fill: parent; hoverEnabled: true; onClicked: tb.clicked() }
+        MouseArea { id: tma; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    onClicked: (m) => m.button === Qt.MiddleButton ? tb.middle() : tb.clicked()
+                    onWheel: (w) => tb.wheel(w.angleDelta.y) }
         ToolTipLite { text: tb.tip; show: tma.containsMouse }
     }
 
@@ -112,6 +116,17 @@ Rectangle {
                     font.family: Theme.font; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter
                 }
             }
+        }
+        // hang: kattintás → felugró, görgetés → hangerő
+        TrayButton {
+            on: shell.popup === "sound"
+            tip: !shell.sound.ok ? "Hang: a hangkiszolgáló nem fut" : (!shell.sound.hasOutput ? "Hang: nincs kimenet"
+                 : ("Hangerő: " + shell.sound.volume + "%" + (shell.sound.mute ? " (némítva)" : "") + (shell.sound.sinkDesc ? "\n" + shell.sound.sinkDesc : "")
+                    + "\n(görgetés: hangerő, középső gomb: némítás)"))
+            onClicked: shell.togglePopup("sound")
+            onMiddle: shell.soundToggleMute()
+            onWheel: (d) => shell.soundStep(d > 0 ? 5 : -5)
+            FIcon { name: shell.sound.icon || "volume-mute"; size: 18; y: 7; opacity: shell.sound.ok && !shell.sound.mute ? 1 : 0.5 }
         }
         // értesítések
         TrayButton {

@@ -17,6 +17,7 @@ Jelzések: SIGUSR1 = Start menü nyitása/zárása (fusion-shell menu, Super / A
 import json
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import fusion_ui as ui  # noqa: E402  (a környezeti változókat a Qt betöltése előtt állítja)
 import fusion_apps  # noqa: E402
 import fusion_net  # noqa: E402
+import fusion_sound  # noqa: E402
 from fusion_x11 import PANEL_HEIGHT, X11  # noqa: E402
 from dashboard import Dashboard  # noqa: E402
 
@@ -41,6 +43,7 @@ QML = os.path.join(HERE, "qml")
 MENU_W, MENU_H = 440, 560
 CENTER_W, CENTER_H = 400, 520
 CAL_W, CAL_H = 300, 300
+SOUND_W, SOUND_H = 340, 300
 TOAST_W = 380
 STATE_FILE = os.path.join(ui.RUNTIME, "fusion-shell.state")
 DEV_DIR = os.environ.get("FUSION_DEV_DIR", "/dev/fusion")
@@ -130,6 +133,8 @@ class Shell(QObject):
     menuOpenChanged = pyqtSignal()
     appsChanged = pyqtSignal()
     popupChanged = pyqtSignal()
+    soundChanged = pyqtSignal()
+    _soundReady = pyqtSignal("QVariant")     # a figyelő szálból a fő szálra
 
     def __init__(self, app):
         super().__init__()
@@ -148,6 +153,9 @@ class Shell(QObject):
         self._hidden_at = {}
         self._apps = []
         self._programs_mtime = None
+        self._sound = {"ok": False, "volume": 0, "mute": False, "sinks": [], "sources": [], "icon": "volume-mute"}
+        self._soundReady.connect(self._set_sound)
+        self._sound_dirty = threading.Event()
         self._syncing = False
         self._first = True
         self.reload_apps()
@@ -193,6 +201,77 @@ class Shell(QObject):
     @pyqtProperty(str, notify=popupChanged)
     def popup(self):
         return self._popup
+
+    @pyqtProperty("QVariant", notify=soundChanged)
+    def sound(self):
+        return self._sound
+
+    # --- hang: a kiszolgáló eseményeire (pactl subscribe) frissül, nem lekérdezéssel ---
+    def start_sound(self):
+        def refresher():
+            while True:
+                self._sound_dirty.wait()
+                time.sleep(0.08)           # egy hangerő-húzás sok eseménye → egy frissítés
+                self._sound_dirty.clear()
+                try:
+                    st = fusion_sound.state()
+                except Exception as e:
+                    st = {"ok": False, "error": str(e), "sinks": [], "sources": [], "volume": 0, "mute": False}
+                st["icon"] = fusion_sound.icon_for(st)
+                self._soundReady.emit(st)
+
+        def watcher():
+            while True:
+                self._sound_dirty.set()
+                try:
+                    p = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         text=True, errors="replace", env=fusion_sound.ENV)
+                    for line in p.stdout:
+                        if " on sink" in line or " on source" in line or " on server" in line or " on card" in line:
+                            self._sound_dirty.set()
+                    p.wait()
+                except OSError:
+                    pass
+                time.sleep(3)              # a kiszolgáló még nem fut / újraindult
+        threading.Thread(target=refresher, daemon=True).start()
+        threading.Thread(target=watcher, daemon=True).start()
+
+    def _set_sound(self, st):
+        if st != self._sound:
+            self._sound = st
+            self.soundChanged.emit()
+            self.write_state()
+
+    def _sound_do(self, fn, *args):
+        threading.Thread(target=lambda: (fn(*args), self._sound_dirty.set()), daemon=True).start()
+
+    @pyqtSlot(int)
+    def soundStep(self, d):
+        self._sound_do(fusion_sound.step, d)
+
+    @pyqtSlot(int)
+    def soundSet(self, v):
+        self._sound_do(fusion_sound.set_volume, v)
+
+    @pyqtSlot()
+    def soundToggleMute(self):
+        self._sound_do(fusion_sound.toggle_mute)
+
+    @pyqtSlot(str)
+    def soundSetSink(self, name):
+        self._sound_do(fusion_sound.set_default, name)
+
+    @pyqtSlot(int)
+    def micSet(self, v):
+        self._sound_do(fusion_sound.set_volume, v, True)
+
+    @pyqtSlot()
+    def micToggleMute(self):
+        self._sound_do(fusion_sound.toggle_mute, True)
+
+    @pyqtSlot()
+    def soundTest(self):
+        self._sound_do(fusion_sound.test_sound)
 
     @pyqtProperty("QVariant", notify=appsChanged)
     def apps(self):
@@ -255,12 +334,24 @@ class Shell(QObject):
         self.x.setup_floating(int(self.cal.winId()), "popup")
         self.cal.activeChanged.connect(lambda: self._focus_lost(self.cal, "calendar"))
 
+        self.snd = view("SoundPopup.qml", "Fusion Hang", pop)
+        self.snd.setGeometry(sw - SOUND_W - 150, sh - PANEL_HEIGHT - SOUND_H, SOUND_W, SOUND_H)
+        self.x.setup_floating(int(self.snd.winId()), "popup")
+        self.snd.activeChanged.connect(lambda: self._focus_lost(self.snd, "sound"))
+        self.snd.rootObject().implicitHeightChanged.connect(self._place_sound)
+        self._place_sound()
+
         # buborék: felülíró (override-redirect) ablak — nem veszi el a fókuszt, nincs kerete
         self.toast = view("Toasts.qml", "Fusion értesítés", F.ToolTip | F.FramelessWindowHint | F.WindowStaysOnTopHint | F.WindowDoesNotAcceptFocus)
         self.toast.rootObject().implicitHeightChanged.connect(self._place_toast)
         self._ready = False
         self.panel.frameSwapped.connect(self._first_frame)
         self.panel.show()
+
+    def _place_sound(self):
+        sw, sh = self.x.screen_size()
+        h = max(120, int(self.snd.rootObject().property("implicitHeight") or SOUND_H))
+        self.snd.setGeometry(sw - SOUND_W - 150, sh - PANEL_HEIGHT - h, SOUND_W, h)
 
     def _first_frame(self):
         if not self._ready:
@@ -364,7 +455,7 @@ class Shell(QObject):
 
     # --- felugrók: értesítésközpont, naptár ---
     def _hide_popups(self):
-        for name, v in (("center", self.center), ("calendar", self.cal)):
+        for name, v in (("center", self.center), ("calendar", self.cal), ("sound", self.snd)):
             if v.isVisible():
                 v.hide()
         if self._popup:
@@ -373,7 +464,7 @@ class Shell(QObject):
 
     @pyqtSlot(str)
     def togglePopup(self, name):
-        v = {"center": self.center, "calendar": self.cal}[name]
+        v = {"center": self.center, "calendar": self.cal, "sound": self.snd}[name]
         if v.isVisible():
             self._hide_popups()
         elif not self._recent(name):
@@ -605,7 +696,9 @@ class Shell(QObject):
               "dashboard": bool(getattr(self, "desk", None) and self.desk.isVisible()), "printer": self.dash.printer.get("state", ""),
               "unread": self.unread, "toasts": len(self._toasts),
               "wifi": self._wifi.get("state", ""), "devices": [d["role"] for d in self._devices if d["present"]],
-              "media": [m["path"] for m in self._media]}
+              "media": [m["path"] for m in self._media],
+              "sound": {"ok": self._sound.get("ok", False), "volume": self._sound.get("volume", 0), "mute": self._sound.get("mute", False),
+                        "sinks": len(self._sound.get("sinks", [])), "server": self._sound.get("server", "")}}
         if last is not None:
             st["last"] = {"app": last["app"], "summary": last["summary"], "body": last["body"]}
         else:
@@ -639,7 +732,7 @@ def main():
     except OSError:
         pass
 
-    shell.tick_clock(); shell.poll_windows(); shell.tick_devices(); shell.tick_wifi()
+    shell.tick_clock(); shell.poll_windows(); shell.tick_devices(); shell.tick_wifi(); shell.start_sound()
     shell.startup_notes()
     shell.write_state()
     timers = []

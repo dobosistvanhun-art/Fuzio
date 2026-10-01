@@ -65,6 +65,12 @@ G = {
     "archive-out": "M4 4h16v5H4z M5 9v11h14V9 M12 18v-6 M9 15l3-3 3 3",
     "calendar": "M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4",
     "package": "M12 3l8 4v10l-8 4-8-4V7z M4 7l8 4 8-4 M12 11v10 M8 5l8 4",
+    "store": "M5 8h14l-1.2 12H6.2z M9 8V6.5a3 3 0 0 1 6 0V8",
+    "volume": "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12",
+    "volume-low": "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7",
+    "volume-mute": "M4 9h4l5-4v14l-5-4H4z M16 9l5 6 M21 9l-5 6",
+    "speaker": "M6 3h12v18H6z M12 8.5h.01 M12 12a3 3 0 1 1 0 6 3 3 0 0 1 0-6z",
+    "mic": "M9 4a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0z M6 11a6 6 0 0 0 12 0 M12 17v4",
 }
 
 # kitöltött rajzolatok (fill) — nem vonalasak
@@ -100,6 +106,8 @@ APPS = {
     "web": ("web", "#0369a1"),
     "app": ("app", "#374151"),
     "package": ("package", "#be185d"),
+    "store": ("store", "#0f766e"),
+    "volume": ("volume", "#7c3aed"),
 }
 
 

@@ -195,30 +195,11 @@ SettingsPage {
                color: Theme.dim; font.family: Theme.font }
     }
 
-    // --- Flathub ---
+    // --- Flathub: a Programboltban ---
     Section {
-        title: "LINUX-PROGRAMOK A FLATHUBRÓL (internet kell)"
-        Rectangle {
-            width: parent.width; height: 50; color: "transparent"
-            Row {
-                x: 14; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                FTextField { id: q; width: 360; placeholderText: "keresés, pl. firefox, inkscape, freecad"
-                             onAccepted: if (text.trim()) { p.searching = true; settings.flathubSearch(text.trim()) } }
-                FButton { text: "Keresés"; icon: "search"; enabled: q.text.trim() !== "" && !p.searching
-                          onClicked: { p.searching = true; settings.flathubSearch(q.text.trim()) } }
-            }
-        }
-        Repeater {
-            model: p.found
-            InfoRow {
-                icon: "package"
-                label: modelData.name
-                value: modelData.desc + "\n" + modelData.appid + (modelData.version ? "  ·  " + modelData.version : "")
-                property bool have: p.progs.some(x => x.appid === modelData.appid)
-                FButton { text: parent.parent.have ? "Telepítve" : "Telepítés"; primary: !parent.parent.have; enabled: !parent.parent.have && !p.job.running
-                          onClicked: p.startJob(settings.programInstall("flathub:" + modelData.appid, "", false)) }
-            }
-        }
+        title: "LINUX-PROGRAMOK A FLATHUBRÓL"
+        InfoRow { icon: "store"; label: "Programbolt"; value: "Népszerű programok, kategóriák, keresés, képernyőképek — telepítés egy kattintással"
+                  FButton { text: "Programbolt"; icon: "store"; primary: true; onClicked: win.cur = win.pages.findIndex(x => x.id === "store") } }
     }
     FButton { text: "A Windows-futtatókörnyezet ellenőrzése (fwr check)"; icon: "check"; onClicked: settings.openTerminal("fwrcheck") }
 }

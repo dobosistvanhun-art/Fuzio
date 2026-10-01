@@ -120,6 +120,13 @@ psmisc
 # (a Firefox-mérés: fusion-appmeasure; a döntés a mérés után)
 flatpak
 xdg-utils
+# hang: PipeWire (PulseAudio-felülettel a programoknak és a Flatpaknak), WirePlumber, ALSA-eszközök
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+pulseaudio-utils
+alsa-utils
 bubblewrap
 xdg-desktop-portal
 xdg-desktop-portal-gtk

@@ -254,6 +254,19 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     echo "FUSION-M6: USERNS restrict=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)"
     echo "FUSION-M6: SESSION-ENV $(runuser -u fusion -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment 2>/dev/null | grep -c '^XDG_CURRENT_DESKTOP=FusionOS\|^DISPLAY=:0')"
     urun fusion-appmeasure --check 2>&1 | sed 's/^/FUSION-M6:   /'
+    # hang: kernel (HDA), PipeWire a fusion felhasználó munkamenetében, hangerő (a panel is látja), próbahang,
+    # a Flatpak-programok PulseAudio-foglalata
+    echo "FUSION-SOUND: KERNEL cards=$(grep -c '^ *[0-9]' /proc/asound/cards 2>/dev/null) hda=$(lsmod | grep -c '^snd_hda_intel ')"
+    i=0; while [ $i -lt 30 ] && ! urun pactl info >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
+    urun fusion-sound --json 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print("FUSION-SOUND: SERVER ok=%s %s sinks=%d sources=%d default=%s" % (d["ok"], (d.get("server") or "-").replace(" ", "_"), len(d["sinks"]), len(d["sources"]), d["sink"] or "-"))' 2>&1
+    urun fusion-sound set 40; sleep 2
+    echo "FUSION-SOUND: SET volume=$(urun fusion-sound --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["volume"])') shell=$(python3 -c 'import json; print(json.load(open("/run/user/1000/fusion-shell.state")).get("sound", {}).get("volume"))' 2>/dev/null)"
+    urun fusion-sound mute; sleep 1; m1=$(urun fusion-sound --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["mute"])')
+    urun fusion-sound mute; sleep 1
+    echo "FUSION-SOUND: MUTE $m1 $(urun fusion-sound --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["mute"])')"
+    urun fusion-sound test >/dev/null 2>&1; echo "FUSION-SOUND: TEST rc=$?"
+    echo "FUSION-SOUND: FLATPAK-SOCKET $([ -S /run/user/1000/pulse/native ] && echo yes || echo no)"
+    echo "FUSION-SOUND: KEYS $(grep -c 'XF86Audio' /etc/jwm/system.jwmrc)"
     echo "FUSION-M6: PORTAL filechooser=$(urun busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.DBus.Properties Get ss org.freedesktop.portal.FileChooser version 2>&1 | head -n 1)"
     cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
 fi

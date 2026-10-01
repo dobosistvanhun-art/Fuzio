@@ -2,7 +2,8 @@
 """FusionOS — Beállítások (fusion-settings)
 
     fusion-settings [oldal] [paraméter]
-        oldal: wifi | display | devices | printer | programs | desktop | system
+        oldal: wifi | display | devices | printer | sound | programs | store | desktop | system
+        store search:<szó>: a Programbolt ezzel a kereséssel nyílik
         programs <fájl>: a Programkezelő ezzel a telepítővel / programfájllal nyílik
     fusion-settings --selftest      az oldalak adatainak lekérdezése felület nélkül (FUSION-SETTINGS sorok)
 
@@ -17,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "display", "devices", "printer", "programs", "desktop", "system"]
+PAGES = ["wifi", "display", "devices", "printer", "sound", "programs", "store", "desktop", "system"]
 
 
 def selftest():
@@ -41,6 +42,14 @@ def selftest():
     apps = fusion_apps.program_apps()
     print("FUSION-SETTINGS: PROGRAMS " + (" ".join(f"{a['pid']}={'telepítve' if a['installed'] else 'nincs'}" for a in apps) or "-")
           + f" installers={len(sb.installers())}", flush=True)
+    import fusion_sound
+    snd = fusion_sound.state()
+    print(f"FUSION-SETTINGS: SOUND ok={snd['ok']} server={(snd.get('server') or '-').replace(' ', '_')} sinks={len(snd['sinks'])} "
+          f"sources={len(snd['sources'])} default={snd['sink'] or '-'} volume={snd['volume']}", flush=True)
+    import fusion_store
+    t = fusion_store._text("<p>Első <b>bekezdés</b>.</p><ul><li>egy</li><li>kettő</li></ul>")
+    want = "Első bekezdés.\n\n  • egy\n  • kettő"
+    print(f"FUSION-SETTINGS: STORE categories={len(fusion_store.CATEGORIES)} text={'ok' if t == want else repr(t)}", flush=True)
     s = sb.system()
     print(f"FUSION-SETTINGS: SYSTEM version={s['version']} slot={s['slot']} bootdisk={s['bootdisk']} mem={s['memUsed']}/{s['memTotal']} "
           f"disks={','.join(x['name'] + ':' + str(x['pct']) + '%' for x in s['disks'])}", flush=True)

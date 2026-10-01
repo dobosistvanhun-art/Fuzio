@@ -19,7 +19,9 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 import fusion_apps  # noqa: F401  (a programlista — a fusion_programs útvonalát is beállítja)
 import fusion_net
+import fusion_sound
 import fusion_programs as fp
+import fusion_store as store
 import fusion_ui as ui
 
 ROLES_DIR = os.environ.get("FUSION_DEVICES_ROLES", "/usr/lib/fusion/devices/roles")
@@ -467,6 +469,116 @@ class Settings(QObject):
     @pyqtSlot(str)
     def flathubSearch(self, term):
         self._async("flathub", lambda: {"results": fp.flatpak_search(term), "term": term})
+
+    # --- Hang ---
+    @pyqtSlot()
+    def soundRefresh(self):
+        self._async("sound", fusion_sound.state)
+
+    def _snd(self, fn, *a):
+        def work():
+            fn(*a)
+            return fusion_sound.state()
+        threading.Thread(target=lambda: self.result.emit("sound", work()), daemon=True).start()
+
+    @pyqtSlot(int, bool)
+    def soundSetVolume(self, v, source):
+        self._snd(fusion_sound.set_volume, v, source)
+
+    @pyqtSlot(bool)
+    def soundToggleMute(self, source):
+        self._snd(fusion_sound.toggle_mute, source)
+
+    @pyqtSlot(str, bool)
+    def soundSetDefault(self, name, source):
+        self._snd(fusion_sound.set_default, name, source)
+
+    @pyqtSlot(str, str)
+    def soundSetPort(self, sink, port):
+        self._snd(fusion_sound.set_port, sink, port)
+
+    @pyqtSlot(str)
+    def soundTest(self, sink):
+        self._async("sound-test", lambda: {"rc": fusion_sound.test_sound(sink), "sink": sink})
+
+    @pyqtSlot()
+    def soundRestart(self):
+        """a hangkiszolgáló újraindítása (felhasználói szolgáltatások — root nem kell)"""
+        self._async("sound-restart", lambda: dict(zip(("rc", "msg"), ui.run(
+            ["systemctl", "--user", "restart", "wireplumber", "pipewire", "pipewire-pulse"], timeout=20))))
+
+    # --- Programbolt (Flathub) ---
+    def _installed_apps(self):
+        return {m.get("appid"): m["id"] for m in fp.programs() if m.get("type") == "flatpak"}
+
+    @pyqtSlot(str, str, int)
+    def storeList(self, kind, arg, page):
+        """kind: popular | category | search — az eredmény „store-list”, utána az ikonok „store-icons” címkével"""
+        def f():
+            if kind == "category":
+                r = store.category(arg, page)
+            elif kind == "search":
+                r = store.search(arg, page)
+            else:
+                r = store.popular(page)
+            r.update({"kind": kind, "arg": arg, "installed": self._installed_apps(),
+                      "icons": {a["appid"]: p for a in r["apps"] for p in [store.cached_path(a["icon"])] if p}})
+            self._store_icons(r["apps"])
+            return r
+
+        def g():
+            try:
+                return f()
+            except store.StoreError as e:
+                return {"error": str(e), "kind": kind, "arg": arg, "apps": [], "page": page, "pages": 0}
+        # nem _async: egy lassú lekérdezés ne tartsa vissza a következő kattintást (a felület a kind/arg szerint szűr)
+        threading.Thread(target=lambda: self.result.emit("store-list", g()), daemon=True).start()
+
+    def _store_icons(self, apps):
+        """ikonok letöltése párhuzamosan; csomagokban jelez a felületnek"""
+        todo = [a for a in apps if a["icon"] and not store.cached_path(a["icon"])]
+        if not todo:
+            return
+
+        def work(chunk):
+            got = {}
+            for a in chunk:
+                p = store.cached(a["icon"], timeout=15)
+                if p:
+                    got[a["appid"]] = p
+            if got:
+                self.result.emit("store-icons", got)
+        for i in range(4):
+            threading.Thread(target=work, args=(todo[i::4],), daemon=True).start()
+
+    @pyqtSlot(str)
+    def storeDetails(self, appid):
+        def f():
+            try:
+                d = store.details(appid)
+            except store.StoreError as e:
+                return {"error": str(e), "appid": appid}
+            d["iconFile"] = store.cached(d["icon"])
+            d["downloadText"] = ui.human_size(d["download"]) if d["download"] else ""
+            d["installedText"] = ui.human_size(d["installed"]) if d["installed"] else ""
+            d["pid"] = self._installed_apps().get(appid, "")
+            d["shotFiles"] = []
+
+            def shots():
+                files = [p for p in (store.cached(u, timeout=30) for u in d["screenshots"]) if p]
+                self.result.emit("store-shots", {"appid": appid, "files": files})
+                store.prune_cache()
+            threading.Thread(target=shots, daemon=True).start()
+            return d
+        threading.Thread(target=lambda: self.result.emit("store-details", f()), daemon=True).start()
+
+    @pyqtSlot(result="QVariant")
+    def storeCategories(self):
+        return [{"id": c, "name": n, "icon": i} for c, n, i in store.CATEGORIES]
+
+    @pyqtSlot(result="QVariant")
+    def storeInstalled(self):
+        return self._installed_apps()
 
     # --- Asztal ---
     @pyqtSlot(result=str)
