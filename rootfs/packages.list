@@ -119,6 +119,7 @@ psmisc
 # M6 — Fusion Programkezelő, mérési szakasz: Linux-programok Flatpakként (Flathub), homokozó, portálok
 # (a Firefox-mérés: fusion-appmeasure; a döntés a mérés után)
 flatpak
+xdg-utils
 bubblewrap
 xdg-desktop-portal
 xdg-desktop-portal-gtk

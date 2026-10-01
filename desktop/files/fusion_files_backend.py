@@ -19,6 +19,11 @@ from PyQt6.QtCore import (QAbstractListModel, QByteArray, QFileSystemWatcher, QM
 from PyQt6.QtGui import QGuiApplication
 
 import fusion_ui as ui
+import fusion_apps  # noqa: F401  (a Programkezelő moduljának útvonala)
+try:
+    import fusion_programs as fp
+except ImportError:
+    fp = None
 
 TEXT_EXT = {"txt", "md", "log", "cfg", "conf", "ini", "json", "xml", "yaml", "yml", "py", "sh", "csv", "toml",
             "service", "rules", "desktop", "html", "htm", "css", "js", "c", "h", "cpp", "hpp", "fwr", "list",
@@ -26,7 +31,7 @@ TEXT_EXT = {"txt", "md", "log", "cfg", "conf", "ini", "json", "xml", "yaml", "ym
 CODE_EXT = {"gcode", "gc", "g", "nc", "ngc", "tap"}
 IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"}
 ARCHIVE_EXT = ("zip", "tar", "tar.gz", "tgz", "tar.xz", "txz", "tar.bz2", "tbz2")
-EXE_EXT = {"exe", "msi"}
+EXE_EXT = {"exe", "msi", "appimage", "flatpakref", "flatpak"}   # telepítők → Programkezelő
 CHUNK = 1024 * 1024
 
 
@@ -1052,8 +1057,23 @@ class Files(QObject):
         ui.spawn(["xterm"], cwd=path)
 
     @pyqtSlot(str)
-    def installWindows(self, path):
+    def installProgram(self, path):
+        """telepítés: a Programkezelő nyílik ezzel a fájllal"""
         ui.spawn(["fusion-settings", "programs", path])
+
+    @pyqtSlot(str, result=str)
+    def openWithProgram(self, path):
+        """ha egy telepített program megnyitja ezt a fájltípust (Programkezelő → társítás): indítás, a program neve"""
+        if fp is None:
+            return ""
+        try:
+            progs = fp.assoc(path)
+        except Exception:
+            return ""
+        if not progs:
+            return ""
+        ui.spawn(["fusion-run", progs[0][0], path])
+        return progs[0][1]
 
     # --- keresés ---
     @pyqtProperty("QVariant", notify=searchChanged)

@@ -64,6 +64,7 @@ G = {
     "archive-in": "M4 4h16v5H4z M5 9v11h14V9 M12 12v6 M9 15l3 3 3-3",
     "archive-out": "M4 4h16v5H4z M5 9v11h14V9 M12 18v-6 M9 15l3-3 3 3",
     "calendar": "M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4",
+    "package": "M12 3l8 4v10l-8 4-8-4V7z M4 7l8 4 8-4 M12 11v10 M8 5l8 4",
 }
 
 # kitöltött rajzolatok (fill) — nem vonalasak
@@ -98,6 +99,7 @@ APPS = {
     "chip": ("chip", "#6d28d9"),
     "web": ("web", "#0369a1"),
     "app": ("app", "#374151"),
+    "package": ("package", "#be185d"),
 }
 
 

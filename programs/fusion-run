@@ -1,0 +1,12 @@
+#!/bin/sh
+# FusionOS — program indítása a Programkezelő leírása alapján (Start menü, Fájlkezelő, .desktop)
+#   fusion-run <id> [fájl…]
+# Hibát értesítésben is jelez (a Start menüből indítva nincs terminál).
+[ $# -ge 1 ] || { echo "használat: fusion-run <program-azonosító> [fájl…]" >&2; exit 2; }
+err=$(fusion-programs run "$@" 2>&1 >/dev/null)
+rc=$?
+if [ $rc -ne 0 ]; then
+    echo "$err" >&2
+    command -v fusion-notify >/dev/null && fusion-notify "A program nem indult el" "${err#fusion-programs: }" >/dev/null 2>&1
+fi
+exit $rc

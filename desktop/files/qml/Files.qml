@@ -31,8 +31,10 @@ FWindow {
         if (!it.name) return
         if (it.isDir) { p.go(it.full); return }
         var k = files.kind(it.full)
-        if (k === "exe") { files.installWindows(it.full); say("Windows-program: a telepítés a Beállítások → Programok oldalon folytatódik"); return }
-        if (k === "elf" || it.name.toLowerCase().endsWith(".appimage")) { files.runFile(it.full); say("indítva: " + it.name); return }
+        if (k === "exe") { files.installProgram(it.full); say("Telepítő: a telepítés a Programkezelőben folytatódik"); return }
+        var prog = files.openWithProgram(it.full)
+        if (prog) { say("megnyitás: " + prog); return }
+        if (k === "elf") { files.runFile(it.full); say("indítva: " + it.name); return }
         openViewer(it.full)
     }
     // a külön ablakokra hivatkozást tartunk, különben a JavaScript szemétgyűjtője bezárhatná őket
@@ -49,6 +51,7 @@ FWindow {
         var sel = act.selection(), it = act.current()
         switch (a) {
         case "view": if (it.name && !it.isDir) openViewer(it.full); break
+        case "install": if (it.name && !it.isDir) { files.installProgram(it.full); say("a Programkezelő megnyílt: " + it.name) } break
         case "edit": if (it.name && !it.isDir) openEditor(it.full); break
         case "newfile": ask("Új fájl", "Az új fájl neve:", "", function (v) { var e = files.newFile(act.model.path, v); if (e) err("Nem hozható létre", e); else { act.model.reloadKeep(); act.setCur(act.model.indexOf(v)); openEditor(act.model.path + "/" + v) } }); break
         case "copy": case "move":
@@ -370,6 +373,7 @@ FWindow {
         CI { text: "Átnevezés (Shift+F6)"; act: "rename" }
         CI { text: "Tömörítés (Alt+F5)"; act: "pack" }
         CI { text: "Kicsomagolás (Alt+F9)"; act: "extract" }
+        CI { text: "Telepítés a Programkezelővel"; act: "install" }
         CI { text: "Törlés (F8)"; act: "delete" }
         MenuSeparator {}
         CI { text: "Terminál itt"; act: "terminal" }

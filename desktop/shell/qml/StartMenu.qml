@@ -61,7 +61,7 @@ Rectangle {
         delegate: Rectangle {
             width: list.width; height: 48; radius: Theme.radius
             color: index === menu.cur ? Theme.selected : (ima.containsMouse ? Theme.hover : "transparent")
-            FIcon { id: ico; x: 10; anchors.verticalCenter: parent.verticalCenter; name: "app-" + modelData.icon; size: 30
+            FIcon { id: ico; x: 10; anchors.verticalCenter: parent.verticalCenter; name: modelData.iconFile || ("app-" + modelData.icon); size: 30
                     opacity: modelData.installed ? 1 : 0.5 }
             Column {
                 anchors.left: ico.right; anchors.leftMargin: 12; anchors.right: parent.right; anchors.rightMargin: 10

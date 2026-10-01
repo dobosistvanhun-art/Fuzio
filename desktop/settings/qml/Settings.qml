@@ -15,7 +15,7 @@ FWindow {
         { id: "display", title: "Kijelző", icon: "display", qml: "DisplayPage.qml" },
         { id: "devices", title: "Eszközök", icon: "usb", qml: "DevicesPage.qml" },
         { id: "printer", title: "Nyomtató (Klipper)", icon: "printer", qml: "PrinterPage.qml" },
-        { id: "programs", title: "Programok", icon: "app", qml: "ProgramsPage.qml" },
+        { id: "programs", title: "Programkezelő", icon: "package", qml: "ProgramsPage.qml" },
         { id: "desktop", title: "Asztal", icon: "desktop", qml: "DesktopPage.qml" },
         { id: "system", title: "Rendszer", icon: "chip", qml: "SystemPage.qml" }
     ]

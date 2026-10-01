@@ -141,7 +141,7 @@ Rectangle {
                         width: 104; height: 70; radius: Theme.radius
                         color: gma.containsMouse ? Theme.hover : "transparent"
                         Column { anchors.centerIn: parent; spacing: 5
-                            FIcon { anchors.horizontalCenter: parent.horizontalCenter; name: "app-" + modelData.icon; size: 30 }
+                            FIcon { anchors.horizontalCenter: parent.horizontalCenter; name: modelData.iconFile || ("app-" + modelData.icon); size: 30 }
                             Text { width: 96; horizontalAlignment: Text.AlignHCenter; text: modelData.name; color: Theme.text; elide: Text.ElideRight
                                    font.family: Theme.font; font.pixelSize: 11 } }
                         MouseArea { id: gma; anchors.fill: parent; hoverEnabled: true; onClicked: shell.launch(modelData.id) }

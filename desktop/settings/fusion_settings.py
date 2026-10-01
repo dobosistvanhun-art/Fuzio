@@ -3,7 +3,7 @@
 
     fusion-settings [oldal] [paraméter]
         oldal: wifi | display | devices | printer | programs | desktop | system
-        programs <telepítő.exe>: a Programok oldal ezzel a telepítővel nyílik
+        programs <fájl>: a Programkezelő ezzel a telepítővel / programfájllal nyílik
     fusion-settings --selftest      az oldalak adatainak lekérdezése felület nélkül (FUSION-SETTINGS sorok)
 
 Egy példányban fut: ha már nyitva van, az új hívás csak oldalt vált és előre hozza.
@@ -38,8 +38,9 @@ def selftest():
     p = sb.printer()
     print(f"FUSION-SETTINGS: PRINTER " + " ".join(f"{k}={v}" for k, v in p["services"].items())
           + f" klipper={p['klipper']['state'] or '-'} serial={p['serial'] or '-'}", flush=True)
-    apps = fusion_apps.windows_apps()
-    print("FUSION-SETTINGS: PROGRAMS " + (" ".join(f"{a['fwr']}={'telepítve' if a['installed'] else 'nincs'}" for a in apps) or "-"), flush=True)
+    apps = fusion_apps.program_apps()
+    print("FUSION-SETTINGS: PROGRAMS " + (" ".join(f"{a['pid']}={'telepítve' if a['installed'] else 'nincs'}" for a in apps) or "-")
+          + f" installers={len(sb.installers())}", flush=True)
     s = sb.system()
     print(f"FUSION-SETTINGS: SYSTEM version={s['version']} slot={s['slot']} bootdisk={s['bootdisk']} mem={s['memUsed']}/{s['memTotal']} "
           f"disks={','.join(x['name'] + ':' + str(x['pct']) + '%' for x in s['disks'])}", flush=True)

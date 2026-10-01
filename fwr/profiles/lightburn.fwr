@@ -4,6 +4,10 @@ id = lightburn
 name = LightBurn
 exe = C:\Program Files\LightBurn\LightBurn.exe
 windows = win10
+# a Programkezelő erről ismeri fel a telepítőt (fájlnév-minta) — a recept beállításai érvényesülnek
+match = LightBurn*.exe
+icon = laser
+open = .lbrn .lbrn2
 # a lézer a Fusion eszközréteg szerepe szerint (M3): COM3 -> /dev/fusion/laser
 port.COM3 = laser
 # P: = Projektek (a felhasználó mappája); a Linux-fájlrendszer (Z:) nem látszik

@@ -10,9 +10,11 @@
 #  architektúrája. A felhasználó nem Wine-t lát, hanem programonkénti
 #  futtatókörnyezetet, amelyet egy profil ír le:
 #
-#    /usr/lib/fusion/fwr/profiles/<id>.fwr   (id, name, exe, windows, port.COMn,
-#                                             drive.X, dlloverrides)
-#    /data/fwr/<id>/                          a program környezete (Wine prefix)
+#    /data/programs/<id>/program.fusion      a Fusion Programkezelő leírása (type = win64) — ha van,
+#                                             ez az irányadó (ugyanazok a kulcsok + prefix)
+#    /usr/lib/fusion/fwr/profiles/<id>.fwr   recept: ismert program alapbeállításai (id, name, exe,
+#                                             windows, port.COMn, drive.X, dlloverrides, match)
+#    a környezet (Wine prefix): a leírás "prefix" kulcsa, különben /data/fwr/<id>/
 #
 #  A beállításokat (COM-portok, meghajtók, Windows-verzió) mindig a profil
 #  alapján az fwr írja — nem kézi winecfg. A COM-port a Fusion eszközréteg
@@ -34,6 +36,7 @@ set -u
 
 FWR_WINE="${FWR_WINE:-/usr/lib/fusion/wine}"
 FWR_DATA="${FWR_DATA:-/data/fwr}"
+FWR_PROGRAMS="${FWR_PROGRAMS:-/data/programs}"
 FWR_PROFILES="${FWR_PROFILES:-/usr/lib/fusion/fwr/profiles}"
 FWR_TOOLS="${FWR_TOOLS:-/usr/lib/fusion/fwr/tools}"
 FWR_LOGS="${HOME:-/tmp}/.local/share/fusion/fwr"
@@ -49,10 +52,17 @@ prof_get() {  # prof_get <fájl> <kulcs>
 prof_keys() {  # prof_keys <fájl> <előtag> -> "kulcs|érték" sorok
     sed -n "s/^[[:space:]]*$2\.\([A-Za-z0-9]*\)[[:space:]]*=[[:space:]]*\(.*\)$/\1|\2/p" "$1" | sed 's/[[:space:]]*$//'
 }
-profile() {  # profile <id> -> a profilfájl
+profile() {  # profile <id> -> a profilfájl (a Programkezelő leírása, különben a recept)
+    case "$1" in *[!a-zA-Z0-9_.-]*|"") fail "érvénytelen program-azonosító: $1" ;; esac
+    _pf="$FWR_PROGRAMS/$1/program.fusion"
+    if [ -r "$_pf" ] && [ "$(prof_get "$_pf" type)" = win64 ]; then printf '%s' "$_pf"; return; fi
     _pf="$FWR_PROFILES/$1.fwr"
     [ -r "$_pf" ] || fail "ismeretlen program: $1 (lásd: fwr list)"
     printf '%s' "$_pf"
+}
+prefix_of() {  # prefix_of <id> <profil> -> a Wine-környezet könyvtára
+    _px=$(prof_get "$2" prefix)
+    printf '%s' "${_px:-$FWR_DATA/$1}"
 }
 
 # C:\Program Files\X\Y.exe -> <prefix>/drive_c/Program Files/X/Y.exe
@@ -65,7 +75,7 @@ win_to_unix() {
 }
 
 wine_env() {  # wine_env <id> <profil>
-    WINEPREFIX="$FWR_DATA/$1"
+    WINEPREFIX=$(prefix_of "$1" "$2")
     WINEDEBUG="${FWR_DEBUG:-err+all,fixme-all}"
     # mono/gecko nélkül (a célprogramoknak nem kell), menüelemek nélkül
     WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d;$(prof_get "$2" dlloverrides)"
@@ -84,10 +94,11 @@ cmd_prepare() {
     id=$1; pf=$(profile "$id")
     [ -x "$WINE" ] || fail "a Windows runtime nincs telepítve ($WINE)"
     wine_env "$id" "$pf"
-    mkdir -p "$FWR_DATA" 2>/dev/null
-    [ -w "$FWR_DATA" ] || fail "a $FWR_DATA nem írható"
+    mkdir -p "$(dirname "$WINEPREFIX")" 2>/dev/null
+    [ -w "$(dirname "$WINEPREFIX")" ] || fail "a $(dirname "$WINEPREFIX") nem írható"
     stamp="$WINEPREFIX/.fwr-stamp"
-    want="$(wine_build_id) $(sha256sum "$pf" "$0" | cut -c1-16 | tr '\n' ' ')"
+    # csak a környezetet érintő kulcsok számítanak (a leírás egyéb mezői — név, ikon — nem)
+    want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16)"
     if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
@@ -178,9 +189,17 @@ cmd_install() {
     rm -rf "$tmp"; mkdir -p "$tmp"; cp "$inst" "$tmp/"
     name=$(basename "$inst")
     say "fwr: $(prof_get "$pf" name) telepítése: $name"
-    (cd "$tmp" && "$WINE" "C:\\fusion-install\\$name" >> "$LOG" 2>&1)
+    case "$name" in
+        *.msi|*.MSI) (cd "$tmp" && "$WINE" msiexec /i "C:\\fusion-install\\$name" >> "$LOG" 2>&1) ;;
+        *)           (cd "$tmp" && "$WINE" "C:\\fusion-install\\$name" >> "$LOG" 2>&1) ;;
+    esac
     "$WINESERVER" -w
     rm -rf "$tmp"
+    if [ -z "$(prof_get "$pf" exe)" ]; then
+        # általános telepítés: a programot a Programkezelő ismeri fel (parancsikonok, új .exe-k)
+        say "fwr: a telepítő lefutott ($WINEPREFIX)"
+        return 0
+    fi
     exe=$(win_to_unix "$WINEPREFIX" "$(prof_get "$pf" exe)")
     if [ -f "$exe" ]; then
         say "fwr: telepítve — indítás: fwr launch $id"
@@ -244,12 +263,19 @@ cmd_check() {
     return $rc
 }
 
+cmd_stop() {  # a program összes Windows-folyamatának leállítása (pl. eltávolítás előtt)
+    [ $# -eq 1 ] || fail "használat: fwr stop <id>"
+    pf=$(profile "$1"); wine_env "$1" "$pf"
+    [ -d "$WINEPREFIX" ] && "$WINESERVER" -k 2>/dev/null
+    return 0
+}
+
 cmd_list() {
     say "Fusion Windows Runtime — programok"
     for pf in "$FWR_PROFILES"/*.fwr; do
         [ -r "$pf" ] || continue
         id=$(prof_get "$pf" id); [ "$id" = fwr-check ] && continue
-        exe=$(win_to_unix "$FWR_DATA/$id" "$(prof_get "$pf" exe)")
+        exe=$(win_to_unix "$(prefix_of "$id" "$pf")" "$(prof_get "$pf" exe)")
         if [ -f "$exe" ]; then st="telepítve (fwr launch $id)"; else st="nincs telepítve (fwr install $id <telepítő.exe>)"; fi
         say "  $(prof_get "$pf" name) [$id]: $st"
         port_report "$pf"
@@ -264,5 +290,6 @@ case "$cmd" in
     launch)  cmd_launch "$@" ;;
     run)     cmd_run "$@" ;;
     check)   cmd_check ;;
-    *)       fail "ismeretlen parancs: $cmd (list, install, launch, run, check, prepare)" ;;
+    stop)    cmd_stop "$@" ;;
+    *)       fail "ismeretlen parancs: $cmd (list, install, launch, run, stop, check, prepare)" ;;
 esac

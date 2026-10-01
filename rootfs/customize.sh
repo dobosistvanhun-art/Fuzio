@@ -168,6 +168,16 @@ ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
 ln -sf /usr/lib/fusion/desktop/settings/fusion_settings.py "$R/usr/bin/fusion-settings"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
 rm -f "$R/usr/bin/fusion-uimeasure"
+echo "  [customize] Fusion Programkezelő: fusion-programs, fusion-run (leírások: /data/programs/<id>/program.fusion)"
+PG="$R/usr/lib/fusion/programs"
+rm -rf "$PG"; mkdir -p "$PG/tests"
+install -m 0644 "$FUSION_ROOT/programs/fusion_programs.py" "$PG/fusion_programs.py"
+for f in fusion-programs fusion-run fusion-appmeasure; do
+    install -m 0755 "$FUSION_ROOT/programs/$f" "$PG/$f"
+    ln -sf "/usr/lib/fusion/programs/$f" "$R/usr/bin/$f"
+done
+# a Programkezelő próbatelepítője (a QEMU-teszt és a ZBook-ellenőrzés használja)
+install -m 0644 "$FUSION_ROOT/programs/tests/fusionteszt-setup.exe" "$PG/tests/fusionteszt-setup.exe"
 # a modulok betölthetők, a QML-fájlok hibátlanul fordulnak (felület nélkül, offscreen)
 in_root env HOME=/root QT_QPA_PLATFORM=offscreen python3 - <<'PY' || { echo "  [customize] HIBA: a Fusion Desktop modulok nem tölthetők be"; exit 1; }
 import sys, os, glob
@@ -175,6 +185,8 @@ sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
 sys.path.insert(0, "/usr/lib/fusion/desktop/files")
 sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
 import fusion_ui, fusion_x11, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
+import fusion_programs
+assert fusion_apps.fp is fusion_programs, "a Programkezelő modulja nem töltődött be"
 from PyQt6.QtDBus import QDBusConnection
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQml import QQmlComponent, QQmlEngine
@@ -193,9 +205,6 @@ for f in sorted(glob.glob("/usr/lib/fusion/desktop/*/qml/*.qml")):
 print(f"  [customize] QML: {len(glob.glob('/usr/lib/fusion/desktop/*/qml/*.qml'))} fájl, {bad} hibás")
 sys.exit(1 if bad else 0)
 PY
-mkdir -p "$R/usr/lib/fusion/programs"
-install -m 0755 "$FUSION_ROOT/programs/fusion-appmeasure" "$R/usr/lib/fusion/programs/fusion-appmeasure"
-ln -sf /usr/lib/fusion/programs/fusion-appmeasure "$R/usr/bin/fusion-appmeasure"
 install -m 0440 "$FUSION_ROOT/rootfs/overlay/etc/sudoers.d/fusion-admin" "$R/etc/sudoers.d/fusion-admin"
 in_root visudo -c -q -f /etc/sudoers.d/fusion-admin || { echo "  [customize] HIBA: sudoers.d/fusion-admin"; exit 1; }
 

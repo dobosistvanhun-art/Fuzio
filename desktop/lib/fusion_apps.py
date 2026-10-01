@@ -1,63 +1,49 @@
-"""FusionOS — egységes programlista (Start menü, Beállítások → Programok)
+"""FusionOS — egységes programlista (Start menü, irányítópult, keresés)
 
 Források:
   - /usr/lib/fusion/desktop/apps.json   a Fusion Desktop saját és a rendszer programjai
-  - /usr/lib/fusion/fwr/profiles/*.fwr  Windows-programok (Fusion Windows Runtime):
-                                         telepítve → indítható, különben „telepítés” bejegyzés
-Minden bejegyzés: id, name, desc, icon, exec, type (fusion|linux|web|windows),
-installed, search_only (csak keresésre jelenik meg, pl. egy beállítás-oldal).
+  - a Fusion Programkezelő leírásai      /data/programs/<id>/program.fusion (Windows és Linux)
+  - az ismert Windows-programok receptjei (fwr), amelyek még nincsenek telepítve:
+                                         „telepítés” bejegyzés → Programkezelő
+Minden bejegyzés: id, name, desc, icon (Fusion-csempe), iconFile (a program saját ikonja, ha van),
+exec, type (fusion|linux|web|windows), installed, search_only, pid (Programkezelő-azonosító).
 """
 import json
 import os
-import shlex
+import sys
 
 APPS_FILE = os.environ.get("FUSION_APPS", "")
-FWR_PROFILES = os.environ.get("FWR_PROFILES", "/usr/lib/fusion/fwr/profiles")
-FWR_DATA = os.environ.get("FWR_DATA", "/data/fwr")
+_PROG_LIB = os.environ.get("FUSION_PROGRAMS_LIB") or next(
+    (p for p in ("/usr/lib/fusion/programs",
+                 os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "programs"))
+     if os.path.isfile(os.path.join(p, "fusion_programs.py"))), "/usr/lib/fusion/programs")
+if _PROG_LIB not in sys.path:
+    sys.path.insert(0, _PROG_LIB)
+try:
+    import fusion_programs as fp
+except ImportError:      # a Programkezelő nélkül is legyen Start menü
+    fp = None
 
 
-def _profile(path):
-    p = {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                p[k.strip()] = v.strip()
-    except OSError:
-        pass
-    return p
-
-
-def win_to_unix(prefix, winpath):
-    """C:\\Program Files\\X\\x.exe → <prefix>/drive_c/Program Files/X/x.exe"""
-    if len(winpath) > 2 and winpath[1] == ":":
-        return os.path.join(prefix, "drive_" + winpath[0].lower(), winpath[3:].replace("\\", "/"))
-    return winpath
-
-
-def windows_apps():
-    out = []
-    try:
-        names = sorted(os.listdir(FWR_PROFILES))
-    except OSError:
-        return out
-    for fn in names:
-        if not fn.endswith(".fwr"):
+def program_apps():
+    if fp is None:
+        return []
+    out, have = [], set()
+    for m in fp.programs():
+        i = fp.info(m)
+        have.add(m["id"])
+        out.append({"id": "prog-" + m["id"], "pid": m["id"], "fwr": m["id"] if m["type"] == "win64" else "",
+                    "name": i["name"], "type": "windows" if m["type"] == "win64" else "linux",
+                    "desc": i["comment"] or i["typeName"] + "-program", "icon": i["icon"], "iconFile": i["iconFile"],
+                    "exec": "fusion-run " + m["id"], "installed": True, "search_only": False,
+                    "keywords": (m.get("categories", "") + " " + m.get("appid", "")).replace(";", " ")})
+    for r in fp.recipes():
+        if r["id"] in have:
             continue
-        p = _profile(os.path.join(FWR_PROFILES, fn))
-        pid = p.get("id", fn[:-4])
-        if pid == "fwr-check" or not p.get("exe"):
-            continue
-        exe = win_to_unix(os.path.join(FWR_DATA, pid), p["exe"])
-        inst = os.path.isfile(exe)
-        out.append({"id": "fwr-" + pid, "fwr": pid, "name": p.get("name", pid), "type": "windows",
-                    "desc": "Windows-program" if inst else "Nincs telepítve — Beállítások → Programok",
-                    "icon": "laser" if pid == "lightburn" else "app",
-                    "exec": "fwr launch " + shlex.quote(pid) if inst else "fusion-settings programs",
-                    "installed": inst, "search_only": False})
+        out.append({"id": "prog-" + r["id"], "pid": r["id"], "fwr": r["id"], "name": r.get("name", r["id"]),
+                    "type": "windows", "desc": "Nincs telepítve — Programkezelő", "icon": r.get("icon", "app"),
+                    "iconFile": "", "exec": "fusion-settings programs", "installed": False, "search_only": False,
+                    "keywords": "telepítés"})
     return out
 
 
@@ -74,5 +60,12 @@ def load(apps_file=None):
         a.setdefault("installed", True)
         a.setdefault("search_only", False)
         a.setdefault("keywords", "")
-    # a Windows-programok a lista elejére (a Prototype 0.1 célprogramja a LightBurn)
-    return windows_apps() + base
+        a.setdefault("iconFile", "")
+        a.setdefault("pid", "")
+        a.setdefault("fwr", "")
+    try:
+        progs = program_apps()
+    except Exception:      # egy hibás leírás ne vigye el a Start menüt
+        progs = []
+    # a telepített programok a lista elejére (a Prototype 0.1 célprogramja a LightBurn)
+    return sorted(progs, key=lambda a: (not a["installed"], a["name"].lower())) + base

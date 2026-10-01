@@ -184,8 +184,8 @@ step_test() {
             _check "$log" "FUSION-M6:   FUSION-SETTINGS: WIFI ok=True .*known=.*FusionTeszt" "Beállítások → Wi-Fi: megjegyzett hálózat" || ok_run=0
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs" "Beállítások → Programok (fwr-profilok)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS fwr-lightburn,printer,mainsail,files,settings,terminal" "Start menü programlistája" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
@@ -216,6 +216,16 @@ step_test() {
             _check "$log" "FUSION-M4:   *CAM: MediaFrameSourceGroup.FindAllAsync OK" "Windows kamera-felsoroló (WinRT) — LightBurn 2.x induláshoz" || ok_run=0
             _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
             _check "$log" "FUSION-M4: SYSTRAY showsystray=1 notray=1" "a Wine saját tálcaablaka kikapcsolva" || ok_run=0
+            # Fusion Programkezelő: leírás-alapú programok (Windows: fwr, Linux: archívum), társítás, eltávolítás
+            _check "$log" "FUSION-PROG: SYNC win64 prefix=/data/fwr/lightburn port=laser icon=icon.png" "a régi helyű LightBurn leírást kap, újratelepítés nélkül" || ok_run=0
+            _check "$log" "FUSION-PROG: ASSOC-LBRN lightburn" "a .lbrn fájlt a LightBurn nyitja" || ok_run=0
+            _check "$log" "FUSION-PROG: WIN rc=0 name=FusionTeszt exe=C:.Program Files.FusionTeszt.fusionteszt.exe icon=icon.png owner=fusion" "általános Windows-telepítő: a program a parancsikonból felismerve, ikon a programból" || ok_run=0
+            _check "$log" "FUSION-PROG: DESKTOP Exec=fusion-run fusionteszt %F" "XDG-bejegyzés (fusion-run)" || ok_run=0
+            _check "$log" "FUSION-PROG: RUN rc=0 .*window=[1-9].* args=.*P:.proba teszt.lbrn" "indítás fájllal: a Windows-program a P: meghajtón kapja" || ok_run=0
+            _check "$log" "FUSION-PROG: DETECT archive win64" "telepítőfájl felismerése" || ok_run=0
+            _check "$log" "FUSION-PROG: NATIVE assoc=fprobaprog out=/tmp/x.fprb" "Linux-program archívumból, fájltársítás (X-Fusion-Open)" || ok_run=0
+            _check "$log" "FUSION-PROG: APPS prog-fprobaprog,prog-fusionteszt,prog-lightburn,printer" "a Start menü a leírásokból" || ok_run=0
+            _check "$log" "FUSION-PROG: REMOVED left=desktop=0 fwr-lightburn=nincs" "eltávolítás: mappa, Windows-környezet, Start menü bejegyzés" || ok_run=0
             # M5: Klipper + Moonraker + webes felület; szoftveres MCU-val a teljes lánc
             _check "$log" "FUSION-M5: SERVICES klipper=active moonraker=active nginx=active" "Klipper, Moonraker, nginx fut" || ok_run=0
             _check "$log" "FUSION-M5: CONFIG serial: /dev/fusion/printer" "alapkonfiguráció: a nyomtató a /dev/fusion/printer szerepen" || ok_run=0

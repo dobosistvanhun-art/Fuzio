@@ -1,0 +1,118 @@
+#!/usr/bin/python3
+"""FusionOS — Fusion Programkezelő parancssorból
+
+    fusion-programs                       a telepített programok
+    fusion-programs list [--json]
+    fusion-programs info <id>             részletek (JSON)
+    fusion-programs detect <fájl>         a fájl típusa (win64, appimage, archive, …)
+    fusion-programs install <fájl | flathub:<azonosító>> [--name NÉV] [--exec ÚT] [--portable]
+    fusion-programs remove <id> [--data]  eltávolítás (--data: a program adatai is)
+    fusion-programs update <id>
+    fusion-programs sync                  a már telepített Flatpakok és régi Windows-programok felvétele
+    fusion-programs run <id> [fájl…]      indítás (ugyanaz, mint: fusion-run)
+    fusion-programs assoc <fájl>          melyik program nyitja meg
+    fusion-programs associate <.kit | mime> <id>
+    fusion-programs device <id> <COMn> [szerep]   Windows-program soros eszköze (üres = törlés)
+    fusion-programs search <szó>          keresés a Flathubon
+    fusion-programs size <id>             a program helyfoglalása (MiB)
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import fusion_programs as fp  # noqa: E402
+
+
+def out(msg):
+    print(msg, flush=True)
+
+
+def opt(args, name, flag=False):
+    if name in args:
+        i = args.index(name)
+        args.pop(i)
+        return True if flag else args.pop(i)
+    return False if flag else None
+
+
+def main(argv):
+    cmd = argv[0] if argv else "list"
+    args = argv[1:]
+    if cmd in ("-h", "--help", "help"):
+        out(__doc__.strip())
+        return 0
+    if cmd == "list":
+        progs = fp.programs()
+        if "--json" in args:
+            out(json.dumps([fp.info(m) for m in progs], ensure_ascii=False))
+            return 0
+        if not progs:
+            out("Nincs telepített program (Programkezelő: fusion-settings programs)")
+        for m in progs:
+            out(f"  {m.get('name', m['id']):28} {fp.TYPE_NAMES.get(m['type'], '?'):18} [{m['id']}]")
+        return 0
+    if cmd == "info" and len(args) == 1:
+        m = fp.manifest(args[0])
+        if not m:
+            raise fp.ProgramError("nincs ilyen program: " + args[0])
+        out(json.dumps(fp.info(m), ensure_ascii=False, indent=1))
+        return 0
+    if cmd == "detect" and len(args) == 1:
+        out(fp.detect(args[0]))
+        return 0
+    if cmd == "install" and args:
+        name = opt(args, "--name")
+        exe = opt(args, "--exec")
+        portable = opt(args, "--portable", True)
+        if len(args) != 1:
+            raise fp.ProgramError("használat: fusion-programs install <fájl | flathub:<azonosító>>")
+        src = args[0] if args[0].startswith("flathub:") else os.path.abspath(args[0])
+        m = fp.install(src, out, name, exe, portable)
+        out(f"OK {m['id']}")
+        return 0
+    if cmd == "remove" and args:
+        data = opt(args, "--data", True)
+        fp.remove(args[0], data, out)
+        return 0
+    if cmd == "update" and len(args) == 1:
+        out(fp.update(args[0], out))
+        return 0
+    if cmd == "sync":
+        fp.sync(out if "-v" in args else None)
+        return 0
+    if cmd == "run" and args:
+        fp.launch(args[0], [os.path.abspath(a) for a in args[1:]])
+        return 0
+    if cmd == "assoc" and len(args) == 1:
+        for pid, name in fp.assoc(args[0]):
+            out(f"{pid}\t{name}")
+        return 0
+    if cmd == "associate" and len(args) == 2:
+        fp.associate(args[0], args[1])
+        return 0
+    if cmd == "device" and len(args) in (2, 3):
+        fp.set_device(args[0], args[1].upper(), args[2] if len(args) == 3 else "")
+        return 0
+    if cmd == "search" and args:
+        for r in fp.flatpak_search(" ".join(args)):
+            out(f"{r['appid']:40} {r['name']} — {r['desc']}")
+        return 0
+    if cmd == "size" and len(args) == 1:
+        m = fp.manifest(args[0])
+        if not m:
+            raise fp.ProgramError("nincs ilyen program: " + args[0])
+        out(f"{fp.size_mib(m):.0f}")
+        return 0
+    out(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except fp.ProgramError as e:
+        print("fusion-programs: " + str(e), file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)
