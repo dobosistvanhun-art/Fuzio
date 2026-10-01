@@ -137,7 +137,9 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     out=$(prun timeout 900 fusion-programs install /usr/lib/fusion/programs/tests/fusionteszt-setup.exe 2>&1); rc=$?
     printf '%s\n' "$out" | tail -n 8 | sed 's/^/FUSION-PROG:   /'
     m=$P/fusionteszt/program.fusion
-    echo "FUSION-PROG: WIN rc=$rc name=$(sed -n 's/^name = //p' $m 2>/dev/null) exe=$(sed -n 's/^exe = //p' $m 2>/dev/null) icon=$(sed -n 's/^icon = //p' $m 2>/dev/null) owner=$(stat -c %U $P/fusionteszt 2>/dev/null)"
+    # printf: a Windows-út visszaperjeleit (\f…) az echo értelmezné
+    printf 'FUSION-PROG: WIN rc=%s name=%s exe=%s icon=%s owner=%s\n' "$rc" "$(sed -n 's/^name = //p' $m 2>/dev/null)" \
+        "$(sed -n 's/^exe = //p' $m 2>/dev/null)" "$(sed -n 's/^icon = //p' $m 2>/dev/null)" "$(stat -c %U $P/fusionteszt 2>/dev/null)"
     echo "FUSION-PROG: DESKTOP $(grep -h '^Exec=' /home/fusion/.local/share/applications/fusion-fusionteszt.desktop 2>/dev/null)"
     # indítás egy fájllal a megosztott P: (Projektek) mappából — a program a Windows-utat kapja
     prun mkdir -p /home/fusion/Projektek; prun sh -c 'echo teszt > "/home/fusion/Projektek/proba teszt.lbrn"'
@@ -145,8 +147,8 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     rm -f "$args"
     prun fusion-run fusionteszt "/home/fusion/Projektek/proba teszt.lbrn"; rrc=$?
     i=0; while [ $rrc -eq 0 ] && [ $i -lt 120 ] && [ ! -s "$args" ]; do sleep 1; i=$((i + 1)); done
-    sleep 2
-    echo "FUSION-PROG: RUN rc=$rrc wait=${i}s window=$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"') args=$(tr -d '\r\n' < "$args" 2>/dev/null)"
+    j=0; while [ $j -lt 15 ] && [ "$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"')" = 0 ]; do sleep 1; j=$((j + 1)); done
+    printf 'FUSION-PROG: RUN rc=%s wait=%ss window=%s args=%s\n' "$rrc" "$i" "$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"')" "$(tr -d '\r\n' < "$args" 2>/dev/null)"
     # 3) Linux-program archívumban (.desktop + X-Fusion-Open társítás)
     t=$(mktemp -d); mkdir -p "$t/fprobaprog"
     printf '#!/bin/sh\necho "$@" > /tmp/fusion-prog-native.txt\n' > "$t/fprobaprog/fprobaprog"; chmod 755 "$t/fprobaprog/fprobaprog"
