@@ -209,6 +209,8 @@ step_test() {
             _check "$log" "FUSION-DRIVE: LOGIN url=ok redirect=307:accounts.google.com" "bejelentkezés: a helyi kiszolgáló a Google-oldalra irányít" || ok_run=0
             _check "$log" "FUSION-DRIVE: MOUNT 1 read=felho write=helyrol .*volume=Google Drive\* unit=active" "csatolás (ál-Drive): olvasás, írás, Fájlkezelő-kötet, szolgáltatás" || ok_run=0
             _check "$log" "FUSION-DRIVE: LOGOUT mounted=0 conf=nincs enabled=disabled" "leválasztás: csatolás, jegy, automatikus indítás le" || ok_run=0
+            _check "$log" 'FUSION-DEV: STATUS {"node": "v22.99.0", "npm": "10.99.0", "wrangler": "4.99.0"} owner=fusion path=/data/dev/node/bin/node /home/fusion/.local/bin/wrangler' "fejlesztői eszközök: Node.js a DATA-ra (ellenőrzőösszeggel), npm-csomag a saját mappába, PATH" || ok_run=0
+            _check "$log" "FUSION-DEV: REMOVED 0" "Node.js eltávolítása" || ok_run=0
         fi
         _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
         if [ "$cfg" = std-usb ]; then

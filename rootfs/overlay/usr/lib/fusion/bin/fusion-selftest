@@ -302,6 +302,23 @@ PY
     echo "FUSION-DRIVE: MOUNT $(grep -c ' /home/fusion/GoogleDrive fuse.rclone' /proc/self/mounts) read=$rd write=$(cat /tmp/fusion-fakedrive/b-helyrol.txt 2>/dev/null) wait=${i}s volume=$vol unit=$(urun systemctl --user is-active fusion-drive.service) msg=$mo"
     urun fusion-drive logout; sleep 1
     echo "FUSION-DRIVE: LOGOUT mounted=$(grep -c ' /home/fusion/GoogleDrive ' /proc/self/mounts) conf=$([ -e /home/fusion/.config/fusion/rclone.conf ] && echo van || echo nincs) enabled=$(urun systemctl --user is-enabled fusion-drive.service 2>/dev/null)"
+    # fejlesztői eszközök: Node.js-telepítés a DATA-ra egy helyi „ál-tükörről” (letöltés, ellenőrzőösszeg,
+    # kicsomagolás, PATH a munkamenetben), npm globális csomag a saját mappába, eltávolítás
+    m=/tmp/fusion-fakenode; rm -rf "$m"; mkdir -p "$m/v22.99.0" "$m/b/node-v22.99.0-linux-x64/bin"
+    printf '#!/bin/sh\necho v22.99.0\n' > "$m/b/node-v22.99.0-linux-x64/bin/node"
+    printf '#!/bin/sh\n[ "$1" = --version ] && echo 10.99.0 && exit 0\nmkdir -p "$NPM_CONFIG_PREFIX/bin"; printf "#!/bin/sh\\necho 4.99.0\\n" > "$NPM_CONFIG_PREFIX/bin/wrangler"; chmod +x "$NPM_CONFIG_PREFIX/bin/wrangler"\n' > "$m/b/node-v22.99.0-linux-x64/bin/npm"
+    chmod +x "$m/b/node-v22.99.0-linux-x64/bin/"*
+    tar -C "$m/b" -cJf "$m/v22.99.0/node-v22.99.0-linux-x64.tar.xz" node-v22.99.0-linux-x64
+    (cd "$m/v22.99.0" && sha256sum node-v22.99.0-linux-x64.tar.xz > SHASUMS256.txt)
+    echo '[{"version":"v23.1.0","lts":false,"files":["linux-x64"]},{"version":"v22.99.0","lts":"Jod","files":["linux-x64"]}]' > "$m/index.json"
+    chmod -R a+rX "$m"
+    (cd "$m" && setsid python3 -m http.server 8799 --bind 127.0.0.1 >/dev/null 2>&1 &) ; sleep 2
+    urun env FUSION_DEV_MIRROR=http://127.0.0.1:8799 fusion-dev install node 2>&1 | tail -n 1 | sed 's/^/FUSION-DEV:   /'
+    urun env FUSION_DEV_MIRROR=http://127.0.0.1:8799 fusion-dev install wrangler >/dev/null 2>&1
+    echo "FUSION-DEV: STATUS $(urun fusion-dev --json) owner=$(stat -c %U /data/dev/node 2>/dev/null) path=$(urun sh -c '. /etc/profile.d/fusion-dev.sh; command -v node wrangler | tr "\n" " "')"
+    urun fusion-dev remove node >/dev/null 2>&1; urun sh -c 'rm -rf ~/.local/bin/wrangler'
+    echo "FUSION-DEV: REMOVED $(ls /data/dev 2>/dev/null | wc -l)"
+    pkill -f 'http.server 879[9]' 2>/dev/null
     echo "FUSION-M6: PORTAL filechooser=$(urun busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.DBus.Properties Get ss org.freedesktop.portal.FileChooser version 2>&1 | head -n 1)"
     cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
 fi

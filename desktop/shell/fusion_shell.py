@@ -41,7 +41,7 @@ from PyQt6.QtQuick import QQuickView  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 QML = os.path.join(HERE, "qml")
-MENU_W, MENU_H = 440, 560
+MENU_W, MENU_H = 640, 580
 CENTER_W, CENTER_H = 400, 520
 CAL_W, CAL_H = 300, 300
 SOUND_W, SOUND_H = 340, 300
@@ -279,6 +279,20 @@ class Shell(QObject):
     def apps(self):
         return self._apps
 
+    @pyqtProperty("QVariant", notify=appsChanged)
+    def groups(self):
+        return fusion_apps.groups(self._apps)
+
+    @pyqtProperty("QVariant", constant=True)
+    def allGroups(self):
+        return [{"id": g, "name": n, "icon": i} for g, n, i in fusion_apps.GROUPS]
+
+    @pyqtSlot(str, str)
+    def setAppGroup(self, app_id, group):
+        """kézi csoport a Start menüben (üres: az automatikus)"""
+        fusion_apps.set_group(app_id, group)
+        self.reload_apps()
+
     @pyqtProperty(str, constant=True)
     def version(self):
         return ui.fusion_version()
@@ -435,6 +449,10 @@ class Shell(QObject):
         for a in self._apps:
             if a["id"] == app_id:
                 ui.spawn(a["exec"])
+                try:
+                    fusion_apps.record_launch(app_id)
+                except OSError:
+                    pass
                 break
         self.hideMenu()
 

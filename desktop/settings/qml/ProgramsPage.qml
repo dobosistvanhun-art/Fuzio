@@ -23,7 +23,11 @@ SettingsPage {
     property string chosen: ""
     busy: job.running || searching
     onRefresh: settings.programsRefresh()
-    Component.onCompleted: { if (win.param) chooseFile(win.param); settings.programsRefresh(); settings.programJobWatch() }
+    Component.onCompleted: { if (win.param) chooseFile(win.param); settings.programsRefresh(); settings.programJobWatch(); settings.devRefresh() }
+    property var dev: ({ node: "", npm: "", wrangler: "" })
+    property bool devLoaded: false
+    // a terminálban futó telepítés után az állapot frissül, amikor az ablak újra előtérbe kerül
+    Connections { target: win; function onActiveChanged() { if (win.active && p.visible) settings.devRefresh() } }
     Connections {
         target: win
         function onParamChanged() { if (win.param) p.chooseFile(win.param) }
@@ -33,6 +37,7 @@ SettingsPage {
     Connections {
         target: settings
         function onResult(tag, r) {
+            if (tag === "dev") { p.dev = r; p.devLoaded = true; return }
             if (tag === "programs" && r.programs) {
                 p.progs = r.programs; p.roles = r.roles; p.recipes = r.recipes; p.inst = r.installers; p.job = r.job
                 settings.programSizes()
@@ -200,6 +205,27 @@ SettingsPage {
         title: "LINUX-PROGRAMOK A FLATHUBRÓL"
         InfoRow { icon: "store"; label: "Programbolt"; value: "Népszerű programok, kategóriák, keresés, képernyőképek — telepítés egy kattintással"
                   FButton { text: "Programbolt"; icon: "store"; primary: true; onClicked: win.cur = win.pages.findIndex(x => x.id === "store") } }
+    }
+    // --- fejlesztői eszközök ---
+    Section {
+        title: "FEJLESZTŐI ESZKÖZÖK (a DATA-n; a Terminálban: node, npm, wrangler)"
+        InfoRow {
+            icon: "file-code"; label: "Node.js (LTS)"
+            value: !p.devLoaded ? "…" : (p.dev.node ? p.dev.node + "  ·  npm " + p.dev.npm : "nincs telepítve — a nodejs.org-ról, ellenőrzőösszeggel")
+            valueColor: p.dev.node ? Theme.ok : Theme.dim
+            FButton { visible: !p.dev.node; text: "Telepítés"; primary: true; onClicked: settings.openTerminal("dev-install-node") }
+            FButton { visible: !!p.dev.node; text: "Frissítés"; onClicked: settings.openTerminal("dev-update-node") }
+            FButton { visible: !!p.dev.node; text: "Eltávolítás"; flat: true; onClicked: settings.openTerminal("dev-remove-node") }
+        }
+        InfoRow {
+            icon: "cloud"; label: "Cloudflare Wrangler"
+            value: !p.devLoaded ? "…" : (p.dev.wrangler ? p.dev.wrangler : (p.dev.node ? "nincs telepítve" : "előbb a Node.js kell"))
+            valueColor: p.dev.wrangler ? Theme.ok : Theme.dim
+            FButton { visible: !p.dev.wrangler; enabled: !!p.dev.node; text: "Telepítés"; primary: true; onClicked: settings.openTerminal("dev-install-wrangler") }
+            FButton { visible: !!p.dev.wrangler; text: "Bejelentkezés"; icon: "web"; onClicked: settings.openTerminal("wrangler-login") }
+            FButton { visible: !!p.dev.wrangler; text: "Frissítés"; onClicked: settings.openTerminal("dev-update-wrangler") }
+            FButton { visible: !!p.dev.wrangler; text: "Eltávolítás"; flat: true; onClicked: settings.openTerminal("dev-remove-wrangler") }
+        }
     }
     FButton { text: "A Windows-futtatókörnyezet ellenőrzése (fwr check)"; icon: "check"; onClicked: settings.openTerminal("fwrcheck") }
 }

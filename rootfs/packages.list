@@ -129,6 +129,8 @@ pulseaudio-utils
 alsa-utils
 # Google Drive a Fájlkezelőben: rclone (FUSE-csatolás)
 rclone
+# fejlesztés: verziókezelés (Wrangler-projektek)
+git
 bubblewrap
 xdg-desktop-portal
 xdg-desktop-portal-gtk

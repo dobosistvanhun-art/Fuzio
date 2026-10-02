@@ -518,6 +518,17 @@ class Settings(QObject):
         self._async("drive-action", lambda: {"ok": fusion_drive.set_autostart(on),
                                               "msg": "Bejelentkezéskor " + ("csatolódik." if on else "nem csatolódik.")})
 
+    # --- Fejlesztői eszközök ---
+    @pyqtSlot()
+    def devRefresh(self):
+        def f():
+            rc, out = ui.run(["fusion-dev", "--json"], timeout=90)
+            try:
+                return json.loads(out.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                return {"node": "", "npm": "", "wrangler": "", "error": out.strip()[-200:]}
+        self._async("dev", f)
+
     # --- Hang ---
     @pyqtSlot()
     def soundRefresh(self):
@@ -669,7 +680,11 @@ class Settings(QObject):
                    "journal": "journalctl -b -p warning --no-pager | tail -n 200",
                    "printerlog": "fusion-printer log",
                    "fwrcheck": "fwr check",
-                   "devices": "fusion-devices"}
+                   "devices": "fusion-devices",
+                   "dev-install-node": "fusion-dev install node", "dev-update-node": "fusion-dev update node",
+                   "dev-remove-node": "fusion-dev remove node", "dev-install-wrangler": "fusion-dev install wrangler",
+                   "dev-update-wrangler": "fusion-dev update wrangler", "dev-remove-wrangler": "fusion-dev remove wrangler",
+                   "wrangler-login": "wrangler login && wrangler whoami"}
         c = allowed.get(cmd)
         if c:
             ui.spawn(["xterm", "-title", "FusionOS — " + cmd, "-e", "sh", "-c", c + "; echo; echo '(Enter: bezárás)'; read x"])

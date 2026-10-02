@@ -13,6 +13,8 @@ DSP="$CONF/display.sh"
 if [ -r "$DSP" ] && ! grep -qvE '^(#.*|xrandr --output [A-Za-z0-9_.:+-]+ --mode [A-Za-z0-9_.:+-]+)$' "$DSP"; then
     sh "$DSP" 2>/dev/null
 fi
+# fejlesztői eszközök (fusion-dev): Node.js a DATA-n, az npm globális csomagjai (pl. wrangler) a saját mappában
+export PATH="/data/dev/node/bin:$HOME/.local/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
 # a munkamenet-busz szolgáltatásai (portálok, értesítések) lássák a kijelzőt
 export XDG_CURRENT_DESKTOP=FusionOS XDG_SESSION_TYPE=x11
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null
