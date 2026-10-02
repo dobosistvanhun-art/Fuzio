@@ -315,7 +315,7 @@ PY
     (cd "$m" && setsid python3 -m http.server 8799 --bind 127.0.0.1 >/dev/null 2>&1 &) ; sleep 2
     urun env FUSION_DEV_MIRROR=http://127.0.0.1:8799 fusion-dev install node 2>&1 | tail -n 1 | sed 's/^/FUSION-DEV:   /'
     urun env FUSION_DEV_MIRROR=http://127.0.0.1:8799 fusion-dev install wrangler >/dev/null 2>&1
-    echo "FUSION-DEV: STATUS $(urun fusion-dev --json) owner=$(stat -c %U /data/dev/node 2>/dev/null) path=$(urun sh -c '. /etc/profile.d/fusion-dev.sh; command -v node wrangler | tr "\n" " "')"
+    echo "FUSION-DEV: STATUS $(urun fusion-dev --json) owner=$(stat -c %U /data/dev/node 2>/dev/null) path=$(urun sh -c '. /etc/profile.d/fusion-dev.sh; for c in node wrangler; do command -v $c; done | tr "\n" " "')"
     urun fusion-dev remove node >/dev/null 2>&1; urun sh -c 'rm -rf ~/.local/bin/wrangler'
     echo "FUSION-DEV: REMOVED $(ls /data/dev 2>/dev/null | wc -l)"
     pkill -f 'http.server 879[9]' 2>/dev/null
