@@ -76,10 +76,26 @@ Rectangle {
             onActiveFocusChanged: if (!activeFocus) visible = false
         }
     }
+    // --- lomtár sáv: a lomtár mappájában ---
+    Rectangle {
+        id: trashBar
+        anchors.top: pathBar.bottom; width: parent.width; height: panel.model.isTrash ? 34 : 0; visible: panel.model.isTrash
+        color: "#2a2216"
+        property var info: panel.model.isTrash && panel.model.count > 0 ? files.trashInfo(panel.model.path + "/" + (panel.model.item(panel.cur).name || "")) : ({})
+        FIcon { x: 8; anchors.verticalCenter: parent.verticalCenter; name: "trash"; size: 16 }
+        Text { x: 30; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 30 - tbRow.width - 16; elide: Text.ElideMiddle
+               text: trashBar.info && trashBar.info.orig ? "Eredeti hely: " + trashBar.info.orig + "  ·  " + trashBar.info.date : "Lomtár — Del: végleges törlés"
+               color: Theme.text; font.family: Theme.font; font.pixelSize: 11 }
+        Row {
+            id: tbRow; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; spacing: 4
+            FButton { implicitHeight: 24; text: "Visszaállítás"; onClicked: { panel.activated(); panel.request("restore") } }
+            FButton { implicitHeight: 24; text: "Ürítés"; danger: true; onClicked: { panel.activated(); panel.request("emptytrash") } }
+        }
+    }
     // --- oszlopfejléc (kattintásra rendez) ---
     Rectangle {
         id: cols
-        anchors.top: pathBar.bottom; width: parent.width; height: 24; color: Theme.panel
+        anchors.top: trashBar.bottom; width: parent.width; height: 24; color: Theme.panel
         property bool wide: panel.width > 620
         component ColHead: Rectangle {
             property string key; property string label; property int align: Text.AlignLeft

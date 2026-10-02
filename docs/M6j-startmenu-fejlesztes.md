@@ -1,4 +1,4 @@
-# M6j — Csoportos Start menü, fejlesztői eszközök (Node.js, Wrangler): ellenőrzés a ZBookon (0.0.22)
+# M6j — Csoportos Start menü, fejlesztői eszközök (Node.js, Wrangler), Lomtár, gyors törlés Drive mellett: ellenőrzés a ZBookon (0.0.22)
 
 ## Frissítés (Mint) — a DATA megmarad
 
@@ -39,6 +39,27 @@ Bal oldalt a csoportok, jobbra a csoport programjai. A csoportot a program sajá
 - [ ] **Wrangler → Bejelentkezés**: a böngészőben (Firefox) a Cloudflare-fiók, „Allow” → a terminálban a fiók neve
 - [ ] Terminál (Ctrl+Alt+T): `node --version`, `npm --version`, `wrangler --version`, `git --version`
 - [ ] A motoros program mappájában: `npm install`, `wrangler dev` / `wrangler deploy`
+
+## C) Lomtár (Fájlkezelő)
+
+A törlés (F8 / Del) mostantól a **Lomtárba** tesz: ugyanazon a meghajtón belül átnevezés, ezért azonnali,
+akármekkora a fájl. A szabványos (freedesktop) lomtár: `~/.local/share/Trash`, USB-meghajtón `.Trash-1000`.
+
+- [ ] Egy fájl → **F8** → megerősítés nélkül, azonnal eltűnik; **Ctrl+Z** → visszajön
+- [ ] Bal oldali kötetlista: **Lomtár** → a törölt elemek; kijelölve felül: eredeti hely, törlés ideje
+- [ ] **Visszaállítás** gomb → az eredeti helyére kerül (ha ott már van ilyen nevű: „(visszaállítva)” utótaggal)
+- [ ] **Ürítés** gomb → megerősítés után végleges törlés; a Lomtárban az F8 is véglegesen töröl
+- [ ] **Shift+Del**: végleges törlés a lomtár kihagyásával (megerősítéssel)
+- [ ] Google Drive-on a törlés megerősítést kér, és a Drive **saját** lomtárába kerül (drive.google.com → Kuka)
+
+## D) Lassú törlés, ha a másik panel a Google Drive
+
+Ok: a művelet utáni frissítés és a szabad hely lekérdezése a Drive-panelen az internetre várt.
+Mostantól hálózati / Drive-panelen ez a háttérben fut.
+
+- [ ] Egyik panel: Google Drive, másik: saját mappa → egy kis fájl törlése / másolása azonnal kész
+- [ ] A Drive-panel szabad helye pár másodperc múlva jelenik meg (nem akasztja meg az ablakot)
+- [ ] Ha valami mégis lassú: `~/.local/share/fusion/files.log` (a 0,5 s-nál lassabb lépések)
 
 ## Parancssor
 

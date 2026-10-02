@@ -19,6 +19,7 @@ from PyQt6.QtCore import (QAbstractListModel, QByteArray, QFileSystemWatcher, QM
 from PyQt6.QtGui import QGuiApplication
 
 import fusion_ui as ui
+import fusion_trash as trashlib
 import fusion_apps  # noqa: F401  (a Programkezelő moduljának útvonala)
 try:
     import fusion_programs as fp
@@ -101,6 +102,33 @@ def perm_text(mode):
 # ---------------------------------------------------------------------------
 # könyvtárlista (egy panel)
 # ---------------------------------------------------------------------------
+LOG = os.path.join(os.path.expanduser("~"), ".local", "share", "fusion", "files.log")
+
+
+def slow(what, t0, limit=0.5):
+    """a felületet megakasztó lassú műveletek naplója (hibakereséshez): ~/.local/share/fusion/files.log"""
+    dt = time.monotonic() - t0
+    if dt >= limit:
+        try:
+            os.makedirs(os.path.dirname(LOG), exist_ok=True)
+            with open(LOG, "a", encoding="utf-8") as f:
+                f.write(f"{time.strftime('%F %T')} lassú ({dt:.1f} mp): {what}\n")
+        except OSError:
+            pass
+
+
+_FREE = {}
+_FREE_BUSY = set()
+
+
+def _statvfs_text(path):
+    try:
+        s = os.statvfs(path)
+        return f"{ui.human_size(s.f_bavail * s.f_frsize)} szabad / {ui.human_size(s.f_blocks * s.f_frsize)}"
+    except OSError:
+        return ""
+
+
 class DirModel(QAbstractListModel):
     ROLES = ["name", "ext", "isDir", "isLink", "isParent", "sizeText", "dateText", "attr", "marked", "hidden", "icon", "size"]
     pathChanged = pyqtSignal()
@@ -123,6 +151,9 @@ class DirModel(QAbstractListModel):
         self._debounce.setInterval(300)
         self._debounce.timeout.connect(lambda: self.reloadKeep())
         self.current = ""        # a felület jelzi, melyik sor az aktuális (frissítéskor megtartjuk)
+        self.freeReady.connect(self.statusChanged)
+        self._scanned.connect(self._apply_scan)
+        self._scanning = False
 
     # --- Qt-modell ---
     def roleNames(self):
@@ -177,11 +208,36 @@ class DirModel(QAbstractListModel):
 
     @pyqtProperty(str, notify=statusChanged)
     def free(self):
-        try:
-            s = os.statvfs(self._path)
-            return f"{ui.human_size(s.f_bavail * s.f_frsize)} szabad / {ui.human_size(s.f_blocks * s.f_frsize)}"
-        except OSError:
-            return ""
+        """szabad hely — hálózati / felhő-köteten (pl. Google Drive) háttérben, gyorsítótárból:
+        ott a lekérdezés a szolgáltatóhoz fordul, és nem akaszthatja meg a felületet"""
+        path = self._path
+        hit = _FREE.get(path)
+        net = trashlib.is_network(path) if path else False
+        ttl = 60 if net else 3
+        if hit and time.monotonic() - hit[0] < ttl:
+            return hit[1]
+        if not net:
+            t0 = time.monotonic()
+            text = _statvfs_text(path)
+            slow("szabad hely: " + path, t0)
+            _FREE[path] = (time.monotonic(), text)
+            return text
+        if path not in _FREE_BUSY:
+            _FREE_BUSY.add(path)
+
+            def work():
+                text = _statvfs_text(path)
+                _FREE[path] = (time.monotonic(), text)
+                _FREE_BUSY.discard(path)
+                self.freeReady.emit()
+            threading.Thread(target=work, daemon=True).start()
+        return hit[1] if hit else "…"
+
+    freeReady = pyqtSignal()
+
+    @pyqtProperty(bool, notify=pathChanged)
+    def isTrash(self):
+        return trashlib.is_trash_files_dir(self._path) if self._path else False
 
     @pyqtProperty(int, notify=statusChanged)
     def markedCount(self):
@@ -229,8 +285,10 @@ class DirModel(QAbstractListModel):
         """könyvtár betöltése; visszaadja a kijelölendő sor indexét"""
         path = os.path.abspath(os.path.expanduser(path or "/"))
         prev = self._path
+        t0 = time.monotonic()
         try:
             items = self._scan(path)
+            slow("megnyitás: " + path, t0)
         except OSError as e:
             self._error = f"{path}: {e.strerror or e}"
             self.errorChanged.emit()
@@ -251,19 +309,63 @@ class DirModel(QAbstractListModel):
             select = os.path.basename(prev.rstrip("/"))   # visszalépéskor a korábbi mappán áll
         return max(0, self.indexOf(select)) if select else 0
 
+    _scanned = pyqtSignal(str, "QVariant")
+
     @pyqtSlot(result=int)
     def reloadKeep(self):
-        """frissítés: az aktuális sor és a jelölések megmaradnak"""
+        """frissítés: az aktuális sor és a jelölések megmaradnak
+        (hálózati / felhő-köteten a listázás háttérben — a felület nem akad meg)"""
+        if self._path and trashlib.is_network(self._path):
+            if not self._scanning:
+                self._scanning = True
+                path = self._path
+
+                def work():
+                    try:
+                        items = self._scan(path)
+                    except OSError:
+                        items = None
+                    self._scanned.emit(path, items)
+                threading.Thread(target=work, daemon=True).start()
+            return max(0, self.indexOf(self.current))
+        return self._reload_sync()
+
+    def _apply_scan(self, path, items):
+        self._scanning = False
+        if path != self._path:
+            return
+        if items is None:
+            self._reload_sync()
+            return
+        self._set_items(items)
+
+    def _set_items(self, items):
         marked = {i["name"] for i in self._items if i["marked"]}
         cur = self.current
+        for i in items:
+            i["marked"] = i["name"] in marked
+        self.beginResetModel()
+        self._items = items
+        self.endResetModel()
+        self.statusChanged.emit()
+        self.reloaded.emit(max(0, self.indexOf(cur)))
+        return max(0, self.indexOf(cur))
+
+    def _reload_sync(self):
+        if not self._path:          # még nincs betöltve (pl. az önteszt üres panelje)
+            return 0
+        marked = {i["name"] for i in self._items if i["marked"]}
+        cur = self.current
+        t0 = time.monotonic()
         try:
             items = self._scan(self._path)
+            slow("frissítés: " + self._path, t0)
         except OSError:
             # a mappa eltűnt (pl. kihúzott USB): a legközelebbi létező szülő
             p = self._path
-            while p != "/" and not os.path.isdir(p):
+            while p and p != "/" and not os.path.isdir(p):
                 p = os.path.dirname(p)
-            return self.load(p)
+            return self.load(p or "/")
         for i in items:
             i["marked"] = i["name"] in marked
         self.beginResetModel()
@@ -585,6 +687,22 @@ class FileOps:
             except OSError as e:
                 self.job.errors.append(f"{s}: {e.strerror or e}")
 
+    def trash(self, srcs):
+        """lomtárba helyezés (azonos köteten átnevezés: azonnali); visszaadja a visszavonáshoz szükséges listát"""
+        self.job.files_total = len(srcs)
+        done = []
+        for s in srcs:
+            self._check()
+            self.job.current = os.path.basename(s)
+            try:
+                td, name = trashlib.trash(s)
+                if td:
+                    done.append((td, name))
+            except (trashlib.TrashError, OSError) as e:
+                self.job.errors.append(str(e) if isinstance(e, trashlib.TrashError) else f"{s}: {e.strerror or e}")
+            self.job.files_done += 1
+        return done
+
     def pack(self, srcs, zippath):
         """ZIP-archívum a kijelölt elemekből (a relatív utak a forrásmappától)"""
         self.job.total, self.job.files_total = _walk_size(srcs, self.job)
@@ -783,6 +901,14 @@ def volumes():
                         "dev": n.get("path", ""), "mounted": bool(mps), "media": usb or bool(mps and mps[0].startswith("/run/media/")),
                         "info": f"{n.get('path', '')} · {n.get('fstype', '')} · {ui.human_size(int(n.get('size') or 0))}"})
     walk(devs)
+    # Lomtár
+    try:
+        os.makedirs(os.path.join(trashlib.HOME_TRASH, "files"), exist_ok=True)
+        tot, cnt = trashlib.size()
+        out.insert(2, {"name": "Lomtár", "path": os.path.join(trashlib.HOME_TRASH, "files"), "icon": "trash", "dev": "",
+                       "mounted": True, "media": False, "info": f"{cnt} elem · {ui.human_size(tot)}" if cnt else "üres"})
+    except OSError:
+        pass
     # Google Drive (rclone-csatolás) — ha be van jelentkezve
     try:
         import fusion_drive
@@ -862,6 +988,8 @@ class Files(QObject):
         self.jobChanged.emit()
         if j.finished:
             self._timer.stop()
+            slow(f"{j.title} (teljes idő)", self._t0, 2.0)
+            t_fin = time.monotonic()
             msg = {"ok": "kész", "megszakítva": "megszakítva", "hiba": "hiba"}.get(j.result, j.result)
             self.jobFinished.emit(j.kind, f"{j.title}: {msg}" + (f" — {len(j.errors)} hiba" if j.errors else ""), j.errors[:50])
             if j.result == "ok" and not j.errors:
@@ -871,6 +999,7 @@ class Files(QObject):
                         i["marked"] = False
             self.left.reloadKeep()
             self.right.reloadKeep()
+            slow("a művelet utáni frissítés", t_fin)
             self._job_view = {"active": False, "show": False}
             self.jobChanged.emit()
 
@@ -896,6 +1025,75 @@ class Files(QObject):
     def move(self, srcs, dst, overwrite):
         srcs = list(srcs)
         return self._start("move", f"Mozgatás ({len(srcs)} elem)", lambda j: FileOps(j, overwrite).move(srcs, dst))
+
+    @pyqtSlot("QStringList", result=bool)
+    def trashItems(self, srcs):
+        """Del / F8: a lomtárba (Google Drive-on a Drive saját lomtárába)"""
+        srcs = list(srcs)
+
+        def run(j):
+            self._last_trash = FileOps(j).trash(srcs)
+        return self._start("trash", f"Lomtárba ({len(srcs)} elem)", run)
+
+    @pyqtSlot(result=int)
+    def undoTrash(self):
+        """az utolsó lomtárba helyezés visszavonása (Ctrl+Z)"""
+        n = 0
+        for td, name in getattr(self, "_last_trash", []) or []:
+            try:
+                trashlib.restore(td, name)
+                n += 1
+            except (trashlib.TrashError, OSError):
+                pass
+        self._last_trash = []
+        self.left.reloadKeep()
+        self.right.reloadKeep()
+        return n
+
+    @pyqtSlot("QStringList", result="QVariant")
+    def restoreFromTrash(self, paths):
+        """kijelölt elemek (a lomtár files mappájából) vissza az eredeti helyükre"""
+        ok, errs = 0, []
+        for p in paths:
+            try:
+                trashlib.restore(os.path.dirname(os.path.dirname(p)), os.path.basename(p))
+                ok += 1
+            except (trashlib.TrashError, OSError) as e:
+                errs.append(str(e))
+        self.left.reloadKeep()
+        self.right.reloadKeep()
+        return {"ok": ok, "errors": errs}
+
+    @pyqtSlot("QStringList", result=bool)
+    def purgeFromTrash(self, paths):
+        paths = list(paths)
+
+        def run(j):
+            j.files_total = len(paths)
+            for p in paths:
+                j.current = os.path.basename(p)
+                trashlib.purge(os.path.dirname(os.path.dirname(p)), os.path.basename(p))
+                j.files_done += 1
+        return self._start("delete", f"Végleges törlés ({len(paths)} elem)", run)
+
+    @pyqtSlot(result=bool)
+    def emptyTrash(self):
+        return self._start("delete", "A lomtár ürítése", lambda j: trashlib.empty())
+
+    @pyqtSlot(str, result="QVariant")
+    def trashInfo(self, path):
+        """a lomtárban lévő elem eredeti helye és a törlés ideje"""
+        orig, date = trashlib._read_info(os.path.dirname(os.path.dirname(path)), os.path.basename(path))
+        return {"orig": orig, "date": date}
+
+    @pyqtSlot(result="QVariant")
+    def trashSummary(self):
+        tot, cnt = trashlib.size()
+        return {"count": cnt, "size": ui.human_size(tot), "path": os.path.join(trashlib.HOME_TRASH, "files")}
+
+    @pyqtSlot(str, result=bool)
+    def onNetwork(self, path):
+        return trashlib.is_network(path)
 
     @pyqtSlot("QStringList", result=bool)
     def remove(self, srcs):
@@ -1144,7 +1342,9 @@ class Files(QObject):
 
     @pyqtSlot()
     def refreshVolumes(self):
+        t0 = time.monotonic()
         self._vols = volumes()
+        slow("kötetek listája", t0)
         self.volumesChanged.emit()
 
     @pyqtSlot(str, result="QVariant")

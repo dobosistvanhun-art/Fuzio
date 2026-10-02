@@ -63,10 +63,34 @@ FWindow {
         case "rename":
             if (!it.name || it.isParent) return
             ask("Átnevezés", "Új név:", it.name, function (v) { var e = files.rename(it.full, v); if (e) err("Nem nevezhető át", e); else act.go(act.model.path, v) }); break
-        case "delete":
+        case "delete":       // Del / F8: a lomtárba; a lomtárban: végleges törlés
             if (!sel.length) return
-            confirm("Törlés", (sel.length === 1 ? "Törli ezt: „" + sel[0].split("/").pop() + "”?" : "Törli a kijelölt " + sel.length + " elemet?") + "\nA törlés végleges (nincs lomtár).",
-                    "Törlés", "danger", function () { files.remove(sel) }); break
+            if (act.model.isTrash) { doAction("purge"); break }
+            if (files.onNetwork(act.model.path)) {
+                confirm("Törlés", (sel.length === 1 ? "Törli ezt: „" + sel[0].split("/").pop() + "”?" : "Törli a kijelölt " + sel.length + " elemet?")
+                        + "\nGoogle Drive: a törölt elem a Drive saját lomtárába kerül (drive.google.com → Lomtár).",
+                        "Törlés", "danger", function () { files.trashItems(sel) }); break
+            }
+            if (files.trashItems(sel)) say((sel.length === 1 ? "„" + sel[0].split("/").pop() + "”" : sel.length + " elem") + " a lomtárba került — Ctrl+Z: visszavonás")
+            break
+        case "delete-final":  // Shift+Del: végleges törlés, lomtár nélkül
+            if (!sel.length) return
+            confirm("Végleges törlés", (sel.length === 1 ? "Véglegesen törli ezt: „" + sel[0].split("/").pop() + "”?" : "Véglegesen törli a kijelölt " + sel.length + " elemet?") + "\nNem kerül a lomtárba, nem állítható vissza.",
+                    "Végleges törlés", "danger", function () { files.remove(sel) }); break
+        case "purge":
+            if (!sel.length) return
+            confirm("Végleges törlés", (sel.length === 1 ? "Véglegesen törli a lomtárból: „" + sel[0].split("/").pop() + "”?" : "Véglegesen törli a lomtárból a kijelölt " + sel.length + " elemet?"),
+                    "Végleges törlés", "danger", function () { files.purgeFromTrash(sel) }); break
+        case "restore":
+            if (!sel.length || !act.model.isTrash) return
+            var rr = files.restoreFromTrash(sel)
+            if (rr.errors.length) err("Visszaállítás", "Nem minden elem állítható vissza", rr.errors); else say(rr.ok + " elem visszaállítva az eredeti helyére")
+            break
+        case "emptytrash":
+            confirm("A lomtár ürítése", "Véglegesen törli a lomtár teljes tartalmát (" + files.trashSummary().count + " elem, " + files.trashSummary().size + ")?",
+                    "Ürítés", "danger", function () { files.emptyTrash() }); break
+        case "trash": act.go(files.trashSummary().path); break
+        case "undo": var nu = files.undoTrash(); say(nu ? nu + " elem visszakerült" : "nincs mit visszavonni"); break
         case "pack":
             if (!sel.length) return
             var base = sel.length === 1 ? sel[0].split("/").pop().replace(/\.[^.]*$/, "") : act.model.path.split("/").pop() || "archivum"
@@ -136,7 +160,8 @@ FWindow {
     Key { sequence: "F2"; onActivated: doAction("rename") }
     Key { sequence: "F7"; onActivated: doAction("mkdir") }
     Key { sequence: "F8"; onActivated: doAction("delete") }
-    Key { sequence: "Shift+Del"; onActivated: doAction("delete") }
+    Key { sequence: "Shift+Del"; onActivated: doAction("delete-final") }
+    Key { sequence: "Ctrl+Z"; onActivated: doAction("undo") }
     Key { sequence: "Alt+F7"; onActivated: doAction("search") }
     Key { sequence: "Alt+F5"; onActivated: doAction("pack") }
     Key { sequence: "Alt+F9"; onActivated: doAction("extract") }
@@ -184,7 +209,9 @@ FWindow {
             MI { text: "Mozgatás"; keys: "F6"; act: "move" }
             MI { text: "Átnevezés"; keys: "Shift+F6"; act: "rename" }
             MI { text: "Új mappa"; keys: "F7"; act: "mkdir" }
-            MI { text: "Törlés"; keys: "F8"; act: "delete" }
+            MI { text: "Lomtárba"; keys: "F8"; act: "delete" }
+            MI { text: "Végleges törlés"; keys: "Shift+Del"; act: "delete-final" }
+            MI { text: "Lomtár"; keys: ""; act: "trash" }
             MenuSeparator {}
             MI { text: "Tömörítés (ZIP)"; keys: "Alt+F5"; act: "pack" }
             MI { text: "Kicsomagolás"; keys: "Alt+F9"; act: "extract" }
@@ -265,7 +292,7 @@ FWindow {
             anchors.fill: parent; anchors.margins: 3; spacing: 3
             Repeater {
                 model: [["F3", "Nézet", "view"], ["F4", "Szerkesztés", "edit"], ["F5", "Másolás", "copy"], ["F6", "Mozgatás", "move"],
-                        ["F7", "Új mappa", "mkdir"], ["F8", "Törlés", "delete"], ["Alt+F7", "Keresés", "search"], ["Alt+F4", "Kilépés", "quit"]]
+                        ["F7", "Új mappa", "mkdir"], ["F8", "Lomtárba", "delete"], ["Alt+F7", "Keresés", "search"], ["Alt+F4", "Kilépés", "quit"]]
                 Rectangle {
                     width: (fkeys.width - 6 - 7 * 3) / 8; height: 26; radius: Theme.radius
                     color: fma.pressed ? Theme.selected : (fma.containsMouse ? Theme.hover : "#1b222c")
@@ -376,7 +403,8 @@ FWindow {
         CI { text: "Tömörítés (Alt+F5)"; act: "pack" }
         CI { text: "Kicsomagolás (Alt+F9)"; act: "extract" }
         CI { text: "Telepítés a Programkezelővel"; act: "install" }
-        CI { text: "Törlés (F8)"; act: "delete" }
+        CI { text: "Lomtárba (F8, Del)"; act: "delete" }
+        CI { text: "Végleges törlés (Shift+Del)"; act: "delete-final" }
         MenuSeparator {}
         CI { text: "Terminál itt"; act: "terminal" }
     }
@@ -439,7 +467,7 @@ FWindow {
                   "Num + / − / *  jelölés minta szerint / megfordítás\n" +
                   "F3 / F4        megtekintés / szerkesztés\n" +
                   "F5 / F6        másolás / mozgatás (a másik panelbe)\n" +
-                  "Shift+F6, F2   átnevezés             F7  új mappa    F8, Del  törlés\n" +
+                  "Shift+F6, F2   átnevezés             F7  új mappa    F8, Del  lomtárba \n" +
                   "Alt+F5 / F9    tömörítés / kicsomagolás\n" +
                   "Alt+F7         keresés               Shift+F2  könyvtár-összehasonlítás\n" +
                   "Alt+F1 / F2    meghajtó (bal / jobb) Ctrl+H    rejtett fájlok\n" +

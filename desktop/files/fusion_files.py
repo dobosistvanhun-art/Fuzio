@@ -9,6 +9,8 @@ Shift+F6 átnevezés, Tab panelváltás, Insert / Szóköz jelölés, Ctrl+A min
 Ctrl+H rejtett fájlok, Alt+F7 keresés, Alt+F5 tömörítés, Alt+F9 kicsomagolás, Alt+F1 / F2 meghajtó.
 """
 import os
+import time
+import shutil
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
@@ -33,6 +35,7 @@ def selftest(work):
         ok = ok and bool(cond)
 
     work = os.path.abspath(work)
+    shutil.rmtree(work, ignore_errors=True)      # egy korábbi futás maradéka ne zavarjon
     a, b = os.path.join(work, "bal"), os.path.join(work, "jobb")
     for d in (a, b):
         os.makedirs(d, exist_ok=True)
@@ -103,6 +106,26 @@ def selftest(work):
     check("SAVE", files.writeFile(os.path.join(b, "új.txt"), "ő ű\n") == "" and open(os.path.join(b, "új.txt"), encoding="utf-8").read() == "ő ű\n")
     j = run(lambda j: fb.FileOps(j).delete([os.path.join(b, "mappa"), zp]))
     check("DELETE", not os.path.exists(os.path.join(b, "mappa")) and not os.path.exists(zp) and not j.errors)
+    # lomtár: áthelyezés (azonnali), eredeti hely, visszaállítás, visszavonás, végleges törlés
+    import fusion_trash as tr
+    tf = os.path.join(b, "lomtarba.txt")
+    with open(tf, "w") as f:
+        f.write("x")
+    t0 = time.monotonic()
+    j = run(lambda j: setattr(files, "_last_trash", fb.FileOps(j).trash([tf])))
+    dt = time.monotonic() - t0
+    ent = [e for e in tr.entries() if e["orig"] == tf]
+    check("TRASH", not os.path.exists(tf) and len(ent) == 1 and not j.errors, f"{dt * 1000:.0f}ms")
+    check("TRASHDIR", tr.is_trash_files_dir(os.path.join(tr.HOME_TRASH, "files")))
+    check("UNDO", files.undoTrash() == 1 and os.path.exists(tf))
+    run(lambda j: fb.FileOps(j).trash([tf]))
+    tp2 = os.path.join(tr.HOME_TRASH, "files", [e for e in tr.entries() if e["orig"] == tf][0]["name"])
+    r = files.restoreFromTrash([tp2])
+    check("RESTORE", r["ok"] == 1 and os.path.exists(tf))
+    run(lambda j: fb.FileOps(j).trash([tf]))
+    nm = [e for e in tr.entries() if e["orig"] == tf][0]["name"]
+    tr.purge(tr.HOME_TRASH, nm)
+    check("PURGE", not any(e["orig"] == tf for e in tr.entries()) and not os.path.exists(os.path.join(tr.HOME_TRASH, "files", nm)))
     vols = fb.volumes()
     check("VOLUMES", any(v["path"] == os.path.expanduser("~") for v in vols), ", ".join(f"{v['name']}={v['path'] or v['dev']}" for v in vols))
     print(f"FUSION-FILES: RESULT {'ok' if ok else 'HIBA'}", flush=True)

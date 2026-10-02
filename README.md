@@ -24,6 +24,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
   képernyőképek) — a telepítést a Programkezelő végzi. Ellenőrzés: `docs/M6h-programbolt-hang.md`
 - **Start menü csoportokkal** (Műhely, Grafika, Iroda, Internet, … Rendszer; Gyakran használt; jobb gomb: áthelyezés)
 - **Fejlesztői eszközök** (Programkezelő; `fusion-dev`): Node.js LTS a DATA-n, Wrangler, git. Ellenőrzés: `docs/M6j-startmenu-fejlesztes.md`
+- **Lomtár** (Fájlkezelő): a törlés a szabványos lomtárba tesz (Ctrl+Z visszavonás, visszaállítás az eredeti helyre, Shift+Del végleges törlés); Drive-panel mellett sem lassú. Ellenőrzés: `docs/M6j-startmenu-fejlesztes.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
   alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`
