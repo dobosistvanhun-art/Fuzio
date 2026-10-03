@@ -17,7 +17,7 @@ EV=/sys/firmware/efi/efivars
 LG=4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
 efistr() { [ -r "$EV/$1-$LG" ] && tail -c +5 "$EV/$1-$LG" | tr -d '\000'; }
 if [ -r /usr/lib/fusion/fusion-release ] || [ -r /etc/fusion-release ]; then
-    echo "-- FusionOS: $(sed -n 's/^FUSION_PRETTY_NAME=//p' /usr/lib/fusion/fusion-release /etc/fusion-release 2>/dev/null | head -n1)"
+    echo "-- FusionOS: $(. /usr/lib/fusion/fusion-release 2>/dev/null; echo "${FUSION_VERSION:-?} (${FUSION_MILESTONE:-?})")"
     echo "slot: $(cat /run/fusion/slot 2>/dev/null)   boot-lemez: $(cat /run/fusion/boot-disk 2>/dev/null)"
     echo "bootloader: $(efistr LoaderInfo)"
     echo "firmware:   $(efistr LoaderFirmwareInfo)  (UEFI $(efistr LoaderFirmwareType))"
@@ -64,7 +64,7 @@ echo "-- az /etc-ben módosított / új fájlok (a rendszerképhez képest):"
 find "$U/etc" -xdev \( -type f -o -type l -o -type c \) 2>/dev/null | sed "s#$U##" | sed 's#^/etc/NetworkManager/system-connections/.*#/etc/NetworkManager/system-connections/(rejtve)#' | sort | uniq -c | awk '{print "   "$2}' | head -n 80
 echo "-- törlésjelölők (overlay whiteout) száma: $(find "$U" -xdev -type c 2>/dev/null | wc -l)"
 echo "-- a korábbi frissítésekből félretett fájlok (stale): $(ls "$m/overlay/stale" 2>/dev/null | wc -l) alkalom"
-echo "-- image-release: $(sed -n 's/^FUSION_PRETTY_NAME=//p' "$m/overlay/image-release" 2>/dev/null)"
+echo "-- image-release: $(sed -n "s/^FUSION_VERSION=//p" "$m/overlay/image-release" 2>/dev/null | tr -d "'")"
 if [ -n "$esp" ] && mount -o ro "$esp" "$e" 2>/dev/null; then
     echo "-- ESP: $(df -h "$e" | awk 'NR==2{print $3" / "$2}')"; (cd "$e" && find EFI/Linux loader -type f | sort | sed 's/^/   /')
 fi
