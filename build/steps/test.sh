@@ -177,6 +177,8 @@ step_test() {
             # M6: Fusion Shell — mindkét mérőváltozat: panel (dock, 40 px foglalás), Start menü
             # M6: Fusion Desktop — Shell (panel, Start menü, értesítés), Fájlkezelő, Beállítások
             _check "$log" "FUSION-M6: SHELL ready=yes .*panel=1 .*menu=1" "Fusion Shell: panel és Start menü" || ok_run=0
+            _check "$log" 'FUSION-M6: USERDIRS XDG_DOWNLOAD_DIR="$HOME/Letöltések" dir=van' "Letöltések mappa (XDG)" || ok_run=0
+            _check "$log" "FUSION-M6: FLATPAK-DL path=/home/fusion/Letöltések host=/home/fusion/Letöltések/fusion-flatpak-letoltes.AppImage" "Flatpak-program letöltése a valódi Letöltések mappába" || ok_run=0
             _check "$log" "FUSION-M6: X11 _NET_WM_WINDOW_TYPE_DOCK strut=40" "panel: dock, 40 px foglalás" || ok_run=0
             _check "$log" "FUSION-M6: NOTIFY rc=0 last=FusionOS önteszt toasts=[1-9]" "értesítés a D-Buson (org.freedesktop.Notifications) → buborék" || ok_run=0
             _check "$log" "FUSION-FILES: RESULT ok" "Fájlkezelő: másolás, mozgatás, törlés, archívumok, keresés, összehasonlítás" || ok_run=0

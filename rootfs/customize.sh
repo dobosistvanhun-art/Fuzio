@@ -188,6 +188,10 @@ for f in fusion-programs fusion-run fusion-appmeasure fusion-dev; do
 done
 # a Programkezelő próbatelepítője (a QEMU-teszt és a ZBook-ellenőrzés használja)
 install -m 0644 "$FUSION_ROOT/programs/tests/fusionteszt-setup.exe" "$PG/tests/fusionteszt-setup.exe"
+# a Flatpak-letöltés próbája (a homokozóból a valódi Letöltések mappába)
+install -m 0755 "$FUSION_ROOT/programs/tests/flatpak-download-test.sh" "$PG/tests/flatpak-download-test.sh"
+# az M7 (A/B frissítés) előtti felmérés — csak olvas
+install -D -m 0755 "$FUSION_ROOT/tools/m7-felmeres.sh" "$R/usr/lib/fusion/tools/m7-felmeres.sh"
 # a modulok betölthetők, a QML-fájlok hibátlanul fordulnak (felület nélkül, offscreen)
 in_root env HOME=/root QT_QPA_PLATFORM=offscreen python3 - <<'PY' || { echo "  [customize] HIBA: a Fusion Desktop modulok nem tölthetők be"; exit 1; }
 import sys, os, glob

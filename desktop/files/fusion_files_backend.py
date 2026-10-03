@@ -865,10 +865,28 @@ def compare_dirs(left_entries, right_entries):
     return lm, rm
 
 
+def download_dir():
+    """a Letöltések mappa (XDG_DOWNLOAD_DIR a ~/.config/user-dirs.dirs-ben — a munkamenet indulásakor jön létre)"""
+    home = os.path.expanduser("~")
+    try:
+        with open(os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "user-dirs.dirs"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("XDG_DOWNLOAD_DIR="):
+                    v = line.split("=", 1)[1].strip().strip('"')
+                    return v.replace("$HOME", home, 1) if v.startswith("$HOME") else v
+    except OSError:
+        pass
+    return ""
+
+
 def volumes():
     """„Ez a gép”: helyek és kötetek (a csatolatlanok is — kattintásra csatolhatók)"""
     home = os.path.expanduser("~")
     out = [{"name": "Saját mappa", "path": home, "icon": "home", "dev": "", "info": home, "mounted": True, "media": False}]
+    dl = download_dir()
+    if dl and os.path.isdir(dl) and os.path.realpath(dl) != os.path.realpath(home):
+        out.append({"name": os.path.basename(dl.rstrip("/")) or "Letöltések", "path": dl, "icon": "download", "dev": "",
+                    "info": dl, "mounted": True, "media": False})
     if os.path.isdir("/data"):
         out.append({"name": "Adatok (FusionOS DATA)", "path": "/data", "icon": "drive", "dev": "", "info": "/data", "mounted": True, "media": False})
     out.append({"name": "Rendszer", "path": "/", "icon": "drive", "dev": "", "info": "/ (csak olvasható alap)", "mounted": True, "media": False})
@@ -1282,6 +1300,43 @@ class Files(QObject):
             return ""
         ui.spawn(["fusion-run", progs[0][0], path])
         return progs[0][1]
+
+    @pyqtSlot(str, result="QVariant")
+    def openWithChoices(self, path):
+        """„Megnyitás ezzel…”: a programok (a típust ismerők elöl), a kulcs (.svg) és a mostani választás"""
+        if fp is None:
+            return {"key": "", "keyLabel": "", "current": "", "items": []}
+        try:
+            d = fp.open_with_choices(path)
+        except Exception:
+            d = {"key": "", "current": "", "items": []}
+        k = d["key"]
+        d["keyLabel"] = (k + " fájlokat") if k.startswith(".") else (k + " típusú fájlokat") if k else ""
+        cur = d["current"]
+        d["currentName"] = "Fusion nézőke" if cur == fp.BUILTIN else next((i["name"] for i in d["items"] if i["id"] == cur), "")
+        return d
+
+    @pyqtSlot(str, str, bool, result=str)
+    def openWith(self, path, pid, always):
+        """megnyitás a választott programmal (pid üres: a Fusion nézőke — azt a felület nyitja);
+        always: ezentúl ez a típus mindig ezzel nyíljon (Enter, dupla kattintás)"""
+        if fp is None:
+            return "a Programkezelő nem érhető el"
+        try:
+            k = fp.assoc_key(path)
+            if always and k:
+                fp.associate(k, pid or fp.BUILTIN)
+            if pid:
+                ui.spawn(["fusion-run", pid, path])
+        except Exception as e:
+            return str(e)
+        return ""
+
+    @pyqtSlot(str)
+    def resetAssociation(self, path):
+        """a választás törlése: a típus újra az alapértelmezés szerint nyílik"""
+        if fp is not None:
+            fp.dissociate(fp.assoc_key(path))
 
     # --- keresés ---
     @pyqtProperty("QVariant", notify=searchChanged)

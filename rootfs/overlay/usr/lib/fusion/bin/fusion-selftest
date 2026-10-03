@@ -234,6 +234,9 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-shell menu; sleep 1
     echo "FUSION-M6: SHELL ready=$([ -e /run/user/1000/fusion-shell.ready ] && echo yes || echo no) wait=${i}s panel=$(printf '%s' "$pw" | grep -c IsViewable) width=$(printf '%s' "$pw" | sed -n 's/.*Width: //p') menu=$mv"
     echo "FUSION-M6: X11 $(printf '%s' "$strut" | grep -o '_NET_WM_WINDOW_TYPE_DOCK') strut=$(printf '%s' "$strut" | grep -o 'STRUT_PARTIAL(CARDINAL) = [0-9, ]*' | cut -d= -f2 | cut -d, -f4 | tr -d ' ')"
+    # Letöltések mappa: a munkamenet beállítja (XDG), és egy Flatpak-program (homokozó, xdg-download) ide ment
+    echo "FUSION-M6: USERDIRS $(grep '^XDG_DOWNLOAD_DIR=' /home/fusion/.config/user-dirs.dirs 2>/dev/null) dir=$([ -d /home/fusion/Letöltések ] && echo van || echo nincs)"
+    urun timeout 120 sh /usr/lib/fusion/programs/tests/flatpak-download-test.sh /tmp/fusion-fpdl 2>&1 | grep '^DL ' | sed 's/^/FUSION-M6: FLATPAK-/'
     # értesítés a szabványos D-Bus-szolgáltatáson át → buborék + a Shell állapotában
     urun fusion-notify -i settings "FusionOS önteszt" "értesítés a D-Buson át"; nrc=$?
     sleep 2

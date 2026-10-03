@@ -13,7 +13,7 @@ FWindow {
     property var other: activeSide === "left" ? rp : lp
     property string message: ""
     property bool busy: files.jobState.active === true
-    property bool modal: dlg.visible || conflictDlg.visible || errDlg.visible || progress.visible || driveMenu.visible || ctxMenu.visible
+    property bool modal: dlg.visible || conflictDlg.visible || errDlg.visible || progress.visible || driveMenu.visible || ctxMenu.visible || openWithDlg.visible
 
     function switchPanel() { activeSide = activeSide === "left" ? "right" : "left"; act.focusList() }
     function say(t) { message = t; msgTimer.restart() }
@@ -53,6 +53,7 @@ FWindow {
         var sel = act.selection(), it = act.current()
         switch (a) {
         case "view": if (it.name && !it.isDir) openViewer(it.full); break
+        case "openwith": if (it.name && !it.isDir && !it.isParent) openWithDlg.show(it.full); break
         case "install": if (it.name && !it.isDir) { files.installProgram(it.full); say("a Programkezelő megnyílt: " + it.name) } break
         case "edit": if (it.name && !it.isDir) openEditor(it.full); break
         case "newfile": ask("Új fájl", "Az új fájl neve:", "", function (v) { var e = files.newFile(act.model.path, v); if (e) err("Nem hozható létre", e); else { act.model.reloadKeep(); act.setCur(act.model.indexOf(v)); openEditor(act.model.path + "/" + v) } }); break
@@ -152,6 +153,8 @@ FWindow {
     // --- billentyűparancsok (a párbeszédek alatt nem) ---
     component Key: Shortcut { enabled: !win.modal; context: Qt.WindowShortcut }
     Key { sequence: "F3"; onActivated: doAction("view") }
+    Key { sequence: "Shift+Return"; onActivated: doAction("openwith") }
+    Key { sequence: "Shift+Enter"; onActivated: doAction("openwith") }
     Key { sequence: "F4"; onActivated: doAction("edit") }
     Key { sequence: "Shift+F4"; onActivated: doAction("newfile") }
     Key { sequence: "F5"; onActivated: doAction("copy") }
@@ -202,6 +205,7 @@ FWindow {
         Menu {
             title: "Fájl"
             MI { text: "Megtekintés"; keys: "F3"; act: "view" }
+            MI { text: "Megnyitás ezzel…"; keys: "Shift+Enter"; act: "openwith" }
             MI { text: "Szerkesztés"; keys: "F4"; act: "edit" }
             MI { text: "Új fájl"; keys: "Shift+F4"; act: "newfile" }
             MenuSeparator {}
@@ -392,6 +396,7 @@ FWindow {
             background: Rectangle { color: ci.highlighted ? Theme.selected : "transparent" }
         }
         CI { text: "Megnyitás"; onTriggered: win.openRow(win.act, win.act.cur) }
+        CI { text: "Megnyitás ezzel… (Shift+Enter)"; act: "openwith" }
         CI { text: "Megtekintés (F3)"; act: "view" }
         CI { text: "Szerkesztés (F4)"; act: "edit" }
         MenuSeparator {}
@@ -442,6 +447,76 @@ FWindow {
                    color: Theme.mark; font.family: Theme.font; font.pixelSize: 12; elide: Text.ElideMiddle }
         }
     }
+    // --- Megnyitás ezzel…: program választása, és ha kell: „mindig ezzel” ---
+    FDialog {
+        id: openWithDlg
+        property string path: ""
+        property var info: ({ key: "", keyLabel: "", current: "", currentName: "", items: [] })
+        property string sel: ""            // a választott program; "" = Fusion nézőke
+        title: "Megnyitás ezzel"
+        buttons: [["Mégse", ""], ["Megnyitás", "primary"]]
+        function show(p) {
+            path = p; info = files.openWithChoices(p)
+            var cur = info.current
+            sel = cur === "-" ? "" : (cur || (info.items.length && info.items[0].rec ? info.items[0].id : ""))
+            always.checked = false
+            open()
+        }
+        onOpened: owList.forceActiveFocus()
+        onClosed: win.act.focusList()
+        onButtonClicked: (i) => {
+            close()
+            if (i !== 1) return
+            var e = files.openWith(path, sel, always.checked)
+            if (e) { win.err("Nem sikerült megnyitni", e); return }
+            if (sel === "") win.openViewer(path)
+            else win.say("megnyitás: " + (info.items.find(x => x.id === sel) || {}).name)
+            if (always.checked) win.say("ezentúl a(z) " + info.keyLabel + " ez nyitja meg (Enter, dupla kattintás)")
+        }
+        Column {
+            x: 20; y: 16; width: 500; spacing: 10
+            Text { width: parent.width; text: openWithDlg.path.split("/").pop(); color: Theme.text; elide: Text.ElideMiddle
+                   font.family: Theme.font; font.pixelSize: 13; font.bold: true }
+            Rectangle {
+                width: parent.width; height: 300; color: Theme.base; border.color: Theme.border
+                ListView {
+                    id: owList
+                    anchors.fill: parent; anchors.margins: 1; clip: true
+                    model: [{ id: "", name: "Fusion nézőke (beépített)", icon: "files", iconFile: "", rec: false, builtin: true }].concat(openWithDlg.info.items)
+                    currentIndex: Math.max(0, model.findIndex(x => x.id === openWithDlg.sel))
+                    keyNavigationEnabled: true
+                    onCurrentIndexChanged: if (currentIndex >= 0 && model[currentIndex]) openWithDlg.sel = model[currentIndex].id
+                    Keys.onReturnPressed: openWithDlg.press(1)
+                    Keys.onEnterPressed: openWithDlg.press(1)
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        width: owList.width; height: 40
+                        color: ListView.isCurrentItem ? Theme.selected : (ma.containsMouse ? Theme.panel : "transparent")
+                        FIcon { x: 10; anchors.verticalCenter: parent.verticalCenter; size: 24
+                                name: modelData.iconFile || ("app-" + modelData.icon) }
+                        Text { x: 44; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 54; elide: Text.ElideRight
+                               text: modelData.name + (modelData.rec ? "   — ajánlott" : "") + (openWithDlg.info.current !== "" && (modelData.id === openWithDlg.info.current || (modelData.builtin && openWithDlg.info.current === "-")) ? "   (jelenleg ez)" : "")
+                               color: Theme.text; font.family: Theme.font; font.pixelSize: 13 }
+                        MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: owList.currentIndex = index
+                                    onDoubleClicked: { owList.currentIndex = index; openWithDlg.press(1) } }
+                    }
+                }
+            }
+            FCheck { id: always; visible: openWithDlg.info.key !== ""
+                     text: "Mindig ezzel nyissa meg a(z) " + openWithDlg.info.keyLabel }
+            Row {
+                visible: openWithDlg.info.current !== ""
+                spacing: 10
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "Most beállítva: " + openWithDlg.info.currentName
+                       color: Theme.dim; font.family: Theme.font; font.pixelSize: 12 }
+                FButton { text: "Alapértelmezés visszaállítása"
+                          onClicked: { files.resetAssociation(openWithDlg.path); openWithDlg.info = files.openWithChoices(openWithDlg.path)
+                                       win.say("a(z) " + openWithDlg.info.keyLabel + " ismét az alapértelmezés szerint nyílnak") } }
+            }
+        }
+    }
     FDialog {
         id: errDlg
         property string text: ""
@@ -461,6 +536,7 @@ FWindow {
         Text {
             x: 20; y: 16; color: Theme.text; font.family: Theme.mono; font.pixelSize: 12; lineHeight: 1.2
             text: "Tab            panelváltás           Enter        megnyitás\n" +
+                  "Shift+Enter    megnyitás ezzel… (program választása, „mindig ezzel”)\n" +
                   "Backspace      egy szinttel feljebb  Ctrl+PgUp    feljebb\n" +
                   "Insert         jelölés, és le        Szóköz       jelölés (+ mappaméret)\n" +
                   "Shift+nyilak   jelölés mozgatással   Ctrl+A       mind\n" +

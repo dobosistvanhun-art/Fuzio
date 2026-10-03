@@ -126,6 +126,17 @@ def selftest(work):
     nm = [e for e in tr.entries() if e["orig"] == tf][0]["name"]
     tr.purge(tr.HOME_TRASH, nm)
     check("PURGE", not any(e["orig"] == tf for e in tr.entries()) and not os.path.exists(os.path.join(tr.HOME_TRASH, "files", nm)))
+    # Megnyitás ezzel…: „mindig ezzel” (itt: a beépített nézőke) elmentődik, és visszaállítható
+    if fb.fp is not None:
+        sv = os.path.join(b, "rajz.svg")
+        with open(sv, "w") as f:
+            f.write("<svg/>")
+        ch = files.openWithChoices(sv)
+        r1 = files.openWith(sv, "", True)
+        saved = fb.fp._assoc_user().get(".svg")
+        files.resetAssociation(sv)
+        check("OPENWITH", ch["key"] == ".svg" and r1 == "" and saved == fb.fp.BUILTIN and ".svg" not in fb.fp._assoc_user(),
+              f"key={ch['key']} saved={saved} items={len(ch['items'])}")
     vols = fb.volumes()
     check("VOLUMES", any(v["path"] == os.path.expanduser("~") for v in vols), ", ".join(f"{v['name']}={v['path'] or v['dev']}" for v in vols))
     print(f"FUSION-FILES: RESULT {'ok' if ok else 'HIBA'}", flush=True)

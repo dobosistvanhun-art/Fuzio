@@ -13,6 +13,14 @@ DSP="$CONF/display.sh"
 if [ -r "$DSP" ] && ! grep -qvE '^(#.*|xrandr --output [A-Za-z0-9_.:+-]+ --mode [A-Za-z0-9_.:+-]+)$' "$DSP"; then
     sh "$DSP" 2>/dev/null
 fi
+# Letöltések mappa (XDG): a Flatpak-programok (pl. Firefox) csak így írhatnak a valódi saját mappába —
+# nélküle a letöltés a homokozó ideiglenes ~/Downloads mappájába kerül, és a program bezárásakor elvész
+UD="${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs"
+if ! grep -q '^XDG_DOWNLOAD_DIR=' "$UD" 2>/dev/null; then
+    mkdir -p "$(dirname "$UD")" && printf 'XDG_DOWNLOAD_DIR="$HOME/Letöltések"\n' >> "$UD"
+fi
+dl=$(sed -n 's/^XDG_DOWNLOAD_DIR="\(.*\)"$/\1/p' "$UD" | head -n 1 | sed "s#^\$HOME#$HOME#")
+case "$dl" in /*) mkdir -p "$dl" ;; esac
 # fejlesztői eszközök (fusion-dev): Node.js a DATA-n, az npm globális csomagjai (pl. wrangler) a saját mappában
 export PATH="/data/dev/node/bin:$HOME/.local/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
 # a munkamenet-busz szolgáltatásai (portálok, értesítések) lássák a kijelzőt

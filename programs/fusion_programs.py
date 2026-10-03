@@ -927,6 +927,13 @@ def sync_desktop():
             os.unlink(f)
     # mimeapps.list: csak a Fusion-bejegyzések alapértelmezései (a felhasználó választása elsőbbséget kap)
     user = _assoc_user()
+    # a kiterjesztéssel megadott választás (.svg → program) a MIME-típusára is vonatkozik
+    for k, pid in list(user.items()):
+        if k.startswith(".") and pid != BUILTIN:
+            mt = mimetypes.guess_type("x" + k)[0]
+            if mt and mt not in user:
+                user[mt] = pid
+                defaults.setdefault(mt, f"fusion-{pid}.desktop")
     lines = ["[Default Applications]"]
     for mt, desk in sorted(defaults.items()):
         pid = user.get(mt)
@@ -954,6 +961,47 @@ def associate(key, pid):
     sync_desktop()
 
 
+def dissociate(key):
+    """a felhasználó választásának törlése (vissza az alapértelmezésre)"""
+    a = _assoc_user()
+    if a.pop(key, None) is None:
+        return
+    os.makedirs(os.path.dirname(ASSOC_FILE), exist_ok=True)
+    with open(ASSOC_FILE, "w", encoding="utf-8") as f:
+        json.dump(a, f, ensure_ascii=False, indent=1)
+    sync_desktop()
+
+
+BUILTIN = "-"      # a társítás értéke, ha a Fusion saját nézőkéje nyissa meg
+
+
+def assoc_key(path):
+    """a társítás kulcsa: a kiterjesztés (.svg), ennek hiányában a MIME-típus"""
+    base = os.path.basename(path.lower())
+    if "." in base.strip("."):
+        return "." + base.rsplit(".", 1)[1]
+    return mimetypes.guess_type(path)[0] or ""
+
+
+def open_with_choices(path):
+    """a „Megnyitás ezzel…” ablakhoz: {key, current, items: [{id, name, icon, iconFile, rec}]}
+    rec: a program jelzi, hogy megnyitja ezt a típust (ezek elöl)"""
+    key = assoc_key(path)
+    cur = _assoc_user().get(key, "")
+    low = path.lower()
+    ext = "." + low.rsplit(".", 1)[1] if "." in os.path.basename(low) else ""
+    mt = mimetypes.guess_type(path)[0] or ""
+    rec = {m["id"] for m in programs()
+           if (ext and ext in m.get("open", "").lower().split())
+           or (mt and mt in [x.strip() for x in m.get("mime", "").replace(",", ";").split(";")])}
+    items = []
+    for m in programs():
+        i = info(m)
+        items.append({"id": m["id"], "name": i["name"], "icon": i["icon"], "iconFile": i["iconFile"], "rec": m["id"] in rec})
+    items.sort(key=lambda x: (not x["rec"], x["name"].lower()))
+    return {"key": key, "current": cur, "items": items}
+
+
 def assoc(path, explicit_only=False):
     """melyik program nyitja meg a fájlt: [(id, név)], az alapértelmezett elöl
     explicit_only: csak a Fusion-társítás (open = kiterjesztés) vagy a felhasználó választása számít,
@@ -962,6 +1010,8 @@ def assoc(path, explicit_only=False):
     ext = "." + low.rsplit(".", 1)[1] if "." in os.path.basename(low) else ""
     mt = mimetypes.guess_type(path)[0] or ""
     user = _assoc_user()
+    if (user.get(ext) or user.get(mt)) == BUILTIN:
+        return []
     res = []
     for m in programs():
         exts = m.get("open", "").lower().split()
@@ -970,6 +1020,11 @@ def assoc(path, explicit_only=False):
         if (ext and ext in exts) or (mt and mt in mimes and (not explicit_only or pref_id == m["id"])):
             res.append((m["id"], m.get("name", m["id"])))
     pref = user.get(ext) or user.get(mt)
+    # a felhasználó választása akkor is számít, ha a program maga nem jelzi ezt a típust
+    if pref and pref not in [r[0] for r in res]:
+        pm = manifest(pref)
+        if pm:
+            res.append((pref, pm.get("name", pref)))
     res.sort(key=lambda x: x[0] != pref)
     return res
 
