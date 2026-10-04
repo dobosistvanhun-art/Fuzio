@@ -27,6 +27,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **Lomtár** (Fájlkezelő): a törlés a szabványos lomtárba tesz (Ctrl+Z visszavonás, visszaállítás az eredeti helyre, Shift+Del végleges törlés); Drive-panel mellett sem lassú. Ellenőrzés: `docs/M6j-startmenu-fejlesztes.md`
 - **Letöltések** mappa (XDG — a Flatpak-programok, pl. a Firefox ide mentenek) és **Megnyitás ezzel…** (Shift+Enter, „mindig ezzel”) a Fájlkezelőben. Ellenőrzés: `docs/M6k-letoltes-tarsitas.md`
 - **A/B frissítés** (M7): az új rendszer a nem aktív slotba kerül és próbaként indul (systemd-boot boot-számlálás, 3 lehetőség); sikeres indulás után véglegesül, különben magától a korábbi indul. `fusion-update`, Minten `fusion-build update` (A/B) és `--hibas-proba`. Ellenőrzés: `docs/M7a-ab-frissites.md`
+- **Rendszerfrissítés fájlból** (Beállítások → Rendszerfrissítés): `.fupd` a Letöltésekből / pendrive-ról, újraindítás a FusionOS-be, értesítés véglegesítéskor / visszaálláskor. **Feladatkezelő** (Ctrl+Alt+Del): „nem válaszol” felismerés, bezárás, kényszerített bezárás. Ellenőrzés: `docs/M7b-frissites-feladatkezelo.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
   alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`

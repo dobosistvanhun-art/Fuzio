@@ -30,4 +30,6 @@ dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESK
 # Programkezelő: a parancssorból telepített Flatpakok és a régi helyű Windows-programok leírást kapnak
 timeout 30 fusion-programs sync >/dev/null 2>&1
 fusion-shell run &
+# a rendszerfrissítés eredménye (véglegesítés / visszaállás) értesítésként
+/usr/lib/fusion/bin/fusion-boot-notice &
 exec jwm

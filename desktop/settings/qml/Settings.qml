@@ -20,6 +20,7 @@ FWindow {
         { id: "programs", title: "Programkezelő", icon: "package", qml: "ProgramsPage.qml" },
         { id: "store", title: "Programbolt", icon: "store", qml: "StorePage.qml" },
         { id: "desktop", title: "Asztal", icon: "desktop", qml: "DesktopPage.qml" },
+        { id: "update", title: "Rendszerfrissítés", icon: "update", qml: "UpdatePage.qml" },
         { id: "system", title: "Rendszer", icon: "chip", qml: "SystemPage.qml" }
     ]
     Connections {

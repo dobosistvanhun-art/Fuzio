@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+"""FusionOS — próbaablak a Feladatkezelőhöz (fejlesztés / önteszt)
+
+    fusion-tasks-testwin ok     válaszoló ablak (_NET_WM_PING-re felel, a bezárásra kilép)
+    fusion-tasks-testwin hung   „lefagyott” ablak: megjelenik, aztán nem dolgozza fel az üzeneteit
+"""
+import os
+import sys
+import time
+
+from Xlib import X, Xatom, display, protocol
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "ok"
+d = display.Display()
+s = d.screen()
+title = "Fusion próba — " + ("válaszol" if mode == "ok" else "LEFAGYOTT")
+w = s.root.create_window(100 if mode == "ok" else 500, 100, 360, 160, 0, s.root_depth,
+                         background_pixel=s.white_pixel if mode == "ok" else s.black_pixel,
+                         event_mask=X.ExposureMask | X.StructureNotifyMask)
+WM_PROTOCOLS = d.intern_atom("WM_PROTOCOLS")
+DELETE = d.intern_atom("WM_DELETE_WINDOW")
+PING = d.intern_atom("_NET_WM_PING")
+w.set_wm_name(title.encode("latin-1", "replace").decode("latin-1"))
+w.change_property(d.intern_atom("_NET_WM_NAME"), d.intern_atom("UTF8_STRING"), 8, title.encode())
+w.set_wm_class("fusion-tasks-testwin", "FusionProba")
+w.set_wm_protocols([DELETE, PING])
+w.change_property(d.intern_atom("_NET_WM_PID"), Xatom.CARDINAL, 32, [os.getpid()])
+w.map()
+d.sync()
+if mode == "hung":
+    time.sleep(2)            # a térképezés lezajlik, utána nem olvas több üzenetet
+    while True:
+        time.sleep(3600)
+while True:
+    e = d.next_event()
+    if e.type == X.ClientMessage and e.client_type == WM_PROTOCOLS:
+        a = e.data[1][0]
+        if a == DELETE:
+            sys.exit(0)
+        if a == PING:
+            reply = protocol.event.ClientMessage(window=s.root, client_type=WM_PROTOCOLS, data=e.data)
+            s.root.send_event(reply, event_mask=X.SubstructureNotifyMask | X.SubstructureRedirectMask)
+            d.flush()

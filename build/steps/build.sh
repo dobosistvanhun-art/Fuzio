@@ -149,6 +149,18 @@ step_build() {
     ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
 
     _make_update_dir "$out/update" "$out/$uki" "$out/$ukib"
+    _make_fupd "$out/update" "$out/fusionos-$FUSION_VERSION-$FUSION_MILESTONE-$BUILD_STAMP.fupd"
+}
+
+# egyetlen frissítőfájl (pendrive-ra / Letöltésekbe): tömörítetlen tar, a manifest elöl
+# (a rendszerkép már tömörített EROFS) — Beállítások → Rendszerfrissítés, vagy: fusion-update apply <fájl>
+_make_fupd() {  # <frissítőcsomag-mappa> <kimenet .fupd>
+    local d="$1" f="$2"
+    rm -f "$(dirname "$f")"/fusionos-*.fupd
+    tar -C "$d" --format=gnu --owner=0 --group=0 --numeric-owner -cf "$f.tmp" \
+        fusion-update.manifest uki-A.efi uki-B.efi rootfs.erofs || die "a frissítőfájl nem készült el: $f"
+    mv "$f.tmp" "$f"
+    ok "frissítőfájl: $(basename "$f") ($(du -h "$f" | cut -f1))"
 }
 
 # frissítőcsomag-mappa (M7): fusion-update.manifest + rootfs.erofs + uki-A.efi + uki-B.efi

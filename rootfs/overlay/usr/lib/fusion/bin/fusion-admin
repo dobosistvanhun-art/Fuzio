@@ -15,7 +15,9 @@
 #    autounmount <kernelnév>          (systemd) kihúzáskor
 #    service-restart klipper|moonraker|nginx
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
-#    update-status                    az A/B rendszerfrissítés állapota (csak olvas)
+#    update-status [--json]           az A/B rendszerfrissítés állapota (csak olvas)
+#    update-apply <fájl.fupd>         rendszerfrissítés az inaktív slotba (fusion-update apply)
+#    update-reboot                    újraindítás a FusionOS-be (UEFI BootNext)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -202,7 +204,19 @@ case "$cmd" in
         case "$1" in *[!a-zA-Z0-9_-]*) fail "érvénytelen paraméter" ;; esac
         exec /usr/lib/fusion/devices/fusion-devd forget "$1" ;;
     update-status)
-        [ $# -eq 0 ] || fail "használat: update-status"
-        exec /usr/lib/fusion/bin/fusion-update status ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status" ;;
+        case "${1:-}" in "") exec /usr/lib/fusion/bin/fusion-update status ;;
+                         --json) exec /usr/lib/fusion/bin/fusion-update status --json ;;
+                         *) fail "használat: update-status [--json]" ;; esac ;;
+    update-apply)
+        # csak .fupd fájl (a felhasználó saját mappájából, cserélhető meghajtóról vagy a /data/import-ból)
+        [ $# -eq 1 ] || fail "használat: update-apply <fájl.fupd>"
+        case "$1" in /*.fupd) ;; *) fail "csak abszolút útvonalú .fupd fájl telepíthető" ;; esac
+        f=$(readlink -f -- "$1") || fail "nem található: $1"
+        case "$f" in /home/*|/run/media/*|/data/import/*) ;; *) fail "a frissítőfájl helye nem engedélyezett: $f" ;; esac
+        [ -f "$f" ] || fail "nem fájl: $f"
+        exec /usr/lib/fusion/bin/fusion-update apply "$f" ;;
+    update-reboot)
+        [ $# -eq 0 ] || fail "használat: update-reboot"
+        exec /usr/lib/fusion/bin/fusion-update reboot ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot" ;;
 esac

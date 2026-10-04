@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "system"]
+PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "update", "system"]
 
 
 def selftest():
@@ -53,6 +53,10 @@ def selftest():
     s = sb.system()
     print(f"FUSION-SETTINGS: SYSTEM version={s['version']} slot={s['slot']} bootdisk={s['bootdisk']} mem={s['memUsed']}/{s['memTotal']} "
           f"disks={','.join(x['name'] + ':' + str(x['pct']) + '%' for x in s['disks'])}", flush=True)
+    u = sb.update_state()
+    print(f"FUSION-SETTINGS: UPDATE version={u['version']} slot={u['slot']} entries="
+          + (",".join(f"{e['slot']}:{e['state']}{'*' if e['running'] else ''}" for e in u["entries"]) or "-")
+          + f" files={len(u['files'])} error={u['error'] or '-'}", flush=True)
     all_apps = fusion_apps.load()
     print("FUSION-SETTINGS: APPS " + ",".join(a["id"] for a in all_apps if not a["search_only"]), flush=True)
     return 0

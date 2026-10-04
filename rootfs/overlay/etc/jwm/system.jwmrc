@@ -60,6 +60,8 @@
     <Key mask="CA" key="e">exec:fusion-files</Key>
     <Key mask="CA" key="t">exec:xterm</Key>
     <Key mask="CA" key="s">exec:fusion-settings</Key>
+    <Key mask="CA" key="Delete">exec:fusion-tasks</Key>
+    <Key mask="CS" key="Escape">exec:fusion-tasks</Key>
     <Key key="XF86AudioRaiseVolume">exec:fusion-sound up</Key>
     <Key key="XF86AudioLowerVolume">exec:fusion-sound down</Key>
     <Key key="XF86AudioMute">exec:fusion-sound mute</Key>

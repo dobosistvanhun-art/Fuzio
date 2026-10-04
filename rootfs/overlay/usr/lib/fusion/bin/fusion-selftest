@@ -10,14 +10,21 @@ if [ -e /data/.fusion-test-ab ]; then
     echo "FUSION-AB: STATE $(cat /run/fusion/boot-state 2>/dev/null)"
     fusion-update status 2>&1 | sed 's/^/FUSION-AB:   /'
     upd=$(blkid -t LABEL=FUSIONUPD -o device 2>/dev/null | head -n 1)
-    mkdir -p /run/fusion-upd; [ -n "$upd" ] && mount -o ro "$upd" /run/fusion-upd
+    # a frissítőlemez a /data/import alá: onnan a felhasználó is telepíthet (fusion-admin update-apply)
+    mkdir -p /data/import/upd; [ -n "$upd" ] && mount -o ro "$upd" /data/import/upd
     case "$abstep" in
         good|bad)
-            fusion-update apply "/run/fusion-upd/$abstep" > /run/fusion-ab.out 2>&1; arc=$?
+            if [ "$abstep" = good ]; then
+                # mint a Beállítások → Rendszerfrissítés: a felhasználó, sudo-val a szűk segéden át, .fupd fájlból
+                echo "FUSION-AB: GUARD $(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin update-apply /etc/passwd.fupd 2>&1 | head -n 1)"
+                runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin update-apply /data/import/upd/good.fupd > /run/fusion-ab.out 2>&1; arc=$?
+            else
+                fusion-update apply /data/import/upd/bad.fupd > /run/fusion-ab.out 2>&1; arc=$?
+            fi
             sed 's/^/FUSION-AB:   /' /run/fusion-ab.out
             echo "FUSION-AB: APPLY $abstep rc=$arc"
             [ "$abstep" = good ] && echo bad > /data/.fusion-test-ab || echo final > /data/.fusion-test-ab
-            sync; umount /run/fusion-upd 2>/dev/null
+            sync; umount /data/import/upd 2>/dev/null
             echo "FUSION-AB: REBOOT"
             systemctl reboot --no-block ;;
         *)
@@ -271,6 +278,9 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     # Fájlkezelő: a műveletek (felület nélkül), majd az ablak
     rm -rf /tmp/fusion-files-test; mkdir -p /tmp/fusion-files-test; chown fusion: /tmp/fusion-files-test
     urun fusion-files --selftest /tmp/fusion-files-test 2>&1 | sed 's/^/FUSION-M6:   /'
+    # Feladatkezelő: egy válaszoló és egy „lefagyott” próbaablak; a lefagyott felismerése és leállítása
+    urun timeout 60 fusion-tasks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
+    echo "FUSION-M6: CTRLALTDEL $(grep -c 'key="Delete">exec:fusion-tasks' /etc/jwm/system.jwmrc) target=$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)"
     urun sh -c 'fusion-files /home/fusion /data >/tmp/fusion-files.log 2>&1 &'
     i=0; while [ $i -lt 30 ] && [ "$(winview '/home/fusion')" != 1 ]; do sleep 1; i=$((i + 1)); done
     echo "FUSION-M6: FILES window=$(winview '/home/fusion') wait=${i}s"

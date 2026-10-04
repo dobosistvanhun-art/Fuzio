@@ -132,11 +132,12 @@ _test_ab() {
     rm -rf "$upd"; mkdir -p "$upd"
     # „good”: ugyanaz a rendszerkép, újabb build (a systemd-boot az újabbat választja)
     sleep 1; FUSION_VARIANT="test" step_build >/dev/null
-    cp -al "$out/update" "$upd/good"
+    _make_fupd "$out/update" "$upd/good.fupd" >/dev/null
     # „bad”: még újabb build, de a rendszerkép sérült (nem EROFS) — az initramfs nem tudja csatolni
     sleep 1; FUSION_VARIANT="test" step_build >/dev/null
     bad="$out/ab-bad.img"; head -c $((64 * 1024 * 1024)) /dev/zero | tr '\0' 'X' > "$bad"
     _make_update_dir "$upd/bad" "$out/$(uki_name A)" "$out/$(uki_name B)" "$bad" >/dev/null
+    _make_fupd "$upd/bad" "$upd/bad.fupd" >/dev/null; rm -rf "$upd/bad"
     rm -f "$out/upd.img"; truncate -s 1600M "$out/upd.img"
     mkfs.ext4 -q -F -E nodiscard -L FUSIONUPD -d "$upd" "$out/upd.img"
     rm -rf "$upd" "$bad"
@@ -148,6 +149,8 @@ _test_ab() {
     rm -f "$out/ab.img" "$out/upd.img"
     local ok_run=1 tries
     _check "$log" "FUSION-AB: BOOT step=good slot=A" "1. indítás: A slot" || ok_run=0
+    _check "$log" "FUSION-AB: GUARD fusion-admin: " "a segéd csak engedélyezett helyről telepít" || ok_run=0
+    _check "$log" "FUSION-AB:   frissítőcsomag: FusionOS .* — good.fupd" "telepítés .fupd fájlból, a felhasználó (fusion-admin)" || ok_run=0
     _check "$log" "FUSION-AB: APPLY good rc=0" "frissítés a B slotba" || ok_run=0
     _check "$log" "FUSION-AB: BOOT step=bad slot=B .*count=.*B+" "2. indítás: B, próbaként (számlálóval)" || ok_run=0
     _check "$log" "FUSION-AB: STATE VÉGLEGESÍTVE: fusionos-.*-B.efi" "a B véglegesítve (a számláló lekerült)" || ok_run=0
@@ -230,7 +233,10 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: UPDATE version=$FUSION_VERSION slot=A entries=A:ok\* files=0 error=-" "Beállítások → Rendszerfrissítés: állapot (sudo fusion-admin update-status)" || ok_run=0
+            _check "$log" "FUSION-TASKS: RESULT ok" "Feladatkezelő: lefagyott ablak felismerése és bezárása" || ok_run=0
+            _check "$log" "FUSION-M6: CTRLALTDEL 1 target=masked" "Ctrl+Alt+Del: Feladatkezelő (a konzolon nem indít újra)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,tasks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0

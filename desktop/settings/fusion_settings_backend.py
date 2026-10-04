@@ -33,9 +33,6 @@ DISPLAY_FILE = os.path.join(ui.CONFIG, "display.sh")
 BG_DEFAULT = "#16202b"
 SAFE = re.compile(r"^[A-Za-z0-9_.:+-]+$")
 JOB_DIR = os.path.expanduser("~/.local/share/fusion")
-JOB_LOG = os.path.join(JOB_DIR, "programs-job.log")
-JOB_PID = os.path.join(JOB_DIR, "programs-job.pid")
-JOB_TITLE = os.path.join(JOB_DIR, "programs-job.title")
 
 
 def _kv(path):
@@ -191,6 +188,70 @@ def installers():
     return out[:50]
 
 
+# --- Rendszerfrissítés (M7): .fupd fájlok a szokásos helyeken, a futó rendszer állapota ---
+def fupd_info(path):
+    """a frissítőfájl manifestje (csak a tar elejét olvassa)"""
+    import tarfile
+    try:
+        with tarfile.open(path, "r:") as t:
+            m = next((x for x in t if os.path.basename(x.name) == "fusion-update.manifest"), None)
+            txt = t.extractfile(m).read().decode("utf-8", "replace") if m else ""
+    except (tarfile.TarError, OSError):
+        return None
+    kv = dict(ln.split("=", 1) for ln in txt.splitlines() if "=" in ln and " " not in ln.split("=", 1)[0])
+    if "FUSION_VERSION" not in kv:
+        return None
+    return {"version": kv.get("FUSION_VERSION", "?"), "milestone": kv.get("FUSION_MILESTONE", ""),
+            "stamp": kv.get("BUILD_STAMP", "")}
+
+
+def update_files():
+    home = os.path.expanduser("~")
+    roots = [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + sorted(glob.glob("/run/media/*"))
+    seen, out = set(), []
+    for r in roots:
+        if not os.path.isdir(r):
+            continue
+        base = r.rstrip("/").count("/")
+        for dirpath, dirs, files in os.walk(r):
+            if dirpath.count("/") - base >= 2:
+                dirs[:] = []
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive")]
+            for f in files:
+                if not f.lower().endswith(".fupd"):
+                    continue
+                p = os.path.join(dirpath, f)
+                if os.path.realpath(p) in seen:
+                    continue
+                seen.add(os.path.realpath(p))
+                info = fupd_info(p)
+                if not info:
+                    continue
+                st = os.stat(p)
+                out.append(dict(info, path=p, name=f, size=ui.human_size(st.st_size), mtime=st.st_mtime,
+                                place=os.path.dirname(p).replace(home, "~")))
+    out.sort(key=lambda x: x.get("stamp", ""), reverse=True)
+    return out[:20]
+
+
+def update_state():
+    rc, out = ui.admin("update-status", "--json", timeout=20)
+    try:
+        st = json.loads(out) if rc == 0 else {}
+    except ValueError:
+        st = {}
+    rel = ui.fusion_release()
+    running = next((e for e in st.get("entries", []) if e.get("running")), None)
+    stamp = running["name"].split("-")[-2] if running and running["name"].count("-") >= 4 else ""
+    files = update_files()
+    for f in files:
+        f["newer"] = bool(f.get("stamp")) and (not stamp.isdigit() or f["stamp"] > stamp)
+    return {"version": rel.get("FUSION_VERSION", "?"), "milestone": rel.get("FUSION_MILESTONE", ""),
+            "slot": st.get("slot", _read("/run/fusion/slot", "?")), "state": st.get("state", ""),
+            "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "files": files,
+            "stamp": stamp}
+
+
 # --- Rendszer ---
 def system():
     rel = ui.fusion_release()
@@ -233,7 +294,7 @@ class Settings(QObject):
     def __init__(self):
         super().__init__()
         self._busy = set()
-        self._jobproc = None
+        self._jobprocs = {}
 
     def _async(self, tag, fn, *args):
         if tag in self._busy:
@@ -376,47 +437,57 @@ class Settings(QObject):
 
     # a hosszú műveletek (telepítés, eltávolítás, frissítés) külön folyamatban futnak: a Beállítások
     # bezárása nem szakítja meg őket; a végén értesítés jön, a felület a naplót mutatja
-    def _job_state(self):
+    def _jobfiles(self, kind):
+        base = os.path.join(JOB_DIR, f"{kind}-job")
+        return base + ".pid", base + ".log", base + ".title"
+
+    def _job_state(self, kind="programs"):
+        fpid, flog, ftitle = self._jobfiles(kind)
         try:
-            pid = int(_read(JOB_PID, "0") or 0)
+            pid = int(_read(fpid, "0") or 0)
         except ValueError:
             pid = 0
-        if self._jobproc is not None:
-            self._jobproc.poll()          # a saját indítású folyamat begyűjtése (ne maradjon zombi)
+        for pr in list(self._jobprocs.values()):
+            pr.poll()                     # a saját indítású folyamat begyűjtése (ne maradjon zombi)
         stat = _read(f"/proc/{pid}/stat") if pid > 0 else ""
         running = bool(stat) and stat.split(")")[-1].split()[:1] != ["Z"]
-        lines = _read(JOB_LOG).splitlines()
+        lines = _read(flog).splitlines()
         rc = next((int(x[3:]) for x in reversed(lines) if re.match(r"^RC=\d+$", x)), None)
         try:
-            age = time.time() - os.path.getmtime(JOB_LOG)
+            age = time.time() - os.path.getmtime(flog)
         except OSError:
             age = 1e9
-        return {"running": running, "rc": rc, "title": _read(JOB_TITLE), "recent": running or age < 600,
+        return {"running": running, "rc": rc, "title": _read(ftitle), "recent": running or age < 600,
                 "lines": [x for x in lines if not x.startswith("RC=")][-14:]}
 
-    def _job(self, title, args):
-        if self._job_state()["running"]:
+    def _job(self, title, args, kind="programs", cmd=("fusion-programs",), app="Programkezelő", icon="package",
+             okpat="^(Telepítve|Eltávolítva|kész|fusion-programs:)"):
+        if self._job_state(kind)["running"]:
             return "már fut egy művelet — várja meg a végét"
-        os.makedirs(os.path.dirname(JOB_LOG), exist_ok=True)
-        with open(JOB_TITLE, "w") as f:
+        fpid, flog, ftitle = self._jobfiles(kind)
+        os.makedirs(JOB_DIR, exist_ok=True)
+        with open(ftitle, "w") as f:
             f.write(title)
-        script = ('echo $$ > "$1"; shift; log=$1; shift; title=$1; shift; : > "$log"; '
-                  'fusion-programs "$@" >> "$log" 2>&1; rc=$?; echo "RC=$rc" >> "$log"; '
-                  'last=$(grep -E "^(Telepítve|Eltávolítva|kész|fusion-programs:)" "$log" | tail -n 1); '
-                  'if [ $rc -eq 0 ]; then fusion-notify -i package -a Programkezelő "$title: kész" "$last"; '
-                  'else fusion-notify -u critical -i package -a Programkezelő "$title: sikertelen" "${last#fusion-programs: }"; fi')
-        self._jobproc = subprocess.Popen(["sh", "-c", script, "fusion-programs-job", JOB_PID, JOB_LOG, title] + args,
-                                         start_new_session=True, stdin=subprocess.DEVNULL,
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        script = ('echo $$ > "$1"; shift; log=$1; shift; title=$1; shift; app=$1; shift; icon=$1; shift; pat=$1; shift; '
+                  ': > "$log"; "$@" >> "$log" 2>&1; rc=$?; echo "RC=$rc" >> "$log"; '
+                  'last=$(grep -E "$pat" "$log" | tail -n 1); '
+                  'if [ $rc -eq 0 ]; then fusion-notify -i "$icon" -a "$app" "$title: kész" "$last"; '
+                  'else err=$(grep -v "^RC=" "$log" | tail -n 1); fusion-notify -u critical -i "$icon" -a "$app" '
+                  '"$title: sikertelen" "${err#*: }"; fi')
+        self._jobprocs[kind] = subprocess.Popen(
+            ["sh", "-c", script, "fusion-job", fpid, flog, title, app, icon, okpat] + list(cmd) + list(args),
+            start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(0.2)
-        self._job_watch()
+        self._job_watch(kind)
         return ""
 
-    def _job_watch(self):
+    def _job_watch(self, kind="programs"):
+        tag = "program-job" if kind == "programs" else f"{kind}-job"
+
         def work():
             for _ in range(36000):
-                st = self._job_state()
-                self.result.emit("program-job", st)
+                st = self._job_state(kind)
+                self.result.emit(tag, st)
                 if not st["running"]:
                     break
                 time.sleep(0.5)
@@ -662,6 +733,33 @@ class Settings(QObject):
         os.makedirs(ui.CONFIG, exist_ok=True)
         with open(os.path.join(ui.CONFIG, "dashboard"), "w") as f:
             f.write("on\n" if on else "off\n")
+
+    # --- Rendszerfrissítés ---
+    @pyqtSlot()
+    def updateRefresh(self):
+        def f():
+            d = update_state()
+            d["job"] = self._job_state("update")
+            return d
+        self._async("update", f)
+
+    @pyqtSlot(str, result=str)
+    def updateInstall(self, path):
+        if not path.endswith(".fupd") or not os.path.isfile(path):
+            return "nem .fupd frissítőfájl: " + path
+        info = fupd_info(path) or {}
+        return self._job("Rendszerfrissítés: FusionOS " + info.get("version", "?"), [path], kind="update",
+                         cmd=("sudo", "-n", ui.ADMIN, "update-apply"), app="Rendszerfrissítés", icon="update",
+                         okpat="^KÉSZ:")
+
+    @pyqtSlot()
+    def updateJobWatch(self):
+        if self._job_state("update")["running"]:
+            self._job_watch("update")
+
+    @pyqtSlot()
+    def updateReboot(self):
+        self._async("power", lambda: dict(zip(("rc", "msg"), ui.admin("update-reboot"))))
 
     # --- Rendszer ---
     @pyqtSlot()

@@ -33,6 +33,8 @@ G = {
     "power": "M12 3v8 M7 6a8 8 0 1 0 10 0",
     "restart": "M20 12a8 8 0 1 1-2.3-5.6 M20 4v5h-5",
     "logout": "M14 4H5v16h9 M10 12h10 M17 9l3 3-3 3",
+    "tasks": "M3 4h18v16H3z M3 8h18 M6 16l3-4 3 2 3-5 3 3",
+    "update": "M12 3v10 M8 9l4 4 4-4 M4 15v5h16v-5",
     "bell": "M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 20a2 2 0 0 0 4 0",
     "search": "M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z M15.5 15.5 20 20",
     "close": "M6 6l12 12 M18 6 6 18",
@@ -114,6 +116,7 @@ APPS = {
     "store": ("store", "#0f766e"),
     "cloud": ("cloud", "#2563eb"),
     "volume": ("volume", "#7c3aed"),
+    "tasks": ("tasks", "#9a3412"),
 }
 
 

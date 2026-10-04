@@ -2,8 +2,10 @@
 """FusionOS — A/B rendszerfrissítés (M7)
 
     fusion-update status              slotok és boot-bejegyzések (aktív, próba, hibás, tartalék)
-    fusion-update apply <mappa>       frissítés az INAKTÍV slotba (a futó rendszerhez nem nyúl);
-                                      a mappában: fusion-update.manifest, rootfs.erofs, uki-A.efi, uki-B.efi
+    fusion-update apply <fájl.fupd|mappa>
+                                      frissítés az INAKTÍV slotba (a futó rendszerhez nem nyúl);
+                                      a csomagban: fusion-update.manifest, rootfs.erofs, uki-A.efi, uki-B.efi
+    fusion-update reboot              újraindítás — a következő indítás is a FusionOS (UEFI BootNext)
     fusion-update boot-check          (fusion-boot-check.service) a sikeres indulás ellenőrzése;
                                       próba-indításnál siker esetén véglegesít, hiba esetén újraindít
 
@@ -12,12 +14,15 @@ ESP-re; a systemd-boot minden indításkor csökkenti a számlálót. Ha a rends
 program leveszi a számlálót (véglegesítés). Ha háromszor nem sikerül, a bejegyzés hátra kerül, és
 magától a korábbi slot indul. Root kell hozzá (a grafikus felület a fusion-admin segéden át hívja).
 """
+import fcntl
 import glob
 import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
+import tarfile
 import time
 
 EFIVARS = "/sys/firmware/efi/efivars"
@@ -131,6 +136,9 @@ class Esp:
 
     def __enter__(self):
         os.makedirs(ESP_MNT, exist_ok=True)
+        # egyszerre csak egy folyamat csatolja (pl. boot-check és a Beállítások állapotlekérdezése)
+        self.lock = open("/run/fusion/esp.lock", "w")
+        fcntl.flock(self.lock, fcntl.LOCK_EX)
         if os.path.ismount(ESP_MNT):
             run(["umount", ESP_MNT], check=False)
         run(["mount", "-t", "vfat", "-o", ("rw" if self.rw else "ro") + ",nodev,nosuid,noexec,umask=0077",
@@ -140,6 +148,7 @@ class Esp:
     def __exit__(self, *exc):
         os.sync()
         run(["umount", ESP_MNT], check=False)
+        self.lock.close()
 
 
 def ukis(esp):
@@ -160,32 +169,71 @@ def fsync_path(path):
 
 
 # ---------------------------------------------------------------------------
-def cmd_status():
+def status():
     entry = efivar("LoaderEntrySelected")
-    say(f"futó slot: {current_slot()}   elindított bejegyzés: {entry or '?'}")
-    say(f"bootloader: {efivar('LoaderInfo') or '?'}")
+    pe = parse(entry)
     try:
-        say(f"állapot: {open(STATE).read().strip()}")
+        state = open(STATE).read().strip()
     except OSError:
-        pass
+        state = ""
+    d = {"slot": current_slot(), "entry": entry, "bootloader": efivar("LoaderInfo"), "state": state, "entries": []}
+    if os.geteuid() == 0:
+        with Esp() as esp:
+            for e in ukis(esp):
+                d["entries"].append({"slot": e["slot"], "name": e["name"], "version": e["base"].split("-")[0],
+                                     "state": "bad" if e["bad"] else "trial" if e["trial"] else "ok",
+                                     "left": e["left"], "running": bool(pe and pe["key"] == e["key"])})
+    return d
+
+
+def cmd_status(as_json=False):
+    d = status()
+    if as_json:
+        print(json.dumps(d, ensure_ascii=False))
+        return 0
+    say(f"futó slot: {d['slot']}   elindított bejegyzés: {d['entry'] or '?'}")
+    say(f"bootloader: {d['bootloader'] or '?'}")
+    if d["state"]:
+        say(f"állapot: {d['state']}")
     if os.geteuid() != 0:
         say("(a boot-bejegyzések listája: sudo /usr/lib/fusion/bin/fusion-admin update-status)")
-        return 0
-    with Esp() as esp:
-        for e in ukis(esp):
-            st = "HIBÁS (nem indult el)" if e["bad"] else f"próba ({e['left']} lehetőség)" if e["trial"] else "véglegesített"
-            cur = "  ← fut" if entry and parse(entry) and parse(entry)["key"] == e["key"] else ""
-            say(f"  {e['slot']}: {e['name']}  [{st}]{cur}")
+    for e in d["entries"]:
+        st = {"bad": "HIBÁS (nem indult el)", "trial": f"próba ({e['left']} lehetőség)", "ok": "véglegesített"}[e["state"]]
+        say(f"  {e['slot']}: {e['name']}  [{st}]{'  ← fut' if e['running'] else ''}")
     return 0
 
 
 # ---------------------------------------------------------------------------
-def read_manifest(d):
-    path = os.path.join(d, "fusion-update.manifest")
-    try:
-        lines = open(path, encoding="utf-8").read().splitlines()
-    except OSError:
-        raise UpdateError(f"nem frissítőcsomag (hiányzik: {path})")
+class Source:
+    """a frissítőcsomag: mappa vagy .fupd fájl (tömörítetlen tar: manifest, uki-A.efi, uki-B.efi, rootfs.erofs)"""
+    def __init__(self, path):
+        self.path = os.path.abspath(path)
+        self.tar = None
+        if os.path.isdir(self.path):
+            return
+        if not os.path.isfile(self.path):
+            raise UpdateError(f"nem található: {self.path}")
+        try:
+            self.tar = tarfile.open(self.path, "r:")
+        except (tarfile.TarError, OSError) as e:
+            raise UpdateError(f"nem FusionOS-frissítőfájl ({e})")
+        self.members = {os.path.basename(m.name): m for m in self.tar.getmembers() if m.isfile()}
+
+    def open(self, name):
+        if self.tar is None:
+            try:
+                return open(os.path.join(self.path, name), "rb")
+            except OSError:
+                raise UpdateError(f"hiányzik a csomagból: {name}")
+        m = self.members.get(name)
+        if m is None:
+            raise UpdateError(f"hiányzik a csomagból: {name}")
+        return self.tar.extractfile(m)
+
+
+def read_manifest(src):
+    with src.open("fusion-update.manifest") as f:
+        lines = f.read().decode("utf-8", "replace").splitlines()
     meta, files = {}, {}
     for ln in lines:
         ln = ln.strip()
@@ -204,31 +252,33 @@ def read_manifest(d):
     return meta, files
 
 
-def sha256(path, size):
+def sha256(src, name, size, progress=False):
     h = hashlib.sha256()
-    n = 0
-    with open(path, "rb") as f:
+    n, last = 0, -25
+    with src.open(name) as f:
         while True:
-            b = f.read(1 << 20)
+            b = f.read(4 << 20)
             if not b:
                 break
             h.update(b)
             n += len(b)
+            if progress and size and n * 100 // size >= last + 25:
+                last = n * 100 // size - (n * 100 // size) % 25
+                say(f"  ellenőrzés {last}%")
     if n != size:
-        raise UpdateError(f"{os.path.basename(path)}: a méret nem egyezik ({n} ≠ {size})")
+        raise UpdateError(f"{name}: a méret nem egyezik ({n} ≠ {size}) — sérült vagy hiányos csomag")
     return h.hexdigest()
 
 
-def write_slot(img, part):
-    size = os.path.getsize(img)
+def write_slot(src, size, want, part):
     psize = int(run(["blockdev", "--getsize64", part]).stdout.strip())
     if size > psize:
         raise UpdateError(f"a rendszerkép ({size >> 20} MiB) nem fér a slotba ({psize >> 20} MiB)")
     say(f"rendszerkép írása: {part} ({size >> 20} MiB)…")
-    with open(img, "rb") as src, open(part, "r+b", buffering=0) as dst:
+    with src.open("rootfs.erofs") as s, open(part, "r+b", buffering=0) as dst:
         done, last = 0, -10
         while True:
-            b = src.read(4 << 20)
+            b = s.read(4 << 20)
             if not b:
                 break
             dst.write(b)
@@ -236,59 +286,57 @@ def write_slot(img, part):
             pct = done * 100 // size
             if pct >= last + 10:
                 last = pct - pct % 10
-                say(f"  {last}%")
+                say(f"  írás {last}%")
         os.fsync(dst.fileno())
     run(["blockdev", "--flushbufs", part], check=False)
-    # visszaolvasás: a lemezről (a gyorsítótár ürítése után)
+    # visszaolvasás a lemezről (a gyorsítótár ürítése után), az ellenőrzőösszeg a manifestből
     with open("/proc/sys/vm/drop_caches", "w") as f:
         f.write("1")
-    h_img, h_part = hashlib.sha256(), hashlib.sha256()
-    with open(img, "rb") as a, open(part, "rb") as b:
+    h = hashlib.sha256()
+    with open(part, "rb") as b:
         left = size
         while left > 0:
-            n = min(4 << 20, left)
-            h_img.update(a.read(n))
-            h_part.update(b.read(n))
-            left -= n
-    if h_img.digest() != h_part.digest():
+            chunk = b.read(min(4 << 20, left))
+            if not chunk:
+                break
+            h.update(chunk)
+            left -= len(chunk)
+    if h.hexdigest() != want:
         raise UpdateError(f"a slot tartalma eltér a rendszerképtől ({part}) — hibás lemez?")
     say("rendszerkép: ellenőrizve (visszaolvasás egyezik)")
 
 
-def cmd_apply(d):
-    d = os.path.abspath(d)
-    meta, files = read_manifest(d)
+def cmd_apply(path):
+    src = Source(path)
+    meta, files = read_manifest(src)
     ver = meta.get("FUSION_VERSION", "?")
-    say(f"frissítőcsomag: FusionOS {ver} ({meta.get('FUSION_MILESTONE', '?')})")
+    say(f"frissítőcsomag: FusionOS {ver} ({meta.get('FUSION_MILESTONE', '?')}) — {os.path.basename(src.path)}")
     try:
         blessed = open(STATE).read().startswith("VÉGLEGESÍTVE")
     except OSError:
         blessed = False
     if trial_entry() and not blessed:
         raise UpdateError("a mostani indítás még próba (az előző frissítés ellenőrzése nem fejeződött be) — várjon pár percet, vagy indítsa újra")
-    say("ellenőrzőösszegek…")
-    for name, (want, size) in files.items():
-        got = sha256(os.path.join(d, name), size)
-        if got != want:
-            raise UpdateError(f"{name}: az ellenőrzőösszeg nem egyezik — sérült csomag")
     cur = current_slot()
     target = "B" if cur == "A" else "A"
     part = partition(f"FUSION_{target}")
-    say(f"a futó rendszer: {cur} slot — a frissítés a(z) {target} slotba kerül ({part})")
-    uki = os.path.join(d, f"uki-{target}.efi")
-    newname = None
     m = re.match(r"^fusionos-(.+)-[AB]\.efi$", meta.get(f"UKI_{target}", ""))
-    if m:
-        newname = f"fusionos-{m.group(1)}-{target}"
-    if not newname:
+    if not m:
         raise UpdateError(f"a manifestből hiányzik az UKI_{target} név")
-    newstamp = re.sub(r"-[AB]$", "", newname).rsplit("-", 1)[-1]
+    newname = f"fusionos-{m.group(1)}-{target}"
+    newstamp = m.group(1).rsplit("-", 1)[-1]
     with Esp() as esp:
         # a régi (bélyeg nélküli, pl. 0.0.23) neveket nem számítjuk: azok mindig régebbiek
         others = [e["base"].rsplit("-", 1)[-1] for e in ukis(esp) if e["slot"] != target and not e["bad"]]
     if any(o.isdigit() and o >= newstamp for o in others):
         raise UpdateError("ez a csomag nem újabb a lemezen lévő (futó) rendszernél — a systemd-boot nem indítaná el. "
                           "Újabb buildet kell telepíteni.")
+    say("ellenőrzőösszegek (SHA-256)…")
+    for name, (want, size) in files.items():
+        if sha256(src, name, size, progress=name == "rootfs.erofs") != want:
+            raise UpdateError(f"{name}: az ellenőrzőösszeg nem egyezik — sérült csomag")
+    say(f"a futó rendszer: {cur} slot — a frissítés a(z) {target} slotba kerül ({part})")
+    uki = f"uki-{target}.efi"
     with Esp(rw=True) as esp:
         # 1. a cél-slot régi bejegyzései törlődnek ELŐBB (a félig írt slotra ne mutasson semmi)
         for e in ukis(esp):
@@ -297,15 +345,15 @@ def cmd_apply(d):
                 say(f"régi bejegyzés törölve: {e['name']}")
         os.sync()
         free = os.statvfs(esp)
-        if free.f_bavail * free.f_frsize < os.path.getsize(uki) + (4 << 20):
+        if free.f_bavail * free.f_frsize < files[uki][1] + (4 << 20):
             raise UpdateError("nincs elég hely az ESP-n")
     # 2. a rendszerkép (az ESP közben nincs csatolva — egy megszakadás csak a cél-slotot érinti)
-    write_slot(os.path.join(d, "rootfs.erofs"), part)
+    write_slot(src, files["rootfs.erofs"][1], files["rootfs.erofs"][0], part)
     # 3. az új bejegyzés: ideiglenes néven, majd átnevezve, próba-számlálóval
     with Esp(rw=True) as esp:
         lin = os.path.join(esp, "EFI", "Linux")
         tmp = os.path.join(lin, "fusion-update.tmp")
-        with open(uki, "rb") as s, open(tmp, "wb") as t:
+        with src.open(uki) as s, open(tmp, "wb") as t:
             while True:
                 b = s.read(1 << 20)
                 if not b:
@@ -320,6 +368,12 @@ def cmd_apply(d):
     say(f"KÉSZ: FusionOS {ver} a(z) {target} slotban. Újraindítás után próbaként indul; ha rendben elindul,")
     say(f"véglegessé válik — ha {TRIES}× nem, magától a mostani ({cur}) rendszer indul.")
     return 0
+
+
+def cmd_reboot():
+    """újraindítás úgy, hogy a következő indítás is a FusionOS legyen (a firmware alapértelmezése lehet a Mint)"""
+    set_bootnext()
+    os.execvp("systemctl", ["systemctl", "reboot"])
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +424,27 @@ def checks():
     return True, f"rendben (rendszer: {sysstate}{', felület fut' if desktop_expected() else ''})"
 
 
+NOTICE = "/run/fusion/boot-notice"
+NOTICED = "/var/lib/fusion/boot-notices"
+
+
+def noticed(name):
+    try:
+        return name in open(NOTICED).read().split()
+    except OSError:
+        return False
+
+
+def notice(title, body, remember=""):
+    """üzenet a felhasználónak (a munkamenet indulásakor a fusion-boot-notice értesítésként mutatja)"""
+    with open(NOTICE, "w") as f:
+        f.write(title + "\n" + body + "\n")
+    if remember:
+        os.makedirs(os.path.dirname(NOTICED), exist_ok=True)
+        with open(NOTICED, "a") as f:
+            f.write(remember + "\n")
+
+
 def set_state(s):
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     with open(STATE, "w") as f:
@@ -390,6 +465,15 @@ def cmd_boot_check():
         try:
             with Esp() as esp:
                 pe = next((e for e in ukis(esp) if e["key"] == pe["key"]), pe)   # a valódi fájlnév
+                # visszaállás után: egy újabb, de hibás (el nem indult) bejegyzés — egyszer szólunk róla
+                mystamp = pe["base"].rsplit("-", 1)[-1]
+                for e in ukis(esp):
+                    st = e["base"].rsplit("-", 1)[-1]
+                    if e["bad"] and st.isdigit() and (not mystamp.isdigit() or st > mystamp) and not noticed(e["name"]):
+                        notice("A frissítés nem indult el",
+                               f"A FusionOS {e['base'].split('-')[0]} {TRIES} próbálkozásra sem indult el, ezért a korábbi "
+                               f"rendszer ({pe['base'].split('-')[0]}) fut. Részletek: Beállítások → Rendszerfrissítés.",
+                               e["name"])
                 stale = any(not os.path.exists(os.path.join(esp, l.split()[1].lstrip("/")))
                             for c in glob.glob(os.path.join(esp, "loader", "entries", "*.conf"))
                             for l in open(c, encoding="utf-8") if l.startswith("efi "))
@@ -424,6 +508,8 @@ def cmd_boot_check():
         pe = real
         n = fix_entries(esp, pe["id"], slot)
     set_state(f"VÉGLEGESÍTVE: {pe['id']} (slot {slot}) — {why}" + (f"; {n} tartalék bejegyzés frissítve" if n else ""))
+    notice("Rendszerfrissítés kész", f"A FusionOS {pe['base'].split('-')[0]} rendben elindult, és véglegessé vált "
+           f"(slot {slot}). A korábbi rendszer tartaléknak megmaradt.")
     # egyirányú DATA-átalakítások csak ezután (a visszaállított régi rendszer is értse a DATA-t)
     for h in sorted(glob.glob(os.path.join(HOOKS, "*"))):
         if os.access(h, os.X_OK):
@@ -440,11 +526,13 @@ def main(a):
     if os.geteuid() != 0 and cmd != "status":
         raise UpdateError("root kell hozzá")
     if cmd == "status":
-        return cmd_status()
+        return cmd_status("--json" in a)
     if cmd == "apply" and len(a) == 2:
         return cmd_apply(a[1])
     if cmd == "boot-check":
         return cmd_boot_check()
+    if cmd == "reboot":
+        return cmd_reboot()
     say(__doc__.strip())
     return 2
 
