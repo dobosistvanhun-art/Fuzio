@@ -133,14 +133,21 @@ if modprobe mac80211_hwsim radios=2 2>/dev/null; then
     i=0; while [ $i -lt 60 ] && [ "$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5' | wc -l)" -lt 2 ]; do sleep 1; i=$((i + 1)); done
     ap=$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5 {print $1}' | tail -n 1)
     # a virtuális hozzáférési pont: indítás, ellenőrzés (Started yes), szükség esetén újra (lassú gépen késhet)
-    t=0
-    while [ $t -lt 4 ]; do
+    # 2 sikertelen próba után a másik virtuális rádió lesz a hozzáférési pont
+    devs=$(iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>=5 {print $1}')
+    t=0; aperr=""
+    while [ $t -lt 6 ]; do
+        if [ $t -eq 2 ]; then
+            old=$ap; ap=$(printf '%s\n' "$devs" | grep -vx "$old" | head -n 1)
+            iwctl device "$old" set-property Mode station >/dev/null 2>&1; sleep 2
+        fi
         iwctl device "$ap" set-property Mode ap >/dev/null 2>&1; sleep 2
-        iwctl ap "$ap" start FusionTeszt fusion12345 >/dev/null 2>&1; sleep 3
+        iwctl device "$ap" set-property Powered on >/dev/null 2>&1; sleep 1
+        aperr=$(iwctl ap "$ap" start FusionTeszt fusion12345 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tr '\n' ' '); sleep 3
         iwctl ap "$ap" show 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q 'Started *yes' && break
         t=$((t + 1)); sleep 3
     done
-    echo "FUSION-WIFI: AP $ap tries=$t"
+    echo "FUSION-WIFI: AP $ap tries=$t ${aperr:+(utolsó üzenet: $aperr)}"
     # lassú (KVM nélküli) gépen a másik rádió station-módja késhet
     i=0; while [ $i -lt 30 ] && ! iwctl device list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4' | grep -q ' station'; do sleep 1; i=$((i + 1)); done
     out=$(timeout 90 runuser -u fusion -- env FUSION_WIFI_PASSPHRASE=fusion12345 fusion-wifi connect FusionTeszt 2>&1)
