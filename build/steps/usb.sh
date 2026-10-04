@@ -280,6 +280,8 @@ step_update() {
     done
     [ "$(id -u)" -eq 0 ] || die "root kell:  sudo build/fusion-build update /dev/sdX"
     need lsblk mkfs.vfat udevadm blockdev mmd mcopy mdir mdel mren cmp
+    # mtools: a partíción formázott ESP fejlécére ne figyelmeztessen („Hidden … does not match sectors”)
+    export MTOOLS_SKIP_CHECK=1
     [ -n "$dev" ] || die "add meg a FusionOS-lemezt, pl.:  sudo build/fusion-build update /dev/sdb"
     local rel="$OUT_DIR/release"
     [ -d "$rel/esp/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
@@ -299,14 +301,20 @@ step_update() {
     done
     _unmount_fusion "$dev"
 
-    # melyik rendszer indul most alapértelmezetten (a legújabb, nem hibás bejegyzés) → a másik slotba írunk
+    # a megtartandó rendszer: a legújabb VÉGLEGESÍTETT (bizonyítottan induló) bejegyzés → a másik slotba írunk.
+    # Egy még ki nem próbált (számlálós) bejegyzés nem számít: egy újabb frissítés azt cseréli le.
     local list active="" astamp=-1 n sl st stp target tpart newuki newname
     list=$(_esp_ukis "$p1")
     while read -r n sl stp st; do
-        [ -n "$n" ] || continue
-        [ "$st" = hibas ] && continue
+        [ -n "$n" ] && [ "$st" = ok ] || continue
         if [ "$stp" -gt "$astamp" ]; then astamp=$stp; active=$sl; fi
     done <<< "$list"
+    if [ -z "$active" ]; then      # nincs véglegesített: a legújabb próba (nem hibás) marad
+        while read -r n sl stp st; do
+            [ -n "$n" ] && [ "$st" = proba ] || continue
+            if [ "$stp" -gt "$astamp" ]; then astamp=$stp; active=$sl; fi
+        done <<< "$list"
+    fi
     if [ "$active" = A ]; then target=B; tpart=$p3; else target=A; tpart=$p2; fi
     [ -n "$active" ] || { target=A; tpart=$p2; }
     local slot_b img_b
@@ -351,7 +359,7 @@ step_update() {
     # 1. a cél-slot régi bejegyzései törlődnek előbb (a félig írt slotra ne mutasson semmi)
     while read -r n sl stp st; do
         [ -n "$n" ] && [ "$sl" = "$target" ] || continue
-        mdel -i "$p1" "::/EFI/Linux/$n" && info "régi bejegyzés törölve: $n"
+        mdel -i "$p1" "::/EFI/Linux/$n" < /dev/null && info "régi bejegyzés törölve: $n"
     done <<< "$list"
     sync
     # 2. a rendszerkép a cél-slotba
@@ -368,21 +376,24 @@ step_update() {
     step "Bootloader és UKI"
     local f relp tmpd; tmpd=$(mktemp -d)
     for relp in EFI/BOOT/BOOTX64.EFI EFI/systemd/systemd-bootx64.efi EFI/Linux/fusion-diag.efi loader/loader.conf; do
-        mcopy -o -i "$p1" "$rel/esp/$relp" "::/$relp" || die "nem sikerült a másolás az ESP-re: $relp"
+        mcopy -o -i "$p1" "$rel/esp/$relp" "::/$relp" < /dev/null || die "nem sikerült a másolás az ESP-re: $relp"
         info "/$relp"
     done
-    mmd -i "$p1" ::/loader/entries 2>/dev/null || true
+    # (az mtools névütközéskor kérdezne — a mappát csak akkor hozzuk létre, ha nincs)
+    mdir -i "$p1" ::/loader/entries >/dev/null 2>&1 || mmd -i "$p1" ::/loader/entries < /dev/null \
+        || die "nem sikerült a loader/entries létrehozása az ESP-n"
     for f in "$rel"/esp/loader/entries/*.conf; do
         [ -e "$f" ] || continue
         sed -e "s#^efi /EFI/Linux/fusionos-.*\.efi\$#efi /EFI/Linux/$newuki#" -e "s/fusion\.slot=[AB]/fusion.slot=$target/" "$f" > "$tmpd/$(basename "$f")"
-        mcopy -o -i "$p1" "$tmpd/$(basename "$f")" "::/loader/entries/$(basename "$f")"
+        mcopy -o -i "$p1" "$tmpd/$(basename "$f")" "::/loader/entries/$(basename "$f")" < /dev/null \
+            || die "nem sikerült a másolás az ESP-re: loader/entries/$(basename "$f")"
     done
     rm -rf "$tmpd"
     # 4. az új rendszer UKI-ja: ideiglenes néven, majd átnevezve, 3 indítási próbával
-    mdel -i "$p1" ::/EFI/Linux/fusion-update.tmp 2>/dev/null || true
-    mcopy -i "$p1" "$newuki_file" ::/EFI/Linux/fusion-update.tmp || die "az UKI másolása nem sikerült"
+    mdel -i "$p1" ::/EFI/Linux/fusion-update.tmp < /dev/null 2>/dev/null || true
+    mcopy -D o -i "$p1" "$newuki_file" ::/EFI/Linux/fusion-update.tmp < /dev/null || die "az UKI másolása nem sikerült"
     [ -n "$ukitmp" ] && rm -rf "$ukitmp"
-    mren -i "$p1" ::/EFI/Linux/fusion-update.tmp "::/EFI/Linux/$newname" || die "az UKI átnevezése nem sikerült"
+    mren -D o -i "$p1" ::/EFI/Linux/fusion-update.tmp "::/EFI/Linux/$newname" < /dev/null || die "az UKI átnevezése nem sikerült"
     info "/EFI/Linux/$newname"
     sync
     ok "kész: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) a(z) $target slotban — a DATA változatlan."
