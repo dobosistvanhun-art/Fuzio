@@ -262,8 +262,9 @@ fi
 # --- M6: Fusion Desktop — Fusion Shell (panel, Start menü, értesítések), Fájlkezelő, Beállítások ---
 urun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion \
          USER=fusion DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus PATH=/usr/local/bin:/usr/bin:/bin "$@"; }
-winview() { urun xwininfo -root -tree 2>/dev/null | grep -F -- "$1" | head -n 1 | awk '{print $1}' | \
-            while read -r w; do urun xwininfo -id "$w" 2>/dev/null | grep -c IsViewable; done; }
+# 1, ha a címet tartalmazó ablakok közül bármelyik látható (a Qt segédablakai is egyezhetnek a címre)
+winview() { v=0; for w in $(urun xwininfo -root -tree 2>/dev/null | grep -F -- "$1" | awk '{print $1}'); do
+                urun xwininfo -id "$w" 2>/dev/null | grep -q IsViewable && { v=1; break; }; done; echo "$v"; }
 if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-shell ]; then
     i=0; while [ $i -lt 120 ] && [ ! -e /run/user/1000/fusion-shell.ready ]; do sleep 1; i=$((i + 1)); done
     sleep 2
@@ -289,8 +290,8 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun timeout -k 5 100 fusion-tasks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
     echo "FUSION-M6: CTRLALTDEL $(grep -c 'key="Delete">exec:fusion-tasks' /etc/jwm/system.jwmrc) target=$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)"
     urun sh -c 'fusion-files /home/fusion /data >/tmp/fusion-files.log 2>&1 &'
-    i=0; while [ $i -lt 30 ] && [ "$(winview '/home/fusion')" != 1 ]; do sleep 1; i=$((i + 1)); done
-    echo "FUSION-M6: FILES window=$(winview '/home/fusion') wait=${i}s"
+    i=0; fw=0; while [ $i -lt 30 ]; do fw=$(winview '/home/fusion'); [ "$fw" = 1 ] && break; sleep 1; i=$((i + 1)); done
+    echo "FUSION-M6: FILES window=$fw wait=${i}s"
     # Beállítások: minden oldal adatai, majd az ablak (egy példány: a második hívás oldalt vált)
     urun fusion-settings --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
     urun sh -c 'fusion-settings system >/tmp/fusion-settings.log 2>&1 &'
