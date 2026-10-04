@@ -113,27 +113,48 @@ def selftest():
         print(f"FUSION-TASKS: {name} {'ok' if cond else 'HIBA'}{(' ' + extra) if extra else ''}", flush=True)
         ok = ok and bool(cond)
 
-    pa = subprocess.Popen([sys.executable, TESTWIN, "ok"])
-    pb = subprocess.Popen([sys.executable, TESTWIN, "hung"])
+    import faulthandler
+    import signal
+    # ha valami beakad: 45 mp után a Python-veremkép a naplóba, és kilépés (a próbaablakok is leállnak)
+    faulthandler.dump_traceback_later(45, exit=False)
+    kids = []
+
+    def cleanup(*_):
+        for k in kids:
+            try:
+                k.kill()
+            except OSError:
+                pass
+    signal.signal(signal.SIGALRM, lambda *_: (print("FUSION-TASKS: TIMEOUT", flush=True), cleanup(), os._exit(3)))
+    signal.alarm(50)
+    quiet = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    pa = subprocess.Popen([sys.executable, TESTWIN, "ok"], **quiet)
+    pb = subprocess.Popen([sys.executable, TESTWIN, "hung"], **quiet)
+    kids += [pa, pb]
     time.sleep(5)
     t = ft.Tasks()
+    print("FUSION-TASKS: X " + ("ok" if t.x else "nincs"), flush=True)
     gs = t.refresh(ping=True)
     a = next((g for g in gs if pa.pid in g["pids"]), None)
     b = next((g for g in gs if pb.pid in g["pids"]), None)
     check("LIST", a is not None and b is not None, f"programok={len(gs)}")
     check("ALIVE", a is not None and a["status"] == "ok")
     check("HUNG", b is not None and b["status"] == "hung")
-    if b:
-        t0 = time.monotonic()
-        check("FORCE", t.force(b) and pb.wait(timeout=5) is not None, f"{time.monotonic() - t0:.1f}s")
-    if a:
-        t.close(a)
-        try:
+    try:
+        if b:
+            t0 = time.monotonic()
+            forced = t.force(b)
+            check("FORCE", forced and pb.wait(timeout=5) is not None, f"{time.monotonic() - t0:.1f}s")
+        if a:
+            t.close(a)
             check("CLOSE", pa.wait(timeout=5) == 0)
-        except subprocess.TimeoutExpired:
-            check("CLOSE", False)
-            pa.kill()
+    except subprocess.TimeoutExpired as e:
+        check("FORCE/CLOSE", False, f"nem állt le: {e}")
+    finally:
+        cleanup()
     check("PROCESSES", len(t.processes()) > 0 and t.summary()["memTotal"] > 0)
+    signal.alarm(0)
+    faulthandler.cancel_dump_traceback_later()
     print(f"FUSION-TASKS: RESULT {'ok' if ok else 'HIBA'}", flush=True)
     return 0 if ok else 1
 
