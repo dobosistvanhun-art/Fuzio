@@ -115,8 +115,8 @@ def selftest():
 
     import faulthandler
     import signal
-    # ha valami beakad: 45 mp után a Python-veremkép a naplóba, és kilépés (a próbaablakok is leállnak)
-    faulthandler.dump_traceback_later(45, exit=False)
+    # ha valami beakad: 75 mp után a Python-veremkép a naplóba, és kilépés (a próbaablakok is leállnak)
+    faulthandler.dump_traceback_later(75, exit=False)
     kids = []
 
     def cleanup(*_):
@@ -126,14 +126,22 @@ def selftest():
             except OSError:
                 pass
     signal.signal(signal.SIGALRM, lambda *_: (print("FUSION-TASKS: TIMEOUT", flush=True), cleanup(), os._exit(3)))
-    signal.alarm(50)
+    signal.alarm(80)
     quiet = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     pa = subprocess.Popen([sys.executable, TESTWIN, "ok"], **quiet)
     pb = subprocess.Popen([sys.executable, TESTWIN, "hung"], **quiet)
     kids += [pa, pb]
-    time.sleep(5)
     t = ft.Tasks()
     print("FUSION-TASKS: X " + ("ok" if t.x else "nincs"), flush=True)
+    # megvárjuk, amíg mindkét próbaablak megjelenik (lassú, KVM nélküli gépen a Python indulása is sokáig tart)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 40:
+        pids = {p for g in t.refresh(ping=False) for p in g["pids"]}
+        if pa.pid in pids and pb.pid in pids:
+            break
+        time.sleep(1)
+    time.sleep(2)            # a „lefagyott” ablak 2 mp után hagyja abba az üzenetek feldolgozását
+    print(f"FUSION-TASKS: WINDOWS {time.monotonic() - t0:.0f}s", flush=True)
     gs = t.refresh(ping=True)
     a = next((g for g in gs if pa.pid in g["pids"]), None)
     b = next((g for g in gs if pb.pid in g["pids"]), None)

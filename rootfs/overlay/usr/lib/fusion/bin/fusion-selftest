@@ -286,7 +286,7 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     rm -rf /tmp/fusion-files-test; mkdir -p /tmp/fusion-files-test; chown fusion: /tmp/fusion-files-test
     urun fusion-files --selftest /tmp/fusion-files-test 2>&1 | sed 's/^/FUSION-M6:   /'
     # Feladatkezelő: egy válaszoló és egy „lefagyott” próbaablak; a lefagyott felismerése és leállítása
-    urun timeout -k 5 70 fusion-tasks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
+    urun timeout -k 5 100 fusion-tasks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
     echo "FUSION-M6: CTRLALTDEL $(grep -c 'key="Delete">exec:fusion-tasks' /etc/jwm/system.jwmrc) target=$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)"
     urun sh -c 'fusion-files /home/fusion /data >/tmp/fusion-files.log 2>&1 &'
     i=0; while [ $i -lt 30 ] && [ "$(winview '/home/fusion')" != 1 ]; do sleep 1; i=$((i + 1)); done
