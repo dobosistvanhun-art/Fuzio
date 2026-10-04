@@ -33,8 +33,26 @@ has_arg() { case " $CMDLINE " in *" $1 "*|*" $1="*) return 0 ;; esac; return 1; 
 
 msg() { printf 'fusion-init: %s\n' "$*"; }
 
+# az elindított boot-bejegyzés (systemd-boot): „…+2-1.efi” = próba-indítás egy frissítés után (M7)
+mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null
+efivar_str() {  # az EFI-változó szövege (UTF-16); az efivarfs nem léptethető, ezért csővel
+    f=/sys/firmware/efi/efivars/$1-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+    [ -r "$f" ] && cat "$f" | tail -c +5 | tr -d '\000'
+}
+ENTRY=$(efivar_str LoaderEntrySelected)
+COUNTPATH=$(efivar_str LoaderBootCountPath)     # csak számlálós (próba) bejegyzésnél van
+TRIAL=""; [ -n "$COUNTPATH" ] && TRIAL=1
+case "$ENTRY" in *+[0-9]*.efi) TRIAL=1 ;; esac
+
 rescue() {
     printf '\n\033[1;31mFusionOS: a rendszer nem indítható.\033[0m\n%s\n\n' "$*"
+    if [ -n "$TRIAL" ]; then
+        # próba-indítás: újraindítás — a systemd-boot számlálója fogy, a 3. sikertelen próba után
+        # magától a korábbi (véglegesített) rendszer indul
+        w=15; has_arg fusion.test && w=3
+        printf 'Ez egy frissítés utáni próba-indítás (%s).\nÚjraindítás %s mp múlva — ha többször sem sikerül, a korábbi rendszer indul.\n' "${COUNTPATH:-$ENTRY}" "$w"
+        sleep "$w"; reboot -f
+    fi
     printf 'Mentőhéj — "reboot -f" újraindít, "poweroff -f" kikapcsol.\n'
     printf 'A FusionOS diagnosztika a boot menüből is elérhető.\n\n'
     setsid cttyhack sh
@@ -67,10 +85,7 @@ guid_of() {  # 32 hexa karakter (GPT, vegyes bájtsorrend) -> xxxxxxxx-xxxx-xxxx
         "$(printf '%s' "$1" | cut -c17-20)" "$(printf '%s' "$1" | cut -c21-32)"
 }
 boot_disk() {
-    v=/sys/firmware/efi/efivars/LoaderDevicePartUUID-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
-    [ -r "$v" ] || mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null
-    [ -r "$v" ] || return 1
-    want=$(tail -c +5 "$v" | tr -d '\000\n' | tr 'A-F' 'a-f')
+    want=$(efivar_str LoaderDevicePartUUID | tr -d '\n' | tr 'A-F' 'a-f')
     [ -n "$want" ] || return 1
     for b in /sys/block/*; do
         n=${b##*/}
@@ -151,6 +166,8 @@ umount -l /lower
 # állapot a rendszernek
 mkdir -p /run/fusion
 echo "$SLOT" > /run/fusion/slot
+echo "${ENTRY:-ismeretlen}" > /run/fusion/boot-entry
+[ -n "$COUNTPATH" ] && echo "$COUNTPATH" > /run/fusion/boot-countpath
 echo "${BOOTDISK:-ismeretlen}" > /run/fusion/boot-disk
 [ -n "${IMAGE_CHANGED:-}" ] && echo 1 > /run/fusion/image-changed
 echo "$ROOTDEV" > /run/fusion/root-device

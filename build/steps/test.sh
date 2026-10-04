@@ -71,7 +71,8 @@ _make_stick() {
 # kihúzza és visszadugja a soros eszközt
 _qemu_run() {
     local cfg="$1" vga="$2" bus="$3" log="$4" marker="$5"
-    local out="$OUT_DIR/test" img="$OUT_DIR/test/fusionos.img"
+    local out="$OUT_DIR/test" img="${QEMU_DISK:-$OUT_DIR/test/fusionos.img}"
+    local snap="${QEMU_SNAPSHOT:-on}" noreboot=(-no-reboot); [ "${QEMU_REBOOT:-0}" = 1 ] && noreboot=()
     local accel="tcg"; [ -w /dev/kvm ] && accel="kvm"
     local diskdev
     case "$bus" in
@@ -84,11 +85,11 @@ _qemu_run() {
         -machine q35,accel="$accel" -m 2048 -smp 2 \
         -drive if=pflash,format=raw,readonly=on,file="$(_ovmf_code)" \
         -drive if=pflash,format=raw,file="$out/vars-$cfg.fd" \
-        -drive file="$img",format=raw,if=none,id=disk0,snapshot=on \
+        -drive file="$img",format=raw,if=none,id=disk0,snapshot="$snap" \
         "${diskdev[@]}" \
         -nic user,model=e1000e \
         -audiodev none,id=snd0 -device ich9-intel-hda -device hda-duplex,audiodev=snd0 \
-        -vga "$vga" -display none -serial "file:$log" -no-reboot \
+        -vga "$vga" -display none -serial "file:$log" "${noreboot[@]}" \
         -monitor "unix:$out/qemu-$cfg.mon,server,nowait" \
         "${QEMU_EXTRA[@]}" >/dev/null 2>&1 &
     local qpid=$! unplugged=0 replugged=0
@@ -119,6 +120,44 @@ PY
 _check() {  # _check <napló> <minta> <leírás>
     if grep -qa -- "$2" "$1"; then return 0; fi
     warn "hiányzik: $3  ($2)"; return 1
+}
+
+_test_ab() {
+    local out="$OUT_DIR/test" log="$OUT_DIR/test/qemu-ab.log" upd="$OUT_DIR/test/ab-upd" bad
+    FUSION_VARIANT="test" step_build >/dev/null
+    FUSION_VARIANT="test" FUSION_TEST_AB=good step_image >/dev/null
+    cp --sparse=always "$out/fusionos.img" "$out/ab.img"
+    rm -rf "$upd"; mkdir -p "$upd"
+    # „good”: ugyanaz a rendszerkép, újabb build (a systemd-boot az újabbat választja)
+    sleep 1; FUSION_VARIANT="test" step_build >/dev/null
+    cp -al "$out/update" "$upd/good"
+    # „bad”: még újabb build, de a rendszerkép sérült (nem EROFS) — az initramfs nem tudja csatolni
+    sleep 1; FUSION_VARIANT="test" step_build >/dev/null
+    bad="$out/ab-bad.img"; head -c $((64 * 1024 * 1024)) /dev/zero | tr '\0' 'X' > "$bad"
+    _make_update_dir "$upd/bad" "$out/$(uki_name A)" "$out/$(uki_name B)" "$bad" >/dev/null
+    rm -f "$out/upd.img"; truncate -s 1600M "$out/upd.img"
+    mkfs.ext4 -q -F -E nodiscard -L FUSIONUPD -d "$upd" "$out/upd.img"
+    rm -rf "$upd" "$bad"
+    step "QEMU EFI boot → A/B frissítés: A → B (véglegesítés) → hibás frissítés → 3 próba → vissza B-re"
+    # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
+    QEMU_EXTRA=(-drive "file=$out/upd.img,format=raw,if=none,id=upd0,readonly=on" -device "ide-hd,drive=upd0,bus=ahci0.1")
+    QEMU_HOTPLUG=0; QEMU_TIMEOUT=3600
+    QEMU_DISK="$out/ab.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 _qemu_run ab std sata "$log" "FUSION-AB: DONE"
+    rm -f "$out/ab.img" "$out/upd.img"
+    local ok_run=1 tries
+    _check "$log" "FUSION-AB: BOOT step=good slot=A" "1. indítás: A slot" || ok_run=0
+    _check "$log" "FUSION-AB: APPLY good rc=0" "frissítés a B slotba" || ok_run=0
+    _check "$log" "FUSION-AB: BOOT step=bad slot=B .*count=.*B+" "2. indítás: B, próbaként (számlálóval)" || ok_run=0
+    _check "$log" "FUSION-AB: STATE VÉGLEGESÍTVE: fusionos-.*-B.efi" "a B véglegesítve (a számláló lekerült)" || ok_run=0
+    _check "$log" "FUSION-AB: APPLY bad rc=0" "a hibás frissítés az A slotba" || ok_run=0
+    tries=$(grep -ac "frissítés utáni próba-indítás" "$log")
+    [ "$tries" -ge 3 ] || { warn "hiányzik: 3 sikertelen próba-indítás (volt: $tries)"; ok_run=0; }
+    _check "$log" "FUSION-AB: BOOT step=final slot=B" "3 próba után magától a B indult" || ok_run=0
+    _check "$log" "FUSION-AB:   *A: fusionos-.*-A+0-[0-9]*.efi  \[HIBÁS" "az A bejegyzés hibásként megjelölve" || ok_run=0
+    _check "$log" "FUSION-AB: DONE" "a teszt végigfutott" || ok_run=0
+    grep -a 'FUSION-AB\|próba-indítás' "$log" | grep -v 'FUSION-AB:   [ 0-9]*%' | sed 's/^/      /' >&2
+    if [ "$ok_run" -eq 1 ]; then ok "SIKERES ($RUN_SECS mp)"; return 0; fi
+    warn "SIKERTELEN — napló: $log"; return 1
 }
 
 step_test() {
@@ -161,6 +200,7 @@ step_test() {
         _check "$log" "FUSION-M1: ROOT overlay usr=erofs ro" "gyökér-overlay, /usr csak olvasható (EROFS)" || ok_run=0
         _check "$log" "FUSION-M1: MOUNTS data=ext4" "/data" || ok_run=0
         _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
+        _check "$log" "FUSION-M7: BOOTCHECK ok: véglegesített rendszer (fusionos-.*-A.efi), slot A" "indulás-ellenőrzés (nem próba)" || ok_run=0
         _check "$log" "FUSION-M1: BOOTDISK sda MARKER none" "a boot-lemez felismerve (LoaderDevicePartUUID)" || ok_run=0
         _check "$log" "FUSION-M1: DISPLAY_PROFILE=$want STATUS=ok DRIVER=$drv" "hardverprofil és driver" || ok_run=0
         _check "$log" "FUSION-M1: GETTY active" "bejelentkezési képernyő" || ok_run=0
@@ -323,6 +363,13 @@ step_test() {
         fails=$((fails + 1))
     fi
     rm -f "$out/fusionos-masodik.img"
+
+    # M7 — A/B frissítés: egyetlen futás, újraindításokkal, megmaradó lemezzel.
+    #   1. A slot (véglegesített) → fusion-update apply „good” → a B slotba
+    #   2. B próbaként indul → fusion-boot-check véglegesíti → apply „bad” (sérült rendszerkép) → az A slotba
+    #   3–5. A próba: a fusion-init nem tud csatolni → újraindítás; 3 sikertelen próba után
+    #   6. magától a B (véglegesített) indul; az A bejegyzés „hibás” (+0-3)
+    _test_ab || fails=$((fails + 1))
 
     # diagnosztika: a boot menü második bejegyzése, alapértelmezettként beállítva
     FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-diag*" step_build >/dev/null

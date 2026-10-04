@@ -26,6 +26,7 @@ ln -sf /usr/lib/fusion/bin/fusion-hwinfo "$R/usr/bin/fusion-hwinfo"
 ln -sf /usr/lib/fusion/bin/fusion-session "$R/usr/bin/fusion-session"
 ln -sf /usr/lib/fusion/devices/fusion-devd "$R/usr/bin/fusion-devices"
 ln -sf /usr/lib/fusion/bin/fusion-wifi "$R/usr/bin/fusion-wifi"
+ln -sf /usr/lib/fusion/bin/fusion-update "$R/usr/sbin/fusion-update"
 mkdir -p "$R/data"
 
 echo "  [customize] NVIDIA kernelmodulok ($KERNEL_ABI)"
@@ -267,7 +268,7 @@ rm -f "$R/var/lib/dbus/machine-id"
 
 echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
-    fusion-hardware.service fusion-selftest.service \
+    fusion-hardware.service fusion-selftest.service fusion-boot-check.service \
     fusion-klipper.service fusion-moonraker.service nginx.service >/dev/null 2>&1
 in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.service >/dev/null 2>&1 || true
 # TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et

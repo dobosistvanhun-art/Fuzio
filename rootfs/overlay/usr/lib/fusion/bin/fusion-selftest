@@ -2,6 +2,30 @@
 # FusionOS boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 / FUSION-M2 sorokat.
 # (Type=exec szolgáltatásként fut, így a boot befejeződhet, és itt megvárhatjuk.)
 systemctl is-system-running --wait >/dev/null 2>&1
+# --- M7: A/B frissítés próbája (a teszt DATA-ján .fusion-test-ab jelölő: lépés = good | bad | final) ---
+if [ -e /data/.fusion-test-ab ]; then
+    abstep=$(cat /data/.fusion-test-ab)
+    i=0; while [ $i -lt 420 ] && [ ! -s /run/fusion/boot-state ]; do sleep 2; i=$((i + 2)); done
+    echo "FUSION-AB: BOOT step=$abstep slot=$(cat /run/fusion/slot) entry=$(cat /run/fusion/boot-entry) count=$(cat /run/fusion/boot-countpath 2>/dev/null || echo -)"
+    echo "FUSION-AB: STATE $(cat /run/fusion/boot-state 2>/dev/null)"
+    fusion-update status 2>&1 | sed 's/^/FUSION-AB:   /'
+    upd=$(blkid -t LABEL=FUSIONUPD -o device 2>/dev/null | head -n 1)
+    mkdir -p /run/fusion-upd; [ -n "$upd" ] && mount -o ro "$upd" /run/fusion-upd
+    case "$abstep" in
+        good|bad)
+            fusion-update apply "/run/fusion-upd/$abstep" > /run/fusion-ab.out 2>&1; arc=$?
+            sed 's/^/FUSION-AB:   /' /run/fusion-ab.out
+            echo "FUSION-AB: APPLY $abstep rc=$arc"
+            [ "$abstep" = good ] && echo bad > /data/.fusion-test-ab || echo final > /data/.fusion-test-ab
+            sync; umount /run/fusion-upd 2>/dev/null
+            echo "FUSION-AB: REBOOT"
+            systemctl reboot --no-block ;;
+        *)
+            echo "FUSION-AB: DONE"
+            systemctl poweroff --no-block ;;
+    esac
+    exit 0
+fi
 state=$(systemctl is-system-running 2>/dev/null)
 root=$(findmnt -no FSTYPE /)
 usr="$(findmnt -no FSTYPE /usr) $(findmnt -no OPTIONS /usr | cut -d, -f1)"
@@ -13,6 +37,8 @@ echo "FUSION-M1: ROOT $root usr=$usr"
 echo "FUSION-M1: MOUNTS data=$data"
 echo "FUSION-M1: CMDLINE $(cat /proc/cmdline)"
 echo "FUSION-M1: SLOT $(cat /run/fusion/slot 2>/dev/null)"
+i=0; while [ $i -lt 30 ] && [ ! -s /run/fusion/boot-state ]; do sleep 1; i=$((i + 1)); done
+echo "FUSION-M7: BOOTCHECK $(cat /run/fusion/boot-state 2>/dev/null || echo nincs)"
 echo "FUSION-M1: WIFI-STORED $(ls /var/lib/iwd 2>/dev/null | tr '\n' ' ')"
 echo "FUSION-M1: BOOTDISK $(cat /run/fusion/boot-disk 2>/dev/null) MARKER $(cat /data/.fusion-test-marker 2>/dev/null || echo none) IMAGE-CHANGED $(cat /run/fusion/image-changed 2>/dev/null || echo 0)"
 echo "FUSION-M1: DISPLAY_PROFILE=${FUSION_DISPLAY_PROFILE:-none} STATUS=${FUSION_DISPLAY_STATUS:-none} DRIVER=${FUSION_DISPLAY_DRIVER_STATE:-none}"

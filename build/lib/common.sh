@@ -41,7 +41,9 @@ not_root() {
 # Build-változat: release (VirtualBox / ZBook) vagy test (QEMU automatikus teszt)
 variant_dir() { printf '%s/%s' "$OUT_DIR" "${FUSION_VARIANT:-release}"; }
 
-uki_name() { printf 'fusionos-%s-%s-%s.efi' "$FUSION_VERSION" "$FUSION_MILESTONE" "${1:-A}"; }
+# az UKI neve: verzió, mérföldkő, build-bélyeg (UTC), slot — a systemd-boot a legújabbat indítja
+# (próba-számlálóval: …-B+3.efi). uki_name <slot> [bélyeg]
+uki_name() { printf 'fusionos-%s-%s-%s-%s.efi' "$FUSION_VERSION" "$FUSION_MILESTONE" "${2:-$BUILD_STAMP}" "${1:-A}"; }
 
 # partíció eszközneve: /dev/sdc + 1 -> /dev/sdc1 ; /dev/nvme0n1 + 1 -> /dev/nvme0n1p1
 part_dev() {

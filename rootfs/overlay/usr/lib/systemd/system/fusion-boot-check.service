@@ -1,0 +1,14 @@
+[Unit]
+Description=FusionOS — a sikeres indulás ellenőrzése (A/B frissítés: próba-indítás véglegesítése)
+# a boot után fut (nem tartja fel): megvárja a rendszert és a Fusion Desktopot
+After=multi-user.target data.mount
+ConditionPathExists=/sys/firmware/efi/efivars
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/fusion/bin/fusion-update boot-check
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

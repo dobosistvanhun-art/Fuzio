@@ -108,15 +108,27 @@ _wait_layout() {  # <eszköz>: a kernel lássa az új partíciótáblát
     die "a kernel nem látja az új partíciókat. (Pendrive: húzd ki és dugd vissza.) Futtasd újra ugyanezt a parancsot."
 }
 
-# a rendszerkép az A slotba, visszaolvasásos ellenőrzéssel
-_write_slot() {  # <partíció>
-    local p="$1" rootimg; rootimg=$(rootfs_img)
-    info "A slot: rendszerkép írása ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB)..."
+# a rendszerkép egy slotba, visszaolvasásos ellenőrzéssel
+_write_slot() {  # <partíció> [slot]
+    local p="$1" sl="${2:-A}" rootimg; rootimg=$(rootfs_img)
+    info "$sl slot: rendszerkép írása ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB)..."
     dd if="$rootimg" of="$p" bs=4M conv=fsync status=none || die "a rendszerkép írása nem sikerült ($p)"
     # az eszköz gyorsítótárát ürítjük, hogy valóban a lemezről olvassunk vissza
     blockdev --flushbufs "$p" 2>/dev/null || true
     cmp -n "$(stat -c %s "$rootimg")" "$rootimg" "$p" >/dev/null || die "a slot tartalma eltér a rendszerképtől ($p) — hibás lemez?"
-    info "A slot: ellenőrizve (visszaolvasás egyezik)"
+    info "$sl slot: ellenőrizve (visszaolvasás egyezik)"
+}
+
+# az ESP rendszer-UKI-jai: „név slot bélyeg állapot” soronként (állapot: ok | proba | hibas)
+_esp_ukis() {  # <ESP partíció>
+    local n base slot hascnt cnt stamp st
+    mdir -i "$1" -b ::/EFI/Linux 2>/dev/null | sed 's#^::/EFI/Linux/##' | while read -r n; do
+        [[ "$n" =~ ^fusionos-(.+)-([AB])(\+([0-9]+)(-[0-9]+)?)?\.efi$ ]] || continue
+        base=${BASH_REMATCH[1]}; slot=${BASH_REMATCH[2]}; hascnt=${BASH_REMATCH[3]}; cnt=${BASH_REMATCH[4]}
+        stamp=${base##*-}; [[ "$stamp" =~ ^[0-9]{14}$ ]] || stamp=0
+        if [ -z "$hascnt" ]; then st=ok; elif [ "$cnt" = 0 ]; then st=hibas; else st=proba; fi
+        echo "$n $slot $stamp $st"
+    done
 }
 
 # az ESP: újraformázás és a release ESP-fa másolása (mtools: csatolás nélkül)
@@ -263,10 +275,12 @@ step_update() {
         shift
     done
     [ "$(id -u)" -eq 0 ] || die "root kell:  sudo build/fusion-build update /dev/sdX"
-    need lsblk mkfs.vfat udevadm blockdev mmd mcopy cmp
+    need lsblk mkfs.vfat udevadm blockdev mmd mcopy mdir mdel mren cmp
     [ -n "$dev" ] || die "add meg a FusionOS-lemezt, pl.:  sudo build/fusion-build update /dev/sdb"
-    [ -d "$OUT_DIR/release/esp/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
+    local rel="$OUT_DIR/release"
+    [ -d "$rel/esp/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
     [ -r "$(rootfs_img)" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
+    [ -r "$rel/update/fusion-update.manifest" ] || die "nincs frissítőcsomag ($rel/update) — előbb: build/fusion-build all"
     [ -z "$wifi_file" ] || [ -r "$wifi_file" ] || die "a Wi-Fi-fájl nem olvasható: $wifi_file"
     dev=$(readlink -f "$dev")
     # frissítéshez belső lemez is jó: a FusionOS-elrendezés és a partíciónevek védik a többi lemezt
@@ -279,30 +293,74 @@ step_update() {
         [ "$name" = "$want" ] || die "$dev nem FusionOS-lemez (a(z) $i. partíció neve: '${name:-nincs}', várt: $want). Új telepítés: install"
         i=$((i + 1))
     done
+    _unmount_fusion "$dev"
+
+    # melyik rendszer indul most alapértelmezetten (a legújabb, nem hibás bejegyzés) → a másik slotba írunk
+    local list active="" astamp=-1 n sl st stp target tpart newuki newname
+    list=$(_esp_ukis "$p1")
+    while read -r n sl stp st; do
+        [ -n "$n" ] || continue
+        [ "$st" = hibas ] && continue
+        if [ "$stp" -gt "$astamp" ]; then astamp=$stp; active=$sl; fi
+    done <<< "$list"
+    if [ "$active" = A ]; then target=B; tpart=$p3; else target=A; tpart=$p2; fi
+    [ -n "$active" ] || { target=A; tpart=$p2; }
     local slot_b img_b
-    slot_b=$(blockdev --getsize64 "$p2"); img_b=$(stat -c %s "$(rootfs_img)")
-    [ "$img_b" -le "$slot_b" ] || die "a rendszerkép ($((img_b / 1048576)) MiB) nem fér az A slotba ($((slot_b / 1048576)) MiB)"
+    slot_b=$(blockdev --getsize64 "$tpart"); img_b=$(stat -c %s "$(rootfs_img)")
+    [ "$img_b" -le "$slot_b" ] || die "a rendszerkép ($((img_b / 1048576)) MiB) nem fér a slotba ($((slot_b / 1048576)) MiB)"
+    newuki=$(sed -n "s/^UKI_$target=//p" "$rel/update/fusion-update.manifest")
+    [ -r "$rel/update/uki-$target.efi" ] && [ -n "$newuki" ] || die "hiányzik a(z) $target slot UKI-ja a frissítőcsomagból"
+    newname="${newuki%.efi}+3.efi"
 
     step "Frissítendő FusionOS-lemez"
     info "Eszköz:  $dev ($DEV_DESC, ${DEV_SIZE_GIB} GiB, ${DEV_TRAN:-?})"
     lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$dev" | sed 's/^/      /'
-    info "Új rendszer: FusionOS $FUSION_VERSION ($FUSION_MILESTONE)"
+    info "A lemez boot-bejegyzései:"
+    if [ -n "$list" ]; then printf '%s\n' "$list" | awk '{printf "      %s  (slot %s, %s)\n", $1, $2, $4}'; else info "  (nincs)"; fi
+    info "Új rendszer: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) → a(z) $target slotba (próbaként indul)"
+    [ -n "$active" ] && info "A mostani rendszer ($active slot) megmarad tartaléknak: ha az új 3× nem indul el, magától ez indul."
     info "A DATA ($p4) MEGMARAD: telepített programok, Wi-Fi, beállítások, nyomtató-adatok."
-    _confirm "$dev" "Az ESP és az A slot felülíródik (a DATA-hoz nem nyúl)."
+    _confirm "$dev" "A(z) $target slot felülíródik (a DATA-hoz és a(z) ${active:-—} slothoz nem nyúl)."
 
     step "Frissítés"
-    _unmount_fusion "$dev"
-    _write_slot "$p2"
+    # 1. a cél-slot régi bejegyzései törlődnek előbb (a félig írt slotra ne mutasson semmi)
+    while read -r n sl stp st; do
+        [ -n "$n" ] && [ "$sl" = "$target" ] || continue
+        mdel -i "$p1" "::/EFI/Linux/$n" && info "régi bejegyzés törölve: $n"
+    done <<< "$list"
+    sync
+    # 2. a rendszerkép a cél-slotba
+    _write_slot "$tpart" "$target"
     if [ -n "$wifi_file" ]; then
         local dst; dst=$(mktemp -d)
         mount "$p4" "$dst" || die "a DATA nem csatolható ($p4)"
         _seed_wifi "$dst" "$wifi_file"
         sync; umount "$dst"; rmdir "$dst"
     fi
+    # 3. bootloader, diagnosztika, loader.conf, tartalék bejegyzések (az új rendszerre mutatnak —
+    #    a véglegesítésig a fájl számlálós néven van; ha a próba nem sikerül, a régi rendszer javítja)
     step "Bootloader és UKI"
-    _write_esp "$p1"
+    local f relp tmpd; tmpd=$(mktemp -d)
+    for relp in EFI/BOOT/BOOTX64.EFI EFI/systemd/systemd-bootx64.efi EFI/Linux/fusion-diag.efi loader/loader.conf; do
+        mcopy -o -i "$p1" "$rel/esp/$relp" "::/$relp" || die "nem sikerült a másolás az ESP-re: $relp"
+        info "/$relp"
+    done
+    mmd -i "$p1" ::/loader/entries 2>/dev/null || true
+    for f in "$rel"/esp/loader/entries/*.conf; do
+        [ -e "$f" ] || continue
+        sed -e "s#^efi /EFI/Linux/fusionos-.*\.efi\$#efi /EFI/Linux/$newuki#" -e "s/fusion\.slot=[AB]/fusion.slot=$target/" "$f" > "$tmpd/$(basename "$f")"
+        mcopy -o -i "$p1" "$tmpd/$(basename "$f")" "::/loader/entries/$(basename "$f")"
+    done
+    rm -rf "$tmpd"
+    # 4. az új rendszer UKI-ja: ideiglenes néven, majd átnevezve, 3 indítási próbával
+    mdel -i "$p1" ::/EFI/Linux/fusion-update.tmp 2>/dev/null || true
+    mcopy -i "$p1" "$rel/update/uki-$target.efi" ::/EFI/Linux/fusion-update.tmp || die "az UKI másolása nem sikerült"
+    mren -i "$p1" ::/EFI/Linux/fusion-update.tmp "::/EFI/Linux/$newname" || die "az UKI átnevezése nem sikerült"
+    info "/EFI/Linux/$newname"
     sync
-    ok "kész: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — a DATA változatlan. Indítás: F9 → a lemez UEFI-bejegyzése."
+    ok "kész: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) a(z) $target slotban — a DATA változatlan."
+    info "Indítás: F9 → a lemez UEFI-bejegyzése. Az új rendszer próbaként indul; ha rendben elindul (a Fusion"
+    info "Desktop megjelenik), véglegessé válik. Ha 3× nem sikerül, magától a(z) ${active:-előző} slot rendszere indul."
 }
 
 # UEFI boot-bejegyzés a FusionOS-lemezhez (a ZBook F9-menüjében „FusionOS” néven jelenik meg).

@@ -100,23 +100,29 @@ step_build() {
         || die "hiányzik a systemd-boot-efi csomag (build/fusion-build deps)"
     mkdir -p "$out"
 
-    local variant="${FUSION_VARIANT:-release}" cm_main cm_diag
+    local variant="${FUSION_VARIANT:-release}" cm_base cm_main cm_diag
     if [ "$variant" = "test" ]; then
-        cm_main="$CMDLINE_TEST fusion.slot=A"; cm_diag="$CMDLINE_DIAG_TEST"
+        cm_base="$CMDLINE_TEST"; cm_diag="$CMDLINE_DIAG_TEST"
     else
-        cm_main="$CMDLINE_RELEASE fusion.slot=A"; cm_diag="$CMDLINE_DIAG"
+        cm_base="$CMDLINE_RELEASE"; cm_diag="$CMDLINE_DIAG"
     fi
+    cm_main="$cm_base fusion.slot=A"
+    BUILD_STAMP=${FUSION_BUILD_STAMP:-$(date -u +%Y%m%d%H%M%S)}
 
     step "FusionOS initramfs (fusion-init, $variant)"
     _make_initramfs "$out/initramfs-fusion.cpio.zst" "$FUSION_ROOT/initramfs/fusion/init" "$FUSION_MODULES"
     step "Diagnosztikai initramfs (M0 boot-teszt, $variant)"
     _make_initramfs "$out/initramfs-diag.cpio.zst" "$FUSION_ROOT/initramfs/m0/init" "$DIAG_MODULES"
 
-    step "UKI-k (Unified Kernel Image)"
-    local uki diag
-    uki=$(uki_name A); diag="fusion-diag.efi"
-    _make_uki "$out/$uki" "$out/initramfs-fusion.cpio.zst" "$cm_main" \
-        "FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — A" "$FUSION_VERSION-$FUSION_MILESTONE-A"
+    step "UKI-k (Unified Kernel Image) — A és B slot, build: $BUILD_STAMP"
+    local uki ukib diag sl
+    uki=$(uki_name A); ukib=$(uki_name B); diag="fusion-diag.efi"
+    rm -f "$out"/fusionos-*.efi
+    for sl in A B; do
+        # IMAGE_VERSION: a systemd-boot ez alapján rendez (a legújabb build elöl)
+        _make_uki "$out/$(uki_name $sl)" "$out/initramfs-fusion.cpio.zst" "$cm_base fusion.slot=$sl" \
+            "FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — $sl" "$FUSION_VERSION-$BUILD_STAMP-$sl"
+    done
     _make_uki "$out/$diag" "$out/initramfs-diag.cpio.zst" "$cm_diag" \
         "FusionOS diagnosztika" "$FUSION_VERSION-diag"
 
@@ -141,4 +147,28 @@ step_build() {
         n=$((n + 1))
     done <<< "${BOOT_MEASURE_ENTRIES:-}"
     ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
+
+    _make_update_dir "$out/update" "$out/$uki" "$out/$ukib"
+}
+
+# frissítőcsomag-mappa (M7): fusion-update.manifest + rootfs.erofs + uki-A.efi + uki-B.efi
+# (a fájlok kemény hivatkozások — nem foglalnak külön helyet)
+_make_update_dir() {  # <mappa> <A uki> <B uki> [rendszerkép]
+    local d="$1" ua="$2" ub="$3" img="${4:-$(rootfs_img)}" f
+    rm -rf "$d"; mkdir -p "$d"
+    ln "$img" "$d/rootfs.erofs" 2>/dev/null || cp "$img" "$d/rootfs.erofs"
+    ln "$ua" "$d/uki-A.efi" 2>/dev/null || cp "$ua" "$d/uki-A.efi"
+    ln "$ub" "$d/uki-B.efi" 2>/dev/null || cp "$ub" "$d/uki-B.efi"
+    {
+        echo "# FusionOS frissítőcsomag (fusion-update apply <mappa>)"
+        echo "FUSION_VERSION=$FUSION_VERSION"
+        echo "FUSION_MILESTONE=$FUSION_MILESTONE"
+        echo "BUILD_STAMP=$BUILD_STAMP"
+        echo "UKI_A=$(basename "$ua")"
+        echo "UKI_B=$(basename "$ub")"
+        for f in rootfs.erofs uki-A.efi uki-B.efi; do
+            echo "$f $(sha256sum "$d/$f" | cut -d' ' -f1) $(stat -c %s "$d/$f")"
+        done
+    } > "$d/fusion-update.manifest"
+    ok "frissítőcsomag: $d ($(basename "$ua") / $(basename "$ub"))"
 }
