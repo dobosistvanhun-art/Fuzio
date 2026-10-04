@@ -314,6 +314,21 @@ step_update() {
     [ "$img_b" -le "$slot_b" ] || die "a rendszerkép ($((img_b / 1048576)) MiB) nem fér a slotba ($((slot_b / 1048576)) MiB)"
     newuki=$(sed -n "s/^UKI_$target=//p" "$rel/update/fusion-update.manifest")
     [ -r "$rel/update/uki-$target.efi" ] && [ -n "$newuki" ] || die "hiányzik a(z) $target slot UKI-ja a frissítőcsomagból"
+    # a systemd-boot a legújabb bejegyzést indítja: ha a lemezen már van ugyanilyen vagy újabb build
+    # (pl. ugyanaz a csomag másodszor, vagy --hibas-proba), friss build-bélyegű UKI készül
+    local newuki_file="$rel/update/uki-$target.efi" maxstamp=0 newstamp ukitmp=""
+    while read -r n sl stp st; do [ -n "$n" ] && [ "$stp" -gt "$maxstamp" ] && maxstamp=$stp; done <<< "$list"
+    newstamp=${newuki%-[AB].efi}; newstamp=${newstamp##*-}
+    if [ "$broken" = 1 ] || ! [ "$newstamp" -gt "$maxstamp" ] 2>/dev/null; then
+        need ukify
+        BUILD_STAMP=$(date -u +%Y%m%d%H%M%S)
+        [ "$BUILD_STAMP" -gt "$maxstamp" ] || BUILD_STAMP=$((maxstamp + 1))
+        ukitmp=$(mktemp -d); newuki=$(uki_name "$target")
+        info "a lemezen már van ilyen vagy újabb build — friss UKI ($BUILD_STAMP), hogy az új rendszer induljon"
+        _make_uki "$ukitmp/$newuki" "$rel/initramfs-fusion.cpio.zst" "$CMDLINE_RELEASE fusion.slot=$target" \
+            "FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — $target" "$FUSION_VERSION-$BUILD_STAMP-$target" >/dev/null
+        newuki_file="$ukitmp/$newuki"
+    fi
     newname="${newuki%.efi}+3.efi"
 
     step "Frissítendő FusionOS-lemez"
@@ -365,7 +380,8 @@ step_update() {
     rm -rf "$tmpd"
     # 4. az új rendszer UKI-ja: ideiglenes néven, majd átnevezve, 3 indítási próbával
     mdel -i "$p1" ::/EFI/Linux/fusion-update.tmp 2>/dev/null || true
-    mcopy -i "$p1" "$rel/update/uki-$target.efi" ::/EFI/Linux/fusion-update.tmp || die "az UKI másolása nem sikerült"
+    mcopy -i "$p1" "$newuki_file" ::/EFI/Linux/fusion-update.tmp || die "az UKI másolása nem sikerült"
+    [ -n "$ukitmp" ] && rm -rf "$ukitmp"
     mren -i "$p1" ::/EFI/Linux/fusion-update.tmp "::/EFI/Linux/$newname" || die "az UKI átnevezése nem sikerült"
     info "/EFI/Linux/$newname"
     sync

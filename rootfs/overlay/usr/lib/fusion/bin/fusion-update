@@ -26,7 +26,8 @@ ESP_MNT = "/run/fusion/esp"
 STATE = "/run/fusion/boot-state"
 TRIES = 3
 DESKTOP_WAIT = int(os.environ.get("FUSION_BOOTCHECK_WAIT", "300"))
-UKI_RE = re.compile(r"^fusionos-(?P<base>.+)-(?P<slot>[AB])(?:\+(?P<left>\d+)(?:-(?P<done>\d+))?)?\.efi$")
+# a systemd-boot az azonosítót kisbetűsen adja vissza (LoaderEntrySelected) — az illesztés kis/nagybetű-független
+UKI_RE = re.compile(r"^fusionos-(?P<base>.+)-(?P<slot>[AB])(?:\+(?P<left>\d+)(?:-(?P<done>\d+))?)?\.efi$", re.IGNORECASE)
 HOOKS = "/usr/lib/fusion/boot-ok.d"
 
 
@@ -116,8 +117,9 @@ def parse(name):
     if not m:
         return None
     left = m.group("left")
-    return {"name": name, "slot": m.group("slot"), "base": m.group("base"),
-            "id": f"fusionos-{m.group('base')}-{m.group('slot')}.efi",
+    slot = m.group("slot").upper()
+    return {"name": name, "slot": slot, "base": m.group("base"),
+            "id": f"fusionos-{m.group('base')}-{slot}.efi", "key": f"fusionos-{m.group('base')}-{slot}.efi".lower(),
             "trial": left is not None, "left": int(left) if left is not None else None,
             "bad": left is not None and int(left) == 0}
 
@@ -172,7 +174,7 @@ def cmd_status():
     with Esp() as esp:
         for e in ukis(esp):
             st = "HIBÁS (nem indult el)" if e["bad"] else f"próba ({e['left']} lehetőség)" if e["trial"] else "véglegesített"
-            cur = "  ← fut" if entry and parse(entry) and parse(entry)["id"] == e["id"] else ""
+            cur = "  ← fut" if entry and parse(entry) and parse(entry)["key"] == e["key"] else ""
             say(f"  {e['slot']}: {e['name']}  [{st}]{cur}")
     return 0
 
@@ -280,6 +282,13 @@ def cmd_apply(d):
         newname = f"fusionos-{m.group(1)}-{target}"
     if not newname:
         raise UpdateError(f"a manifestből hiányzik az UKI_{target} név")
+    newstamp = re.sub(r"-[AB]$", "", newname).rsplit("-", 1)[-1]
+    with Esp() as esp:
+        # a régi (bélyeg nélküli, pl. 0.0.23) neveket nem számítjuk: azok mindig régebbiek
+        others = [e["base"].rsplit("-", 1)[-1] for e in ukis(esp) if e["slot"] != target and not e["bad"]]
+    if any(o.isdigit() and o >= newstamp for o in others):
+        raise UpdateError("ez a csomag nem újabb a lemezen lévő (futó) rendszernél — a systemd-boot nem indítaná el. "
+                          "Újabb buildet kell telepíteni.")
     with Esp(rw=True) as esp:
         # 1. a cél-slot régi bejegyzései törlődnek ELŐBB (a félig írt slotra ne mutasson semmi)
         for e in ukis(esp):
@@ -380,6 +389,7 @@ def cmd_boot_check():
         # normál indítás: a tartalék bejegyzések javítása, ha egy frissítés után elavultak
         try:
             with Esp() as esp:
+                pe = next((e for e in ukis(esp) if e["key"] == pe["key"]), pe)   # a valódi fájlnév
                 stale = any(not os.path.exists(os.path.join(esp, l.split()[1].lstrip("/")))
                             for c in glob.glob(os.path.join(esp, "loader", "entries", "*.conf"))
                             for l in open(c, encoding="utf-8") if l.startswith("efi "))
@@ -403,12 +413,15 @@ def cmd_boot_check():
         dst = os.path.join(esp, "EFI", "Linux", pe["id"])
         if not os.path.exists(src):
             # a változó a számláló léptetése előtti nevet is tartalmazhatja: a mostani fájl az azonos azonosítójú
-            cand = [e for e in ukis(esp) if e["id"] == pe["id"] and e["trial"]]
+            cand = [e for e in ukis(esp) if e["key"] == pe["key"] and e["trial"]]
             if not cand:
                 raise UpdateError(f"a bejegyzés nem található az ESP-n: {entry}")
             src = os.path.join(esp, "EFI", "Linux", cand[0]["name"])
+        real = parse(os.path.basename(src))
+        dst = os.path.join(esp, "EFI", "Linux", real["id"])
         os.rename(src, dst)
         fsync_path(os.path.dirname(dst))
+        pe = real
         n = fix_entries(esp, pe["id"], slot)
     set_state(f"VÉGLEGESÍTVE: {pe['id']} (slot {slot}) — {why}" + (f"; {n} tartalék bejegyzés frissítve" if n else ""))
     # egyirányú DATA-átalakítások csak ezután (a visszaállított régi rendszer is értse a DATA-t)

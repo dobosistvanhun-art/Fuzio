@@ -178,7 +178,7 @@ umount -l /lower
 mkdir -p /run/fusion
 echo "$SLOT" > /run/fusion/slot
 echo "${ENTRY:-ismeretlen}" > /run/fusion/boot-entry
-[ -n "$COUNTPATH" ] && echo "$COUNTPATH" > /run/fusion/boot-countpath
+[ -n "$COUNTPATH" ] && printf '%s\n' "$COUNTPATH" > /run/fusion/boot-countpath   # printf: a \f ne legyen vezérlőkarakter
 echo "${BOOTDISK:-ismeretlen}" > /run/fusion/boot-disk
 [ -n "${IMAGE_CHANGED:-}" ] && echo 1 > /run/fusion/image-changed
 echo "$ROOTDEV" > /run/fusion/root-device

@@ -91,7 +91,7 @@ _qemu_run() {
         -audiodev none,id=snd0 -device ich9-intel-hda -device hda-duplex,audiodev=snd0 \
         -vga "$vga" -display none -serial "file:$log" "${noreboot[@]}" \
         -monitor "unix:$out/qemu-$cfg.mon,server,nowait" \
-        "${QEMU_EXTRA[@]}" >/dev/null 2>&1 &
+        "${QEMU_EXTRA[@]}" >/dev/null 2>"$out/qemu-$cfg.err" &
     local qpid=$! unplugged=0 replugged=0
     RUN_SECS=0
     while kill -0 "$qpid" 2>/dev/null; do
@@ -115,6 +115,8 @@ PY
         sleep 1; RUN_SECS=$((RUN_SECS + 1))
     done
     wait "$qpid" 2>/dev/null || true
+    [ -s "$out/qemu-$cfg.err" ] && sed 's/^/      qemu: /' "$out/qemu-$cfg.err" | head -n 5 >&2
+    return 0
 }
 
 _check() {  # _check <napló> <minta> <leírás>
@@ -140,7 +142,7 @@ _test_ab() {
     rm -rf "$upd" "$bad"
     step "QEMU EFI boot → A/B frissítés: A → B (véglegesítés) → hibás frissítés → 3 próba → vissza B-re"
     # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
-    QEMU_EXTRA=(-drive "file=$out/upd.img,format=raw,if=none,id=upd0,readonly=on" -device "ide-hd,drive=upd0,bus=ahci0.1")
+    QEMU_EXTRA=(-drive "file=$out/upd.img,format=raw,if=none,id=upd0,snapshot=on" -device "ide-hd,drive=upd0,bus=ahci0.1")
     QEMU_HOTPLUG=0; QEMU_TIMEOUT=3600
     QEMU_DISK="$out/ab.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 _qemu_run ab std sata "$log" "FUSION-AB: DONE"
     rm -f "$out/ab.img" "$out/upd.img"

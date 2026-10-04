@@ -22,8 +22,9 @@
 #    usb <eszköz>       felírás pendrive-ra (root: sudo build/fusion-build usb /dev/sdX)
 #    install <eszköz> [--internal] [--data-from <FUSION_DATA>] [--wifi-file <fájl>]
 #                       telepítés lemezre (a lemez törlődik); belső lemezre csak --internal-lal
-#    update <eszköz> [--wifi-file <fájl>]
-#                       rendszerfrissítés meglévő FusionOS-lemezen — a DATA (programok, adatok) megmarad
+#    update <eszköz> [--wifi-file <fájl>] [--hibas-proba]
+#                       rendszerfrissítés meglévő FusionOS-lemezen, a nem aktív slotba (A/B, M7) —
+#                       a DATA (programok, adatok) megmarad; --hibas-proba: a visszaállás próbája
 #    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
 #    clean              a build/out törlése (a letöltött cache marad)
 # =============================================================================
