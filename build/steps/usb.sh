@@ -10,9 +10,12 @@
 #                                     pendrive FUSION_DATA-ja): telepített Windows-programok (LightBurn),
 #                                     Wi-Fi, nyomtató-adatok — semmit nem kell újratelepíteni
 #       --wifi-file <fájl>            Wi-Fi-hálózat előre beállítva (SSID=… és PSK=… sorok)
-#   update <eszköz> [--wifi-file <fájl>]
-#                                     rendszerfrissítés egy meglévő FusionOS-lemezen: ESP + A slot
-#                                     újraírva, a DATA (programok, beállítások, adatok) MEGMARAD
+#   update <eszköz> [--wifi-file <fájl>] [--hibas-proba]
+#                                     rendszerfrissítés egy meglévő FusionOS-lemezen (A/B, M7): az új
+#                                     rendszer a NEM aktív slotba kerül, próbaként indul (3 lehetőség),
+#                                     a mostani tartalék marad; a DATA (programok, beállítások) MEGMARAD
+#       --hibas-proba                 szándékosan HIBÁS frissítés (sérült rendszerkép) — a visszaállás
+#                                     kipróbálásához: 3 sikertelen indítás után magától a mostani indul
 #
 # Biztonság:
 #   - csak teljes lemezt fogad el (pl. /dev/sdb, nem /dev/sdb1);
@@ -110,7 +113,7 @@ _wait_layout() {  # <eszköz>: a kernel lássa az új partíciótáblát
 
 # a rendszerkép egy slotba, visszaolvasásos ellenőrzéssel
 _write_slot() {  # <partíció> [slot]
-    local p="$1" sl="${2:-A}" rootimg; rootimg=$(rootfs_img)
+    local p="$1" sl="${2:-A}" rootimg; rootimg=${SLOT_IMAGE:-$(rootfs_img)}
     info "$sl slot: rendszerkép írása ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB)..."
     dd if="$rootimg" of="$p" bs=4M conv=fsync status=none || die "a rendszerkép írása nem sikerült ($p)"
     # az eszköz gyorsítótárát ürítjük, hogy valóban a lemezről olvassunk vissza
@@ -265,11 +268,12 @@ step_usb()     { _install_or_usb usb "$@"; }
 step_install() { _install_or_usb install "$@"; }
 
 step_update() {
-    local dev="${1:-}" wifi_file=""
+    local dev="${1:-}" wifi_file="" broken=0
     shift || true
     while [ $# -gt 0 ]; do
         case "$1" in
             --wifi-file) wifi_file="${2:-}"; shift ;;
+            --hibas-proba) broken=1 ;;
             *) die "ismeretlen kapcsoló: $1" ;;
         esac
         shift
@@ -317,6 +321,12 @@ step_update() {
     lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$dev" | sed 's/^/      /'
     info "A lemez boot-bejegyzései:"
     if [ -n "$list" ]; then printf '%s\n' "$list" | awk '{printf "      %s  (slot %s, %s)\n", $1, $2, $4}'; else info "  (nincs)"; fi
+    if [ "$broken" = 1 ]; then
+        warn "SZÁNDÉKOSAN HIBÁS próbafrissítés: a(z) $target slotba sérült rendszerkép kerül. Várható: 3 sikertelen"
+        warn "indítás (mindegyik ~15 mp után újraindul), utána magától a(z) ${active:-előző} slot indul."
+        [ -n "$active" ] || die "hibás próba csak akkor, ha van működő (véglegesített) rendszer a lemezen"
+        SLOT_IMAGE=$(mktemp); head -c $((64 * 1024 * 1024)) /dev/zero | tr '\0' 'X' > "$SLOT_IMAGE"
+    fi
     info "Új rendszer: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) → a(z) $target slotba (próbaként indul)"
     [ -n "$active" ] && info "A mostani rendszer ($active slot) megmarad tartaléknak: ha az új 3× nem indul el, magától ez indul."
     info "A DATA ($p4) MEGMARAD: telepített programok, Wi-Fi, beállítások, nyomtató-adatok."
@@ -331,6 +341,7 @@ step_update() {
     sync
     # 2. a rendszerkép a cél-slotba
     _write_slot "$tpart" "$target"
+    [ "$broken" = 1 ] && { rm -f "$SLOT_IMAGE"; unset SLOT_IMAGE; }
     if [ -n "$wifi_file" ]; then
         local dst; dst=$(mktemp -d)
         mount "$p4" "$dst" || die "a DATA nem csatolható ($p4)"

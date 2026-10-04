@@ -61,6 +61,23 @@ def trial_entry():
     return e if e and e["trial"] else None
 
 
+def set_bootnext():
+    """a következő indítás is a mostani UEFI-bejegyzésről (BootNext = BootCurrent) — ha a firmware
+    alapértelmezése más rendszer (pl. a Mint), a próba-indítások így is a FusionOS-be térnek vissza"""
+    g = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
+    try:
+        with open(f"{EFIVARS}/BootCurrent-{g}", "rb") as f:
+            cur = f.read()[4:6]
+        nxt = f"{EFIVARS}/BootNext-{g}"
+        if os.path.exists(nxt):
+            subprocess.run(["chattr", "-i", nxt], capture_output=True)
+        with open(nxt, "wb", buffering=0) as f:
+            f.write(b"\x07\x00\x00\x00" + cur)
+        return True
+    except OSError:
+        return False
+
+
 def run(cmd, check=True, **kw):
     r = subprocess.run(cmd, capture_output=True, text=True, **kw)
     if check and r.returncode != 0:
@@ -150,7 +167,7 @@ def cmd_status():
     except OSError:
         pass
     if os.geteuid() != 0:
-        say("(a boot-bejegyzések listájához root kell: sudo fusion-update status)")
+        say("(a boot-bejegyzések listája: sudo /usr/lib/fusion/bin/fusion-admin update-status)")
         return 0
     with Esp() as esp:
         for e in ukis(esp):
@@ -378,6 +395,7 @@ def cmd_boot_check():
     ok, why = checks()
     if not ok:
         set_state(f"HIBA: {why} — újraindítás (a próba elhasználva; {TRIES} sikertelen után a korábbi rendszer indul)")
+        set_bootnext()
         subprocess.run(["systemctl", "reboot"])
         return 1
     with Esp(rw=True) as esp:

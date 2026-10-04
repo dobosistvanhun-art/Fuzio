@@ -15,6 +15,7 @@
 #    autounmount <kernelnév>          (systemd) kihúzáskor
 #    service-restart klipper|moonraker|nginx
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
+#    update-status                    az A/B rendszerfrissítés állapota (csak olvas)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -200,5 +201,8 @@ case "$cmd" in
         [ $# -eq 1 ] || fail "használat: devices-forget <szerep>"
         case "$1" in *[!a-zA-Z0-9_-]*) fail "érvénytelen paraméter" ;; esac
         exec /usr/lib/fusion/devices/fusion-devd forget "$1" ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget" ;;
+    update-status)
+        [ $# -eq 0 ] || fail "használat: update-status"
+        exec /usr/lib/fusion/bin/fusion-update status ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status" ;;
 esac

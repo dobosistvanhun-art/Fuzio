@@ -15,7 +15,7 @@ echo "== FusionOS M7-felmérés  $(date '+%Y-%m-%d %H:%M')  ($(uname -r))"
 
 EV=/sys/firmware/efi/efivars
 LG=4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
-efistr() { [ -r "$EV/$1-$LG" ] && tail -c +5 "$EV/$1-$LG" | tr -d '\000'; }
+efistr() { [ -r "$EV/$1-$LG" ] && cat "$EV/$1-$LG" | tail -c +5 | tr -d '\000'; }   # az efivarfs nem léptethető
 if [ -r /usr/lib/fusion/fusion-release ] || [ -r /etc/fusion-release ]; then
     echo "-- FusionOS: $(. /usr/lib/fusion/fusion-release 2>/dev/null; echo "${FUSION_VERSION:-?} (${FUSION_MILESTONE:-?})")"
     echo "slot: $(cat /run/fusion/slot 2>/dev/null)   boot-lemez: $(cat /run/fusion/boot-disk 2>/dev/null)"

@@ -44,6 +44,16 @@ COUNTPATH=$(efivar_str LoaderBootCountPath)     # csak számlálós (próba) bej
 TRIAL=""; [ -n "$COUNTPATH" ] && TRIAL=1
 case "$ENTRY" in *+[0-9]*.efi) TRIAL=1 ;; esac
 
+# a következő indítás is a mostani UEFI-bejegyzésről (pl. a ZBookon a Mint az első a sorban):
+# BootNext = BootCurrent. Az efivarfs egyetlen írást fogad el, ezért előbb fájlba rakjuk össze.
+set_bootnext() {
+    d=/sys/firmware/efi/efivars; g=8be4df61-93ca-11d2-aa0d-00e098032b8c
+    [ -r "$d/BootCurrent-$g" ] || return 1
+    { printf '\007\000\000\000'; cat "$d/BootCurrent-$g" | tail -c 2; } > /run/bootnext.bin
+    [ -e "$d/BootNext-$g" ] && chattr -i "$d/BootNext-$g" 2>/dev/null
+    cat /run/bootnext.bin > "$d/BootNext-$g" 2>/dev/null
+}
+
 rescue() {
     printf '\n\033[1;31mFusionOS: a rendszer nem indítható.\033[0m\n%s\n\n' "$*"
     if [ -n "$TRIAL" ]; then
@@ -51,6 +61,7 @@ rescue() {
         # magától a korábbi (véglegesített) rendszer indul
         w=15; has_arg fusion.test && w=3
         printf 'Ez egy frissítés utáni próba-indítás (%s).\nÚjraindítás %s mp múlva — ha többször sem sikerül, a korábbi rendszer indul.\n' "${COUNTPATH:-$ENTRY}" "$w"
+        set_bootnext && printf 'A következő indítás is innen (UEFI BootNext).\n'
         sleep "$w"; reboot -f
     fi
     printf 'Mentőhéj — "reboot -f" újraindít, "poweroff -f" kikapcsol.\n'
