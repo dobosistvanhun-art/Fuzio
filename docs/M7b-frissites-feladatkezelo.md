@@ -34,7 +34,7 @@ A ZBook-próbához egy **újabb build** kell (ugyanazt a buildet nem telepíti �
 
 ```bash
 cd ~/Fusion/fusionos
-touch VERSION && build/fusion-build all       # új build, új .fupd
+build/fusion-build all       # új build (új időbélyeg), új .fupd
 cp build/out/release/fusionos-*.fupd /media/$USER/<pendrive>/      # vagy a FusionOS DATA-jára: /data/import
 ```
 
