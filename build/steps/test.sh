@@ -205,6 +205,7 @@ step_test() {
         _check "$log" "FUSION-M1: ROOT overlay usr=erofs ro" "gyökér-overlay, /usr csak olvasható (EROFS)" || ok_run=0
         _check "$log" "FUSION-M1: MOUNTS data=ext4" "/data" || ok_run=0
         _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
+        _check "$log" "FUSION-M7: IMPORT owner=fusion WAITONLINE --any" "a /data/import a felhasználóé; wait-online: elég egy kapcsolat" || ok_run=0
         _check "$log" "FUSION-M7: BOOTCHECK ok: véglegesített rendszer (fusionos-.*-A.efi), slot A" "indulás-ellenőrzés (nem próba)" || ok_run=0
         _check "$log" "FUSION-M1: BOOTDISK sda MARKER none" "a boot-lemez felismerve (LoaderDevicePartUUID)" || ok_run=0
         _check "$log" "FUSION-M1: DISPLAY_PROFILE=$want STATUS=ok DRIVER=$drv" "hardverprofil és driver" || ok_run=0

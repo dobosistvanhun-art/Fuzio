@@ -24,6 +24,7 @@ SettingsPage {
             if (tag === "update" && r.version !== undefined) {
                 p.s = r
                 if (r.job && !p.job.running) p.job = r.job
+                if (p.chosen && !r.files.find(f => f.path === p.chosen)) p.chosen = ""
                 if (!p.chosen && r.files.length && r.files[0].newer) p.chosen = r.files[0].path
             } else if (tag === "update-job") {
                 var was = p.job.running || p.pending
@@ -108,7 +109,7 @@ SettingsPage {
     }
     Flow {
         width: parent.width; spacing: 8
-        FButton { text: "Telepítés"; primary: true; icon: "update"
+        FButton { text: "Telepítés"; primary: true; icon: "update"; visible: p.s.files.length > 0
                   enabled: p.chosen !== "" && !p.job.running && (p.s.files.find(f => f.path === p.chosen) || {}).newer === true
                   onClicked: { var e = settings.updateInstall(p.chosen); p.msg = e ? "hiba: " + e : ""; if (!e) p.pending = true } }
         Text { visible: p.msg !== ""; text: p.msg; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
