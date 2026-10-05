@@ -454,10 +454,16 @@ class Settings(QObject):
         lines = _read(flog).splitlines()
         rc = next((int(x[3:]) for x in reversed(lines) if re.match(r"^RC=\d+$", x)), None)
         try:
-            age = time.time() - os.path.getmtime(flog)
+            mtime = os.path.getmtime(flog)
         except OSError:
-            age = 1e9
-        return {"running": running, "rc": rc, "title": _read(ftitle), "recent": running or age < 600,
+            mtime = 0
+        age = time.time() - mtime
+        # a gép indulása előtt befejeződött művelet nem „friss” (pl. a frissítés után újraindítás: ne kérje újra)
+        try:
+            boot = time.time() - float(_read("/proc/uptime", "0").split()[0])
+        except (ValueError, IndexError):
+            boot = 0
+        return {"running": running, "rc": rc, "title": _read(ftitle), "recent": running or (age < 600 and mtime > boot),
                 "lines": [x for x in lines if not x.startswith("RC=")][-14:]}
 
     def _job(self, title, args, kind="programs", cmd=("fusion-programs",), app="Programkezelő", icon="package",
