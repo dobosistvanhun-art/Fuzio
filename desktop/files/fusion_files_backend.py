@@ -622,7 +622,12 @@ class FileOps:
             except Cancelled:
                 raise
             except OSError as e:
-                self.job.errors.append(f"{src}: {e.strerror or e}")
+                # a hibás útvonal (forrás vagy cél) — a célmappa írási jogának hiánya érthetően
+                bad = e.filename or src
+                if e.errno == 13 and bad != src:
+                    self.job.errors.append(f"nincs írási jog a célmappában: {os.path.dirname(dst)}")
+                else:
+                    self.job.errors.append(f"{bad}: {e.strerror or e}")
 
     def copy(self, srcs, dstdir):
         self.job.total, self.job.files_total = _walk_size(srcs, self.job)
