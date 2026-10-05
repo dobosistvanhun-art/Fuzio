@@ -67,6 +67,14 @@ parent_disk() {   # /dev/sdb1 → sdb ; /dev/nvme0n1p2 → nvme0n1 ; /dev/sdb �
 
 prop() { blkid -p -o value -s "$2" "$1" 2>/dev/null | head -n 1; }
 
+# a kötet csatolási pontjai, pontos útvonallal (a findmnt -r a nem ASCII betűket \xNN alakban írná ki,
+# pl. „Közös” — azzal az útvonallal nem lehetne leválasztani); a /proc/self/mounts csak a szóközt stb. kódolja (\040)
+mounts_of() {
+    local d
+    d=$(readlink -f "$1")
+    awk -v d="$d" '$1 == d {print $2}' /proc/self/mounts | while IFS= read -r m; do printf '%b\n' "$m"; done
+}
+
 check_allowed() {   # a rendszer saját kötetei nem csatolhatók / választhatók le innen
     local d boot disk
     d=$1
@@ -74,8 +82,8 @@ check_allowed() {   # a rendszer saját kötetei nem csatolhatók / választhat�
     disk=$(parent_disk "$d")
     [ -n "$boot" ] && [ "$disk" = "$boot" ] && fail "a FusionOS saját lemeze ($boot) — nem kezelhető innen"
     case "$(prop "$d" PART_ENTRY_NAME)" in FUSION_*) fail "FusionOS-partíció ($(prop "$d" PART_ENTRY_NAME)) — nem csatolható" ;; esac
-    if findmnt -rn -S "$d" -o TARGET 2>/dev/null | grep -qv "^$MEDIA/"; then
-        fail "a rendszer használja: $(findmnt -rn -S "$d" -o TARGET | head -n 1)"
+    if mounts_of "$d" | grep -qv "^$MEDIA/"; then
+        fail "a rendszer használja: $(mounts_of "$d" | grep -v "^$MEDIA/" | head -n 1)"
     fi
 }
 
@@ -95,7 +103,7 @@ do_mount() {
     local d mp fs uid gid t o name
     d=$(devpath "$1")
     check_allowed "$d"
-    mp=$(findmnt -rn -S "$d" -o TARGET 2>/dev/null | head -n 1)
+    mp=$(mounts_of "$d" | head -n 1)
     [ -n "$mp" ] && { say "már csatolva: $mp"; return 0; }
     fs=$(prop "$d" TYPE)
     [ -n "$fs" ] || fail "nincs felismerhető fájlrendszer: $d"
@@ -132,7 +140,7 @@ do_unmount() {
     local d mp users
     case "$1" in
         "$MEDIA"/*) mp=$1 ;;
-        *) d=$(devpath "$1"); mp=$(findmnt -rn -S "$d" -o TARGET 2>/dev/null | grep "^$MEDIA/" | head -n 1)
+        *) d=$(devpath "$1"); mp=$(mounts_of "$d" | grep "^$MEDIA/" | head -n 1)
            [ -n "$mp" ] || { say "nincs csatolva: $d"; return 0; } ;;
     esac
     mp=$(realpath -m "$mp")
