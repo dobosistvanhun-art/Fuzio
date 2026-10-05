@@ -236,7 +236,7 @@ done
 
 echo "  [customize] os-release"
 # az alaprendszer neve (a hibajelentéshez) — az Ubuntu os-release-éből, mielőtt felülírjuk
-FUSION_BASE=$(sed -n "s/^FUSION_BASE='\(.*\)'$/\1/p" "$R/usr/lib/fusion/fusion-release" 2>/dev/null)
+FUSION_BASE=$(sed -n "s/^FUSION_BASE='\(.*\)'$/\1/p" "$R/usr/lib/fusion/fusion-release" 2>/dev/null || true)
 if grep -q '^NAME="Ubuntu"' "$R/usr/lib/os-release" 2>/dev/null; then
     FUSION_BASE=$(. "$R/usr/lib/os-release"; echo "$PRETTY_NAME ($VERSION_CODENAME)")
 fi
