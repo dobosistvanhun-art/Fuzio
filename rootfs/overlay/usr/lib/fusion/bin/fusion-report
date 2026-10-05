@@ -285,9 +285,9 @@ def quick_checks(sysinfo):
     try:
         sv = os.statvfs("/data")
         pct = 100 - sv.f_bavail * 100 // max(1, sv.f_blocks)
-        w = os.access("/data", os.W_OK) or os.geteuid() == 0
-        add("OK" if pct < 90 else "FIGY", f"DATA: {pct} % foglalt, szabad: {human(sv.f_bavail * sv.f_frsize)}"
-            + ("" if w else " — NEM ÍRHATÓ"))
+        ro = bool(sv.f_flag & os.ST_RDONLY)
+        add("HIBA" if ro else "OK" if pct < 90 else "FIGY", f"DATA: {pct} % foglalt, szabad: {human(sv.f_bavail * sv.f_frsize)}"
+            + (" — CSAK OLVASHATÓ (fájlrendszer-hiba?)" if ro else ""))
     except OSError:
         add("HIBA", "DATA nem érhető el (/data)")
     env = kv("/run/fusion/hardware/display.env")

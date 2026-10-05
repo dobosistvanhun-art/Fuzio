@@ -513,9 +513,14 @@ def set_type(disk, number, table, fs, label):
         run(["sfdisk", "-q", "--no-reread", "--part-label", f"/dev/{disk}", str(number), label or ""], check=False)
 
 
-def automount(part, disk):
-    if removable(disk):
-        run([ADMIN, "automount", part], check=False)
+def automount(disk):
+    """cserélhető lemez: a művelet után a kötetei csatolva legyenek, mint bedugáskor — az új / formázott partíció,
+    és az is, amelyiket a partíciós tábla frissítése közben a kernel (és vele a csatolás) újra felvett"""
+    if not removable(disk):
+        return
+    for n in sorted(os.listdir(f"/sys/block/{disk}")):
+        if n.startswith(disk) and part_number(n):
+            run([ADMIN, "automount", n], check=False)
 
 
 def fs_arg(fs):
@@ -559,7 +564,7 @@ def cmd_format_disk(disk, table, fs, label, confirm):
             mkfs(f"/dev/{n}", fs, label, d["size"])
             settle()
     if fs != "none":
-        automount(n, disk)
+        automount(disk)
     say("kész")
 
 
@@ -574,7 +579,7 @@ def cmd_format(part, fs, label, confirm):
         if d["table"] in ("gpt", "dos"):
             set_type(d["name"], p["number"], d["table"], fs, label)
         sync_kernel(d["name"])
-    automount(part, d["name"])
+    automount(d["name"])
     say("kész")
 
 
@@ -601,6 +606,7 @@ def cmd_label(part, label):
     say(f"új címke: {label or '(nincs)'}")
     if was:
         run([ADMIN, "mount", part], check=False)
+    automount(d["name"])
     say("kész")
 
 
@@ -631,7 +637,7 @@ def cmd_create(disk, start_mib, size_mib, fs, label, confirm):
         n = wait_node(disk, start_sector=start // 512)
         mkfs(f"/dev/{n}", fs, label, size)
         sync_kernel(disk)
-    automount(n, disk)
+    automount(disk)
     say(f"kész: /dev/{n}")
 
 
@@ -645,6 +651,7 @@ def cmd_delete(part, confirm):
         run(["sfdisk", "-q", "--no-reread", "--delete", f"/dev/{d['name']}", str(p["number"])])
         run(["partx", "-d", "--nr", str(p["number"]), f"/dev/{d['name']}"], check=False)
         sync_kernel(d["name"])
+    automount(d["name"])
     say("kész")
 
 

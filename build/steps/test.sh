@@ -326,7 +326,7 @@ step_test() {
             _check "$log" "FUSION-DISK: LABEL rc=0 label=UJ NEV mounted=/run/media/UJ_NEV file=ok" "címke módosítása (csatolt kötet: leválasztás, átnevezés, visszacsatolás)" || ok_run=0
             _check "$log" "FUSION-DISK: DELETE rc=0 parts=0 free=1 media=\s*\$" "partíció törlése" || ok_run=0
             _check "$log" "FUSION-DISK: CREATE rc=0,0 parts=1:ext4:linux,2:exfat:Közös write=ab" "két új partíció (ext4 + exFAT), írhatók" || ok_run=0
-            _check "$log" "FUSION-DISK: REFORMAT rc=0 fs=ntfs type=0x7" "partíció újraformázása (NTFS, típuskód)" || ok_run=0
+            _check "$log" "FUSION-DISK: REFORMAT rc=0 fs=ntfs type=0[xX]0*7" "partíció újraformázása (NTFS, típuskód)" || ok_run=0
             _check "$log" "FUSION-DISK: WIPE rc=0 table=gpt parts=0 media=\s*\$" "a teljes lemez törlése (csatolt kötetekkel), új GPT" || ok_run=0
             _check "$log" "FUSION-DISK: GUARD fusion-disk: a FusionOS saját lemeze .* | fusion-disk: a FusionOS saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else

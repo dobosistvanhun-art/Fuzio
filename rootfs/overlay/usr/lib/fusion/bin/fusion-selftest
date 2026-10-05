@@ -418,7 +418,7 @@ if [ -n "$scr" ]; then
     adm disk create "$k" 40 40 exfat "Közös" "$k" >/dev/null 2>&1; r2=$?
     sleep 2
     l1=$(findmnt -rn -S "/dev/${k}1" -o TARGET | head -n 1); l2=$(findmnt -rn -S "/dev/${k}2" -o TARGET | head -n 1)
-    echo "FUSION-DISK: CREATE rc=$r1,$r2 parts=$(dj 'print(",".join("%s:%s:%s" % (p["number"], p["fstype"], p["label"]) for p in d["partitions"]))') write=$(runuser -u fusion -- sh -c "echo a > '$l1/a' && echo b > '$l2/b' && cat '$l1/a' '$l2/b' | tr -d '\n'" 2>/dev/null || echo no)"
+    echo "FUSION-DISK: CREATE rc=$r1,$r2 parts=$(dj 'print(",".join("%s:%s:%s" % (p["number"], p["fstype"], p["label"]) for p in d["partitions"]))') write=$(runuser -u fusion -- sh -c "echo a > '$l1/a' && echo b > '$l2/b' && cat '$l1/a' '$l2/b' | tr -d '\n'" 2>/dev/null || echo no) at=${l1:-?},${l2:-?}"
     adm disk format "${k}2" ntfs "Windows" "$k" >/dev/null 2>&1; rc=$?
     echo "FUSION-DISK: REFORMAT rc=$rc fs=$(blkid -p -o value -s TYPE "/dev/${k}2") type=$(dj 'print([p["parttype"] for p in d["partitions"] if p["number"]==2][0])')"
     adm disk format-disk "$k" gpt none "" "$k" >/dev/null 2>&1; rc=$?
