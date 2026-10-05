@@ -42,6 +42,8 @@ SERIAL_DEV="usb-serial,chardev=fser0,id=fser0dev,bus=fxhci.0,port=2"
 # teszt-pendrive (M6, automatikus csatolás): ugyanazon az xHCI-n, három partícióval —
 # FAT32 (FUSIONUSB), exFAT (FUSIONEXF), NTFS (FUSIONNTFS); az utóbbi kettő csak, ha a gépen van mkfs.exfat / mkntfs
 STICK_DEV="usb-storage,drive=stick0,bus=fxhci.0,port=3,removable=on"
+# üres USB-lemez a Lemezkezelő próbájához (formázás, címke, partíciók) — 96 MiB, partíciós tábla nélkül
+SCRATCH_DEV="usb-storage,drive=scratch0,bus=fxhci.0,port=4,removable=on,serial=FUSIONSCRATCH"
 
 # _make_stick <kép>: a partíciókat külön fájlban formázzuk, majd a helyükre másoljuk (root nélkül)
 _make_stick() {
@@ -192,8 +194,10 @@ step_test() {
             ser=1; serinfo=", + USB-soros eszköz"
             # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
             _make_stick "$out/stick.img"
+            rm -f "$out/scratch.img"; truncate -s 96M "$out/scratch.img"
             QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV"
-                        -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV")
+                        -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV"
+                        -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
             QEMU_HOTPLUG=1; QEMU_TIMEOUT=2400   # a Wine-környezet létrehozása KVM nélkül lassú
         else
             QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=600
@@ -236,8 +240,11 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: UPDATE version=$FUSION_VERSION slot=A entries=A:ok\* files=0 error=-" "Beállítások → Rendszerfrissítés: állapot (sudo fusion-admin update-status)" || ok_run=0
             _check "$log" "FUSION-TASKS: RESULT ok" "Feladatkezelő: lefagyott ablak felismerése és bezárása" || ok_run=0
+            _check "$log" "FUSION-DISKS: GUARD ok" "Lemezkezelő: a FusionOS saját lemeze nem módosítható" || ok_run=0
+            _check "$log" "FUSION-DISKS: RESULT ok" "Lemezkezelő: lemezlista (sudo), felület" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: REPORT dir=/home/fusion/Letöltések" "Beállítások → Hibajelentés" || ok_run=0
             _check "$log" "FUSION-M6: CTRLALTDEL 1 target=masked" "Ctrl+Alt+Del: Feladatkezelő (a konzolon nem indít újra)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,tasks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,tasks,disks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
@@ -312,6 +319,16 @@ step_test() {
                 _check "$log" "FUSION-M6: MEDIA FUSIONNTFS fs=ntfs3 uid=1000 file=- write=ok" "USB NTFS (ntfs3): automatikus csatolás, írható" || ok_run=0; fi
             _check "$log" "FUSION-M6: EJECT rc=0 left=biztonságosan eltávolítható" "biztonságos eltávolítás (fusion-admin eject, a fusion felhasználóként)" || ok_run=0
             _check "$log" "FUSION-M6: SHELL-MEDIA\s*\$" "a Fusion Shell észleli a leválasztást" || ok_run=0
+            # Lemezkezelő: valódi műveletek az üres USB-lemezen (a felhasználóként, a segéden át)
+            _check "$log" "FUSION-DISK: LIST found removable=True system=False table=- parts=0" "Lemezkezelő: az üres USB-lemez a listában" || ok_run=0
+            _check "$log" "FUSION-DISK: CONFIRM rc=1 .*nem egyezik" "lemezíró művelet csak a lemez nevével" || ok_run=0
+            _check "$log" "FUSION-DISK: FORMAT rc=0 table=dos fs=vfat label=PROBA mounted=/run/media/PROBA write=ok" "formázás (MBR + FAT32), csatolás, írás" || ok_run=0
+            _check "$log" "FUSION-DISK: LABEL rc=0 label=UJ NEV mounted=/run/media/UJ_NEV file=ok" "címke módosítása (csatolt kötet: leválasztás, átnevezés, visszacsatolás)" || ok_run=0
+            _check "$log" "FUSION-DISK: DELETE rc=0 parts=0 free=1 media=\s*\$" "partíció törlése" || ok_run=0
+            _check "$log" "FUSION-DISK: CREATE rc=0,0 parts=1:ext4:linux,2:exfat:Közös write=ab" "két új partíció (ext4 + exFAT), írhatók" || ok_run=0
+            _check "$log" "FUSION-DISK: REFORMAT rc=0 fs=ntfs type=0x7" "partíció újraformázása (NTFS, típuskód)" || ok_run=0
+            _check "$log" "FUSION-DISK: WIPE rc=0 table=gpt parts=0 media=\s*\$" "a teljes lemez törlése (csatolt kötetekkel), új GPT" || ok_run=0
+            _check "$log" "FUSION-DISK: GUARD fusion-disk: a FusionOS saját lemeze .* | fusion-disk: a FusionOS saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
                 warn "hiányzik: a COM3-ra írt sor nem érkezett meg az USB-soros eszközre ($out/serial-$cfg.out)"; ok_run=0
             fi
@@ -320,6 +337,11 @@ step_test() {
             _check "$log" "FUSION-M4: WINE wine-$WINE_VERSION" "Wine $WINE_VERSION a képben" || ok_run=0
         fi
         _check "$log" "FUSION-M3: NOGRAB ok" "nincs ModemManager / brltty" || ok_run=0
+        # hibajelentés: elkészül, minden szakasz benne van, a titkok maszkolva, a rendszeroldali rész (sudo) is
+        _check "$log" "FUSION-REPORT: RUN rc=0 " "hibajelentés: elkészül (fusion-report, a felhasználóként)" || ok_run=0
+        _check "$log" "FUSION-REPORT: SECTIONS ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,\s*\$" "hibajelentés: minden szakasz" || ok_run=0
+        _check "$log" "FUSION-REPORT: MASK secret=0 email=0 ssid=0 alias=[1-9]" "hibajelentés: jelszó, e-mail, Wi-Fi-név maszkolva" || ok_run=0
+        _check "$log" "FUSION-REPORT: SYSTEM update=[1-9][0-9]* pss=1 state=rendszerállapot: running" "hibajelentés: rendszeroldali rész (A/B-állapot, PSS) a segéden át" || ok_run=0
         # Wi-Fi: iwd fut, a ZBook firmware-je és drivere a képben, valódi kapcsolódás virtuális rádiókkal
         _check "$log" "FUSION-WIFI: IWD active" "iwd fut" || ok_run=0
         _check "$log" "FUSION-WIFI: FW /usr/lib/firmware/iwlwifi-7260-17.ucode" "Intel 7260 firmware" || ok_run=0

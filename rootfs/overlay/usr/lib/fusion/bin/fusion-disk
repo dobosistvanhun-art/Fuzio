@@ -1,0 +1,686 @@
+#!/usr/bin/python3
+"""FusionOS — fusion-disk: a Fusion Lemezkezelő rendszeroldali része (root, a fusion-admin hívja)
+
+    fusion-disk list [--smart]                                  lemezek, partíciók, szabad helyek (JSON)
+    fusion-disk format-disk <lemez> <gpt|dos> <fs|none> <címke> <megerősítés>
+                                                                a teljes lemez törlése: új partíciós tábla,
+                                                                egy partícióval (fs) vagy üresen (none)
+    fusion-disk format <partíció> <fs> <címke> <megerősítés>    partíció formázása
+    fusion-disk label <partíció> <címke>                        címke (kötetnév) módosítása
+    fusion-disk create <lemez> <kezdet-MiB> <méret-MiB> <fs> <címke> <megerősítés>
+                                                                új partíció a szabad helyen
+    fusion-disk delete <partíció> <megerősítés>                 partíció törlése
+
+fs: vfat (FAT32) | exfat | ntfs | ext4. A megerősítés a lemez kernelneve (pl. sdc) — a felhasználó gépeli be.
+
+Általános szabályok, eszköztípustól függetlenül (a Hardware Layer általános marad):
+  - a FusionOS saját lemeze (/run/fusion/boot-disk) csak megtekinthető; egy másik FusionOS-lemez
+    (pl. régi telepítő pendrive) FUSION_* partíciói külön nem módosíthatók, csak a teljes lemez törölhető;
+  - csak teljes lemez (SATA, NVMe, USB, SD-kártya) — loop, RAM-lemez, optikai meghajtó nem;
+  - a /run/media alá csatolt köteteket a művelet előtt leválasztja; amit a rendszer máshol használ
+    (más csatolás, swap, eszközleképezés), azt nem módosítja;
+  - átméretezés és mozgatás nincs (szándékosan).
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import unicodedata
+
+BOOT_DISK_FILE = "/run/fusion/boot-disk"
+MEDIA = "/run/media"
+ADMIN = "/usr/lib/fusion/bin/fusion-admin"
+LOCK = "/run/fusion/disk.lock"
+BUSY_DIR = "/run/fusion/disk-busy"
+SMART_CACHE = "/run/fusion/smart"
+MIB = 1024 * 1024
+os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
+os.environ["LC_ALL"] = "C.UTF-8"
+
+FS = {
+    #        felirat     MBR-típus  GPT-típus (GUID)
+    "vfat":  ("FAT32",   "c",  "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"),
+    "exfat": ("exFAT",   "7",  "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"),
+    "ntfs":  ("NTFS",    "7",  "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"),
+    "ext4":  ("ext4",    "83", "0FC63DAF-8483-4772-8E79-3D69D8477DE4"),
+}
+ESP_GUID = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
+FRIENDLY_PARTLABEL = {
+    "FUSION_ESP": "FusionOS indítópartíció (EFI)",
+    "FUSION_A": "FusionOS rendszer — A slot",
+    "FUSION_B": "FusionOS rendszer — B slot",
+    "FUSION_DATA": "FusionOS adatok (DATA)",
+}
+
+
+class DiskError(Exception):
+    pass
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def run(cmd, check=True, timeout=600, inp=None):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=inp, errors="replace")
+    if check and r.returncode != 0:
+        err = (r.stderr or r.stdout or "").strip().splitlines()
+        err = [l for l in err if l.strip()]
+        raise DiskError(f"{os.path.basename(cmd[0])}: " + (err[-1] if err else f"hibakód {r.returncode}"))
+    return r
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def boot_disk():
+    return read(BOOT_DISK_FILE)
+
+
+def settle():
+    run(["udevadm", "settle", "--timeout=15"], check=False)
+
+
+def kernel_parts(disk):
+    try:
+        return {part_number(n) for n in os.listdir(f"/sys/block/{disk}") if n.startswith(disk) and part_number(n)}
+    except OSError:
+        return set()
+
+
+def sync_kernel(disk):
+    """a módosított partíciós tábla a kernelnek (a használatban lévő partíciókat nem érinti);
+    a partx -u egy hívással nem mindig ad hozzá minden partíciót, ezért ismételjük, amíg egyezik"""
+    for _ in range(8):
+        pt = sfdisk_json(disk) or {}
+        want = {part_number(os.path.basename(os.path.realpath(p["node"]))) or int(re.search(r"(\d+)$", p["node"]).group(1))
+                for p in pt.get("partitions", [])}
+        if kernel_parts(disk) == want:
+            break
+        run(["partx", "-u", f"/dev/{disk}"], check=False)
+        run(["partx", "-a", f"/dev/{disk}"], check=False)
+    settle()
+
+
+# --- felmérés -------------------------------------------------------------------------------------
+
+def lsblk():
+    cols = "NAME,PATH,TYPE,SIZE,MODEL,VENDOR,TRAN,RM,RO,HOTPLUG,PTTYPE,FSTYPE,FSVER,LABEL,PARTLABEL,PARTTYPE,MOUNTPOINTS,PKNAME"
+    r = run(["lsblk", "-J", "-b", "-o", cols], check=False)
+    try:
+        return json.loads(r.stdout).get("blockdevices", [])
+    except ValueError:
+        return []
+
+
+def wanted_disk(d):
+    n = d["name"]
+    if d.get("type") == "loop" and os.environ.get("FUSION_DISK_TEST_LOOP") == "1" and n.startswith("loop"):
+        return (d.get("size") or 0) > 0          # csak fejlesztői próbához (a sudo ezt a változót nem engedi át)
+    if d.get("type") != "disk":
+        return False
+    if re.match(r"^(loop|ram|zram|sr|fd|md|dm-|nbd)", n) or re.match(r"^mmcblk\d+(boot|rpmb)", n):
+        return False
+    return (d.get("size") or 0) > 0
+
+
+def mounts():
+    out = {}
+    for line in read("/proc/self/mounts").splitlines():
+        p = line.split()
+        if len(p) >= 2 and p[0].startswith("/dev/"):
+            out.setdefault(os.path.realpath(p[0]), []).append(p[1].replace("\\040", " "))
+    return out
+
+
+def swaps():
+    return {os.path.realpath(l.split()[0]) for l in read("/proc/swaps").splitlines()[1:] if l.strip()}
+
+
+def holders(name):
+    try:
+        return os.listdir(f"/sys/class/block/{name}/holders")
+    except OSError:
+        return []
+
+
+def sector_size(disk):
+    try:
+        return int(read(f"/sys/block/{disk}/queue/logical_block_size", "512"))
+    except ValueError:
+        return 512
+
+
+def sfdisk_json(disk):
+    r = run(["sfdisk", "-J", f"/dev/{disk}"], check=False)
+    try:
+        return json.loads(r.stdout).get("partitiontable") if r.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def part_number(name):
+    try:
+        return int(read(f"/sys/class/block/{name}/partition", "0"))
+    except ValueError:
+        return 0
+
+
+def removable(disk):
+    if read(f"/sys/block/{disk}/removable") == "1" or disk.startswith("mmcblk"):
+        return True
+    return "/usb" in os.path.realpath(f"/sys/block/{disk}")
+
+
+def kind(d):
+    n, tran = d["name"], (d.get("tran") or "")
+    if n.startswith("mmcblk"):
+        return "sd"
+    if tran == "usb":
+        return "usb"
+    if n.startswith("nvme") or tran == "nvme":
+        return "nvme"
+    if read(f"/sys/block/{n}/queue/rotational") == "1":
+        return "hdd"
+    return "ssd"
+
+
+def statvfs(mp):
+    try:
+        s = os.statvfs(mp)
+        return (s.f_blocks - s.f_bfree) * s.f_frsize, s.f_bavail * s.f_frsize
+    except OSError:
+        return None, None
+
+
+def probe(path):
+    """a fájlrendszer típusa és címkéje közvetlenül a lemezről (ha az udev-adatbázis még nem frissült)"""
+    def val(tag):
+        return run(["blkid", "-p", "-o", "value", "-s", tag, path], check=False, timeout=20).stdout.strip()
+    return (val("TYPE") if val("USAGE") in ("", "filesystem") else ""), val("LABEL"), val("VERSION")
+
+
+def free_regions(disk, pt, size_bytes):
+    """szabad helyek a partíciós táblában, 1 MiB-re igazítva (bájtban)"""
+    ss = sector_size(disk)
+    total = size_bytes // ss
+    if pt is None:
+        return []
+    first = int(pt.get("firstlba") or 2048)
+    last = int(pt.get("lastlba") or (total - 1))
+    used = sorted((int(p["start"]), int(p["start"]) + int(p["size"]) - 1) for p in pt.get("partitions", []))
+    if pt.get("label") == "dos":
+        # a kiterjesztett partíció egésze foglalt (a logikai partíciók benne vannak)
+        used = sorted((int(p["start"]), int(p["start"]) + int(p["size"]) - 1) for p in pt.get("partitions", [])
+                      if p.get("type", "").lower() not in ("5", "f", "85"))
+        ext = [p for p in pt.get("partitions", []) if p.get("type", "").lower() in ("5", "f", "85")]
+        used += [(int(p["start"]), int(p["start"]) + int(p["size"]) - 1) for p in ext]
+        used.sort()
+    align = MIB // ss
+    out, cur = [], max(first, align)
+    for s, e in used + [(last + 1, last + 1)]:
+        a = -(-cur // align) * align                   # felfelé igazítva
+        b = ((s) // align) * align                     # lefelé igazítva (a következő foglalt előtt)
+        if b - a >= align:
+            out.append({"start": a * ss, "end": b * ss, "size": (b - a) * ss})
+        cur = max(cur, e + 1)
+    return out
+
+
+def smart_info(disk, k):
+    """SMART-állapot (gyorsítótárral: 10 perc); USB-pendrive-on és SD-kártyán általában nincs"""
+    if k in ("usb", "sd"):
+        return {"available": False, "text": "nem elérhető (pendrive / kártya)"}
+    os.makedirs(SMART_CACHE, exist_ok=True)
+    cache = os.path.join(SMART_CACHE, disk + ".json")
+    try:
+        if time.time() - os.path.getmtime(cache) < 600:
+            with open(cache) as f:
+                return json.load(f)
+    except (OSError, ValueError):
+        pass
+    try:
+        r = subprocess.run(["smartctl", "-j", "-H", "-A", f"/dev/{disk}"], capture_output=True, text=True, timeout=20)
+        j = json.loads(r.stdout or "{}")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        j = {}
+    info = {"available": False, "text": "nem elérhető"}
+    st = j.get("smart_status")
+    if st is not None:
+        info = {"available": True, "passed": bool(st.get("passed"))}
+        info["temp"] = (j.get("temperature") or {}).get("current")
+        info["hours"] = (j.get("power_on_time") or {}).get("hours")
+        attrs = {a.get("id"): (a.get("raw") or {}).get("value", 0)
+                 for a in (j.get("ata_smart_attributes") or {}).get("table", [])}
+        nv = j.get("nvme_smart_health_information_log") or {}
+        bad = {"realloc": attrs.get(5, 0) or 0, "pending": attrs.get(197, 0) or 0,
+               "uncorrect": attrs.get(198, 0) or 0, "media_errors": nv.get("media_errors", 0) or 0}
+        info.update(bad)
+        if nv.get("percentage_used") is not None:
+            info["wear"] = nv["percentage_used"]
+        if not info["passed"]:
+            info["level"], info["text"] = "bad", "HIBÁS — a lemez saját ellenőrzése szerint hamarosan meghibásodhat; mentse az adatait!"
+        elif any(bad.values()):
+            parts = []
+            if bad["realloc"]:
+                parts.append(f"{bad['realloc']} áthelyezett szektor")
+            if bad["pending"]:
+                parts.append(f"{bad['pending']} függő szektor")
+            if bad["uncorrect"] or bad["media_errors"]:
+                parts.append(f"{bad['uncorrect'] + bad['media_errors']} javíthatatlan hiba")
+            info["level"], info["text"] = "warn", "Figyelmeztetés: " + ", ".join(parts)
+        else:
+            info["level"], info["text"] = "ok", "Jó"
+    try:
+        with open(cache, "w") as f:
+            json.dump(info, f)
+    except OSError:
+        pass
+    return info
+
+
+def collect(smart=False):
+    bd = boot_disk()
+    mnt, sw = mounts(), swaps()
+    disks = []
+    for d in lsblk():
+        if not wanted_disk(d):
+            continue
+        name = d["name"]
+        k = kind(d)
+        pt = sfdisk_json(name)
+        parts, has_esp, fusion_parts = [], False, False
+        # a partíció neve és típusa a partíciós táblából (az udev-adatbázis frissülése nélkül is pontos)
+        ptab = {os.path.basename(p["node"]): p for p in (pt or {}).get("partitions", [])}
+        for c in d.get("children") or []:
+            if c.get("type") != "part":
+                continue
+            e = ptab.get(c["name"], {})
+            if e:
+                c["partlabel"] = e.get("name", c.get("partlabel") or "")
+                t = e.get("type", "")
+                c["parttype"] = t if len(t) > 4 else "0x" + t
+            path = os.path.realpath(c["path"])
+            mps = [m for m in (c.get("mountpoints") or []) if m] or mnt.get(path, [])
+            plabel = c.get("partlabel") or ""
+            ptype = (c.get("parttype") or "").upper()
+            if ptype == ESP_GUID or ptype == "0XEF":
+                has_esp = True
+            sysuse = [m for m in mps if not m.startswith(MEDIA + "/")]
+            locked = ""
+            fpart = plabel.startswith("FUSION_")
+            fusion_parts = fusion_parts or fpart
+            if sysuse:
+                locked = "a rendszer használja: " + sysuse[0]
+            elif path in sw:
+                locked = "lapozófájlként (swap) használatban"
+            elif holders(c["name"]):
+                locked = "eszközleképezés használja: " + ", ".join(holders(c["name"]))
+            if not c.get("fstype"):
+                c["fstype"], c["label"], c["fsver"] = probe(c["path"])
+            used = avail = None
+            if mps:
+                used, avail = statvfs(mps[0])
+            start = 0
+            try:
+                start = int(read(f"/sys/class/block/{c['name']}/start", "0")) * 512
+            except ValueError:
+                pass
+            parts.append({
+                "name": c["name"], "path": c["path"], "number": part_number(c["name"]),
+                "start": start, "size": c.get("size") or 0, "end": start + (c.get("size") or 0),
+                "fstype": c.get("fstype") or "", "fsver": c.get("fsver") or "",
+                "label": c.get("label") or "", "partlabel": plabel,
+                "friendly": FRIENDLY_PARTLABEL.get(plabel, "EFI rendszerpartíció" if ptype in (ESP_GUID, "0XEF") else ""),
+                "parttype": ptype, "mountpoint": mps[0] if mps else "", "media": bool(mps) and not sysuse,
+                "used": used, "avail": avail, "locked": locked, "fusionpart": fpart,
+                "extended": ptype in ("0X5", "0XF", "0X85"),
+            })
+        parts.sort(key=lambda p: p["start"])
+        system = bool(bd) and name == bd
+        info = {
+            "name": name, "path": d["path"], "kind": k,
+            "model": " ".join(x for x in ((d.get("vendor") or "").strip(), (d.get("model") or "").strip()) if x) or name,
+            "size": d.get("size") or 0, "tran": d.get("tran") or "", "removable": removable(name),
+            "ro": bool(d.get("ro")), "table": (pt or {}).get("label", "") or (d.get("pttype") or ""),
+            "fstype": d.get("fstype") or "", "label": d.get("label") or "",
+            "system": system, "fusion": fusion_parts, "otheros": has_esp and not system,
+            "partitions": parts, "free": free_regions(name, pt, d.get("size") or 0),
+            "sector": sector_size(name),
+        }
+        if system:
+            info["locked"] = "a FusionOS saját lemeze — csak megtekinthető"
+        elif d.get("ro"):
+            info["locked"] = "írásvédett"
+        elif any(p["locked"] for p in parts):
+            info["locked"] = ""            # a lemez egészét nem lehet törölni, de a szabad partíciók kezelhetők
+            info["inuse"] = next(p["locked"] for p in parts if p["locked"])
+        else:
+            info["locked"] = ""
+        if pt and pt.get("label") == "dos":
+            prim = [p for p in pt.get("partitions", []) if part_number(os.path.basename(p["node"])) <= 4]
+            info["primaryFull"] = len(prim) >= 4
+            info["hasExtended"] = any(p["extended"] for p in parts)
+        info["smart"] = smart_info(name, k) if smart else None
+        disks.append(info)
+    disks.sort(key=lambda x: (not x["system"], x["removable"], x["name"]))
+    return {"bootDisk": bd, "disks": disks}
+
+
+# --- ellenőrzések -------------------------------------------------------------------------------
+
+def find_disk(name):
+    if not re.fullmatch(r"[a-zA-Z0-9]+", name or ""):
+        raise DiskError(f"érvénytelen lemeznév: {name}")
+    for d in collect()["disks"]:
+        if d["name"] == name:
+            return d
+    raise DiskError(f"nincs ilyen lemez: {name}")
+
+
+def find_part(name):
+    if not re.fullmatch(r"[a-zA-Z0-9]+", name or ""):
+        raise DiskError(f"érvénytelen partíciónév: {name}")
+    for d in collect()["disks"]:
+        for p in d["partitions"]:
+            if p["name"] == name:
+                return d, p
+    raise DiskError(f"nincs ilyen partíció: {name}")
+
+
+def check_disk_writable(d, confirm=None):
+    if d["system"]:
+        raise DiskError(f"a FusionOS saját lemeze ({d['name']}) — nem módosítható")
+    if d["ro"]:
+        raise DiskError(f"a lemez írásvédett: {d['name']}")
+    if confirm is not None and confirm.strip() != d["name"]:
+        raise DiskError(f"a megerősítés nem egyezik: a lemez neve „{d['name']}”, beírva: „{confirm}”")
+
+
+def check_part_writable(d, p, confirm=None):
+    check_disk_writable(d, confirm)
+    if p["locked"]:
+        raise DiskError(f"{p['name']}: {p['locked']}")
+    if p["fusionpart"]:
+        raise DiskError(f"{p['name']}: egy másik FusionOS-telepítés partíciója ({p['partlabel']}) — "
+                        "külön nem módosítható, csak a teljes lemez törölhető")
+    if p["extended"]:
+        raise DiskError(f"{p['name']}: kiterjesztett partíció (MBR) — a benne lévő logikai partíciók kezelhetők")
+
+
+def unmount_media(path):
+    """a /run/media alatti csatolás leválasztása (a fusion-admin szabályaival); igaz, ha csatolva volt"""
+    real = os.path.realpath(path)
+    mps = [m for m in mounts().get(real, []) if m.startswith(MEDIA + "/")]
+    for m in mps:
+        r = run([ADMIN, "unmount", m], check=False)
+        if r.returncode != 0:
+            raise DiskError((r.stderr or r.stdout).strip().replace("fusion-admin: ", "") or f"nem választható le: {m}")
+        say(f"leválasztva: {m}")
+    return bool(mps)
+
+
+def label_ok(fs, label):
+    label = (label or "").strip()
+    if any(ord(ch) < 32 for ch in label) or any(ch in label for ch in '/\\"'):
+        raise DiskError('a címkében nem lehet vezérlőkarakter, /, \\ vagy "')
+    if fs == "vfat":
+        # FAT: legfeljebb 11 karakter, nagybetű, ékezet nélkül (a régi eszközök is olvassák)
+        t = unicodedata.normalize("NFKD", label)
+        t = "".join(ch for ch in t if not unicodedata.combining(ch)).upper()
+        t = re.sub(r'[^A-Z0-9 _\-!#$%&\'()@^`{}~]', "_", t)
+        if len(t) > 11:
+            raise DiskError(f"FAT32-címke legfeljebb 11 karakter (ékezet nélkül): „{t}”")
+        return t
+    lim = {"exfat": 15, "ntfs": 32, "ext4": 16}.get(fs, 16)
+    n = len(label.encode()) if fs == "ext4" else len(label)
+    if n > lim:
+        raise DiskError(f"{FS[fs][0]}-címke legfeljebb {lim} {'bájt' if fs == 'ext4' else 'karakter'}")
+    return label
+
+
+class Busy:
+    """kizárólagos lemezművelet: zár + jelölő (a bedugáskori automatikus csatolás addig kimarad)"""
+    def __init__(self, disk):
+        self.disk = disk
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+        self.f = open(LOCK, "w")
+        try:
+            fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise DiskError("egy másik lemezművelet folyamatban van")
+        os.makedirs(BUSY_DIR, exist_ok=True)
+        open(os.path.join(BUSY_DIR, self.disk), "w").close()
+        return self
+
+    def __exit__(self, *a):
+        try:
+            os.unlink(os.path.join(BUSY_DIR, self.disk))
+        except OSError:
+            pass
+        self.f.close()
+
+
+def wait_node(disk, start_sector=None, number=None, timeout=20):
+    """az új partíció eszközneve (a kezdőszektor vagy a sorszám alapján)"""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        sync_kernel(disk)
+        for n in sorted(os.listdir(f"/sys/block/{disk}")):
+            if not n.startswith(disk):
+                continue
+            st = read(f"/sys/block/{disk}/{n}/start")
+            if (start_sector is not None and st == str(start_sector)) or (number is not None and part_number(n) == number):
+                if os.path.exists(f"/dev/{n}"):
+                    return n
+        time.sleep(0.5)
+    raise DiskError("az új partíció nem jelent meg (/dev)")
+
+
+def mkfs(dev, fs, label, size):
+    run(["wipefs", "-a", "-q", dev], check=False)
+    say(f"formázás: {dev} → {FS[fs][0]}" + (f", címke: {label}" if label else ""))
+    if fs == "vfat":
+        cmd = ["mkfs.vfat"] + (["-F", "32"] if size >= 512 * MIB else []) + (["-n", label] if label else []) + [dev]
+    elif fs == "exfat":
+        cmd = ["mkfs.exfat"] + (["-L", label] if label else []) + [dev]
+    elif fs == "ntfs":
+        cmd = ["mkntfs", "-Q", "-F"] + (["-L", label] if label else []) + [dev]
+    elif fs == "ext4":
+        uid = int(os.environ.get("SUDO_UID") or 1000)
+        gid = int(os.environ.get("SUDO_GID") or uid)
+        # a gyökérmappa a felhasználóé (írható csatolás után); adatlemezen nem kell a root-tartalék
+        cmd = ["mkfs.ext4", "-F", "-q", "-m", "0", "-E", f"root_owner={uid}:{gid}"] + (["-L", label] if label else []) + [dev]
+    else:
+        raise DiskError(f"nem támogatott fájlrendszer: {fs}")
+    run(cmd, timeout=3600)
+
+
+def set_type(disk, number, table, fs, label):
+    t = FS[fs][1] if table == "dos" else FS[fs][2]
+    run(["sfdisk", "-q", "--no-reread", "--part-type", f"/dev/{disk}", str(number), t], check=False)
+    if table == "gpt":
+        run(["sfdisk", "-q", "--no-reread", "--part-label", f"/dev/{disk}", str(number), label or ""], check=False)
+
+
+def automount(part, disk):
+    if removable(disk):
+        run([ADMIN, "automount", part], check=False)
+
+
+def fs_arg(fs):
+    if fs not in FS:
+        raise DiskError(f"nem támogatott fájlrendszer: {fs} (vfat, exfat, ntfs, ext4)")
+    return fs
+
+
+# --- műveletek ----------------------------------------------------------------------------------
+
+def cmd_format_disk(disk, table, fs, label, confirm):
+    d = find_disk(disk)
+    check_disk_writable(d, confirm)
+    if table not in ("gpt", "dos"):
+        raise DiskError("partíciós tábla: gpt vagy dos (MBR)")
+    if fs != "none":
+        fs_arg(fs)
+        label = label_ok(fs, label)
+    for p in d["partitions"]:
+        if p["locked"]:
+            raise DiskError(f"{p['name']}: {p['locked']} — a lemez nem törölhető")
+    with Busy(disk):
+        for p in d["partitions"]:
+            unmount_media(p["path"])
+        unmount_media(d["path"])
+        say(f"a lemez törlése: /dev/{disk} ({d['model']})")
+        for p in d["partitions"]:
+            run(["wipefs", "-a", "-q", p["path"]], check=False)
+        run(["wipefs", "-a", "-q", f"/dev/{disk}"])
+        ss = d["sector"]
+        start = MIB // ss
+        script = f"label: {table}\n"
+        if fs != "none":
+            t = FS[fs][1] if table == "dos" else FS[fs][2]
+            script += f"start={start}, type={t}" + (f', name="{label}"' if table == "gpt" and label else "") + "\n"
+        say("új partíciós tábla: " + ("GPT" if table == "gpt" else "MBR"))
+        run(["sfdisk", "-q", "--wipe", "always", "--wipe-partitions", "always", f"/dev/{disk}"], inp=script)
+        settle()
+        if fs != "none":
+            n = wait_node(disk, number=1)
+            mkfs(f"/dev/{n}", fs, label, d["size"])
+            settle()
+    if fs != "none":
+        automount(n, disk)
+    say("kész")
+
+
+def cmd_format(part, fs, label, confirm):
+    d, p = find_part(part)
+    check_part_writable(d, p, confirm)
+    fs_arg(fs)
+    label = label_ok(fs, label)
+    with Busy(d["name"]):
+        unmount_media(p["path"])
+        mkfs(p["path"], fs, label, p["size"])
+        if d["table"] in ("gpt", "dos"):
+            set_type(d["name"], p["number"], d["table"], fs, label)
+        sync_kernel(d["name"])
+    automount(part, d["name"])
+    say("kész")
+
+
+def cmd_label(part, label):
+    d, p = find_part(part)
+    check_part_writable(d, p)
+    fs = {"vfat": "vfat", "exfat": "exfat", "ntfs": "ntfs", "ext2": "ext4", "ext3": "ext4", "ext4": "ext4"}.get(p["fstype"])
+    if not fs:
+        raise DiskError(f"ennek a fájlrendszernek a címkéje nem módosítható: {p['fstype'] or 'nincs fájlrendszer'}")
+    label = label_ok(fs, label)
+    with Busy(d["name"]):
+        was = unmount_media(p["path"])
+        if fs == "vfat":
+            run(["fatlabel", p["path"], label] if label else ["fatlabel", "-r", p["path"]])
+        elif fs == "exfat":
+            run(["exfatlabel", p["path"], label])
+        elif fs == "ntfs":
+            run(["ntfslabel", p["path"], label])
+        else:
+            run(["e2label", p["path"], label])
+        if d["table"] == "gpt":
+            run(["sfdisk", "-q", "--no-reread", "--part-label", f"/dev/{d['name']}", str(p["number"]), label], check=False)
+        sync_kernel(d["name"])
+    say(f"új címke: {label or '(nincs)'}")
+    if was:
+        run([ADMIN, "mount", part], check=False)
+    say("kész")
+
+
+def cmd_create(disk, start_mib, size_mib, fs, label, confirm):
+    d = find_disk(disk)
+    check_disk_writable(d, confirm)
+    fs_arg(fs)
+    label = label_ok(fs, label)
+    if d["table"] not in ("gpt", "dos"):
+        raise DiskError("a lemezen nincs partíciós tábla — előbb: Lemez formázása")
+    if d["table"] == "dos" and (d.get("primaryFull") or d.get("hasExtended")):
+        raise DiskError("MBR-lemez: legfeljebb 4 elsődleges partíció lehet (kiterjesztett partíciót a Lemezkezelő nem hoz létre)")
+    try:
+        start, size = int(start_mib) * MIB, int(size_mib) * MIB
+    except ValueError:
+        raise DiskError("a kezdet és a méret egész MiB legyen")
+    if size < MIB:
+        raise DiskError("a partíció legalább 1 MiB")
+    reg = next((r for r in d["free"] if r["start"] <= start and start + size <= r["end"]), None)
+    if not reg:
+        raise DiskError("a megadott terület nem szabad hely a lemezen")
+    ss = d["sector"]
+    t = FS[fs][1] if d["table"] == "dos" else FS[fs][2]
+    script = f"start={start // ss}, size={size // ss}, type={t}" + (f', name="{label}"' if d["table"] == "gpt" and label else "") + "\n"
+    with Busy(disk):
+        say(f"új partíció: /dev/{disk}, {size // MIB} MiB")
+        run(["sfdisk", "-q", "--no-reread", "--append", f"/dev/{disk}"], inp=script)
+        n = wait_node(disk, start_sector=start // 512)
+        mkfs(f"/dev/{n}", fs, label, size)
+        sync_kernel(disk)
+    automount(n, disk)
+    say(f"kész: /dev/{n}")
+
+
+def cmd_delete(part, confirm):
+    d, p = find_part(part)
+    check_part_writable(d, p, confirm)
+    with Busy(d["name"]):
+        unmount_media(p["path"])
+        say(f"partíció törlése: {p['path']}")
+        run(["wipefs", "-a", "-q", p["path"]], check=False)
+        run(["sfdisk", "-q", "--no-reread", "--delete", f"/dev/{d['name']}", str(p["number"])])
+        run(["partx", "-d", "--nr", str(p["number"]), f"/dev/{d['name']}"], check=False)
+        sync_kernel(d["name"])
+    say("kész")
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        print("fusion-disk: rootként kell futnia (sudo -n fusion-admin disk …)", file=sys.stderr)
+        return 1
+    if not argv:
+        print(__doc__)
+        return 2
+    cmd, a = argv[0], argv[1:]
+    try:
+        if cmd == "list" and len(a) <= 1 and (not a or a[0] == "--smart"):
+            json.dump(collect(smart=bool(a)), sys.stdout, ensure_ascii=False)
+            print()
+        elif cmd == "format-disk" and len(a) == 5:
+            cmd_format_disk(*a)
+        elif cmd == "format" and len(a) == 4:
+            cmd_format(*a)
+        elif cmd == "label" and len(a) == 2:
+            cmd_label(*a)
+        elif cmd == "create" and len(a) == 6:
+            cmd_create(*a)
+        elif cmd == "delete" and len(a) == 2:
+            cmd_delete(*a)
+        else:
+            print("fusion-disk: hibás paraméterek — " + __doc__.split("\n\n")[1].strip().splitlines()[0], file=sys.stderr)
+            return 2
+    except DiskError as e:
+        print(f"fusion-disk: {e}", file=sys.stderr)
+        return 1
+    except subprocess.TimeoutExpired as e:
+        print(f"fusion-disk: időtúllépés: {e.cmd[0]}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

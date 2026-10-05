@@ -252,6 +252,30 @@ def update_state():
             "stamp": stamp}
 
 
+# --- Hibajelentés ---
+def report_dir():
+    m = re.search(r'^XDG_DOWNLOAD_DIR="([^"]+)"', _read(os.path.expanduser("~/.config/user-dirs.dirs")), re.M)
+    return m.group(1).replace("$HOME", os.path.expanduser("~")) if m else os.path.expanduser("~/Letöltések")
+
+
+def report_files():
+    out = []
+    for p in sorted(glob.glob(os.path.join(report_dir(), "fusion-hibajelentes-*.txt")), reverse=True)[:10]:
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue
+        out.append({"path": p, "name": os.path.basename(p), "size": ui.human_size(st.st_size),
+                    "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))})
+    return out
+
+
+def report_preview(path, n=400):
+    if not path.startswith(report_dir() + "/") or not os.path.basename(path).startswith("fusion-hibajelentes-"):
+        return ""
+    return "\n".join(_read(path).splitlines()[:n])
+
+
 # --- Rendszer ---
 def system():
     rel = ui.fusion_release()
@@ -766,6 +790,30 @@ class Settings(QObject):
     @pyqtSlot()
     def updateReboot(self):
         self._async("power", lambda: dict(zip(("rc", "msg"), ui.admin("update-reboot"))))
+
+    # --- Hibajelentés ---
+    @pyqtSlot()
+    def reportRefresh(self):
+        self._async("report", lambda: {"files": report_files(), "dir": report_dir(), "job": self._job_state("report")})
+
+    @pyqtSlot(str, result=str)
+    def reportCreate(self, desc):
+        return self._job("Hibajelentés", ["-d", desc.strip()[:4000]] if desc.strip() else [], kind="report",
+                         cmd=("fusion-report",), app="Hibajelentés", icon="report", okpat="^kész")
+
+    @pyqtSlot()
+    def reportJobWatch(self):
+        if self._job_state("report")["running"]:
+            self._job_watch("report")
+
+    @pyqtSlot(str, result=str)
+    def reportPreview(self, path):
+        return report_preview(path)
+
+    @pyqtSlot(str)
+    def reportShow(self, path):
+        """a jelentés mappája a Fájlkezelőben"""
+        ui.spawn(["fusion-files", os.path.dirname(path)])
 
     # --- Rendszer ---
     @pyqtSlot()

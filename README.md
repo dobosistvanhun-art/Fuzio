@@ -19,7 +19,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
   `org.freedesktop.Notifications` szolgáltatással (`fusion-notify`, `notify-send`), értesítésközpont
 - **Fájlkezelő** (`fusion-files`): kétpaneles; F3–F8, Tab, jelölés, vágólap, húzás, keresés (Alt+F7),
   könyvtár-összehasonlítás, rejtett fájlok, ZIP/TAR, nézőke és szerkesztő, meghajtók (csatolás, kiadás)
-- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Hang, Programkezelő, Programbolt, Asztal, Rendszer
+- **Beállítások** (`fusion-settings [oldal]`): Wi-Fi, Kijelző, Eszközök, Nyomtató, Hang, Programkezelő, Programbolt, Asztal, Rendszerfrissítés, Hibajelentés, Rendszer
 - **Programbolt** (Start → Programbolt): a Flathub katalógusa (népszerű, kategóriák, keresés, részletek,
   képernyőképek) — a telepítést a Programkezelő végzi. Ellenőrzés: `docs/M6h-programbolt-hang.md`
 - **Start menü csoportokkal** (Műhely, Grafika, Iroda, Internet, … Rendszer; Gyakran használt; jobb gomb: áthelyezés)
@@ -28,6 +28,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **Letöltések** mappa (XDG — a Flatpak-programok, pl. a Firefox ide mentenek) és **Megnyitás ezzel…** (Shift+Enter, „mindig ezzel”) a Fájlkezelőben. Ellenőrzés: `docs/M6k-letoltes-tarsitas.md`
 - **A/B frissítés** (M7): az új rendszer a nem aktív slotba kerül és próbaként indul (systemd-boot boot-számlálás, 3 lehetőség); sikeres indulás után véglegesül, különben magától a korábbi indul. `fusion-update`, Minten `fusion-build update` (A/B) és `--hibas-proba`. Ellenőrzés: `docs/M7a-ab-frissites.md`
 - **Rendszerfrissítés fájlból** (Beállítások → Rendszerfrissítés): `.fupd` a Letöltésekből / pendrive-ról, újraindítás a FusionOS-be, értesítés véglegesítéskor / visszaálláskor. **Feladatkezelő** (Ctrl+Alt+Del): „nem válaszol” felismerés, bezárás, kényszerített bezárás. Ellenőrzés: `docs/M7b-frissites-feladatkezelo.md`, lezárás: `docs/M7c-lezaras.md`
+- **Lemezkezelő** (Start → Lemezkezelő; `fusion-disks`): lemezek és partíciók, állapot (SMART), formázás (FAT32, exFAT, NTFS, ext4), címke, partíció létrehozása / törlése — gépelt megerősítéssel; a FusionOS saját lemeze csak megtekinthető. **Hibajelentés** (Beállítások → Hibajelentés; `fusion-report`): a rendszer állapota egy maszkolt szövegfájlban, nem küld adatot sehova. Ellenőrzés: `docs/T1-lemezkezelo-hibajelentes.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
   alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`

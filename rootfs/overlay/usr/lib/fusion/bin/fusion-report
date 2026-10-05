@@ -1,0 +1,500 @@
+#!/usr/bin/python3
+"""FusionOS — hibajelentés: a rendszer állapota egy ember (és bármilyen elemző eszköz) számára olvasható
+szövegfájlban. Determinisztikus, AI nélkül is teljes értékű, és **nem küld adatot sehova** — a fájlt a
+felhasználó maga adhatja tovább, ha akarja. Mentés előtt automatikus maszkolás: jelszavak, kulcsok,
+tokenek, Wi-Fi-kulcsok és -hálózatnevek, e-mail-címek, MAC-címek, sorozatszámok, nyilvános IP-címek,
+személyes fájlnevek.
+
+    fusion-report [-d "a hiba leírása"] [-o mappa]    a jelentés (alapból a Letöltések mappába)
+    fusion-report --system                            a rendszeroldali rész (root; a fusion-admin hívja)
+
+Konzolról is fut (pl. ha a felület nem indul: Ctrl+Alt+F2, bejelentkezés, fusion-report -o /run/media/…).
+"""
+import datetime
+import glob
+import ipaddress
+import json
+import os
+import pwd
+import re
+import socket
+import subprocess
+import sys
+import time
+
+os.environ["LC_ALL"] = "C.UTF-8"
+os.environ["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+ADMIN = "/usr/lib/fusion/bin/fusion-admin"
+FUSION_UNITS = ["fusion-hardware", "fusion-boot-check", "fusion-klipper", "fusion-moonraker", "nginx", "iwd",
+                "systemd-networkd", "systemd-resolved", "systemd-timesyncd", "systemd-logind", "dbus", "getty@tty1"]
+USER_UNITS = ["fusion-drive", "pipewire", "pipewire-pulse", "wireplumber", "xdg-desktop-portal"]
+MAX_LINE = 400
+
+
+def run(cmd, timeout=20, env=None):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, errors="replace",
+                           env=env, stdin=subprocess.DEVNULL)
+        return (r.stdout or "") + (r.stderr if r.returncode and not r.stdout else "")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"(nem futtatható: {cmd[0]}: {e.__class__.__name__})"
+
+
+def read(path, default=""):
+    try:
+        with open(path, errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def tail(path, n):
+    t = read(path)
+    return "\n".join(t.splitlines()[-n:]) if t else ""
+
+
+def kv(path):
+    return {k: v.strip().strip('"').strip("'") for k, v in
+            (l.split("=", 1) for l in read(path).splitlines() if "=" in l and not l.startswith("#"))}
+
+
+def human(n):
+    n = float(n or 0)
+    for u in ("B", "kB", "MB", "GB", "TB"):
+        if n < 1024 or u == "TB":
+            return f"{n:.0f} {u}" if u == "B" else f"{n:.1f} {u}".replace(".", ",")
+        n /= 1024
+
+
+# --- maszkolás ------------------------------------------------------------------------------------
+
+class Masker:
+    """személyes és titkos adatok cseréje következetes álnevekre (ugyanaz az érték mindig ugyanaz az álnév,
+    így a jelentésen belül követhető marad, pl. WIFI-1, SN-2)"""
+    SECRET_KEYS = r"(?:pass(?:word|wd|phrase)?|jelsz[oó]|psk|secret|token|api[_-]?key|apikey|auth(?:orization)?|" \
+                  r"bearer|client[_-]?secret|refresh[_-]?token|access[_-]?token|private[_-]?key|cookie|session[_-]?id)"
+
+    def __init__(self):
+        self.maps = {}
+        self.literal = {}          # pontos értékek → kategória (SSID, sorozatszám, gépnév)
+        self.count = {}
+
+    def alias(self, cat, value):
+        m = self.maps.setdefault(cat, {})
+        if value not in m:
+            m[value] = f"{cat}-{len(m) + 1}"
+        self.count[cat] = self.count.get(cat, 0) + 1
+        return m[value]
+
+    def add_literal(self, cat, value):
+        value = (value or "").strip()
+        if len(value) >= 3 and value.lower() not in ("none", "unknown", "default string", "to be filled by o.e.m.",
+                                                     "0", "00000000", "not specified", "system serial number"):
+            self.literal[value] = cat
+
+    def text(self, s):
+        if not s:
+            return s
+        # 1. ismert pontos értékek (Wi-Fi-hálózatnevek, sorozatszámok, gépnév) — a hosszabbak előbb
+        for v in sorted(self.literal, key=len, reverse=True):
+            if v in s:
+                s = s.replace(v, self.alias(self.literal[v], v))
+        # 2. kulcs=érték alakú titkok (jelszó=…, token: …, Authorization: Bearer …)
+        s = re.sub(r"(?i)(\b" + self.SECRET_KEYS + r"\b[\"']?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|\S+)",
+                   lambda m: m.group(1) + "***" + self._c("TITOK"), s)
+        s = re.sub(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}", lambda m: m.group(1) + " ***" + self._c("TITOK"), s)
+        # 3. e-mail-címek
+        s = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", lambda m: self.alias("EMAIL", m.group(0).lower()), s)
+        # 4. MAC-címek (a 00:00:00:00:00:00 és a ff:… nem személyes)
+        s = re.sub(r"(?i)\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b",
+                   lambda m: m.group(0) if m.group(0).lower() in ("00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff")
+                   else self.alias("MAC", m.group(0).lower().replace("-", ":")), s)
+        # 5. nyilvános IP-címek (a helyi hálózat címei maradnak: a hibakereséshez kellenek)
+        s = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", self._ip4, s)
+        s = re.sub(r"(?i)(?<![0-9a-f:])[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}(?![0-9a-f:])", self._ip6, s)
+        # 6. hosszú, véletlenszerű karaktersor (kulcs, token): betű és szám vegyesen, legalább 32 karakter
+        s = re.sub(r"\b(?=[A-Za-z0-9_\-+/]*[A-Za-z])(?=[A-Za-z0-9_\-+/]*\d)[A-Za-z0-9_\-+/]{32,}={0,2}",
+                   lambda m: m.group(0) if re.fullmatch(r"[0-9a-fA-F-]{32,}", m.group(0)) and len(m.group(0)) in (36, 64)
+                   else "***" + self._c("TITOK"), s)
+        # 7. személyes fájlnevek a felhasználó mappáiban: a mappa és a kiterjesztés marad
+        s = re.sub(r"(/home/[^/\s]+/(?:Letöltések|Dokumentumok|Képek|Asztal|Zene|Videók|GoogleDrive|Downloads|Documents|Pictures|Desktop)/)"
+                   r"(?:([^\n'\";]{1,120}?)(\.[A-Za-z0-9]{1,8})(?=[\s'\":,;)]|$)|([^\s'\";]+))",
+                   lambda m: m.group(1) + "<fájl>" + (m.group(3) or "") + self._c("FÁJLNÉV"), s)
+        return s
+
+    def _c(self, cat):
+        self.count[cat] = self.count.get(cat, 0) + 1
+        return ""
+
+    def _ip4(self, m):
+        try:
+            ip = ipaddress.ip_address(m.group(0))
+        except ValueError:
+            return m.group(0)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
+            return m.group(0)
+        if str(ip) in ("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112"):
+            return m.group(0)            # közismert nyilvános DNS-kiszolgálók: nem személyes adat
+        return self.alias("IP", str(ip))
+
+    def _ip6(self, m):
+        try:
+            ip = ipaddress.ip_address(m.group(0))
+        except ValueError:
+            return m.group(0)
+        if ip.is_global:
+            return self.alias("IPv6", str(ip))
+        return m.group(0)
+
+    def summary(self):
+        names = {"TITOK": "jelszó/kulcs/token", "EMAIL": "e-mail-cím", "MAC": "MAC-cím", "WIFI": "Wi-Fi-hálózatnév",
+                 "SN": "sorozatszám", "IP": "nyilvános IP-cím", "IPv6": "nyilvános IPv6-cím", "GÉP": "gépnév",
+                 "FÁJLNÉV": "személyes fájlnév"}
+        parts = [f"{names.get(k, k)}: {v}" for k, v in sorted(self.count.items()) if v]
+        return ", ".join(parts) if parts else "nem volt maszkolandó adat"
+
+
+def seed_masker(m):
+    """a pontosan ismert személyes értékek összegyűjtése (ezek bárhol előfordulnak, kicseréljük őket)"""
+    for f in glob.glob("/var/lib/iwd/*"):
+        name = os.path.basename(f).rsplit(".", 1)[0]
+        if name.startswith("="):         # iwd: nem nyomtatható SSID hexában
+            try:
+                name = bytes.fromhex(name[1:]).decode(errors="replace")
+            except ValueError:
+                pass
+        m.add_literal("WIFI", name)
+    st = run(["iwctl", "station", "list"], timeout=5) + run(["sh", "-c", "for d in $(ls /sys/class/net); do "
+                                                               "[ -d /sys/class/net/$d/wireless ] && iwctl station $d show; done"], timeout=8)
+    for line in st.splitlines():
+        mm = re.search(r"Connected network\s+(.+?)\s*$", re.sub(r"\x1b\[[0-9;]*m", "", line))
+        if mm:
+            m.add_literal("WIFI", mm.group(1))
+    for f in ("/sys/class/dmi/id/product_serial", "/sys/class/dmi/id/board_serial", "/sys/class/dmi/id/chassis_serial",
+              "/sys/class/dmi/id/product_uuid"):
+        m.add_literal("SN", read(f))
+    for f in glob.glob("/sys/bus/usb/devices/*/serial") + glob.glob("/sys/block/*/device/serial") + \
+            glob.glob("/sys/block/*/device/vpd_pg80") + glob.glob("/sys/class/nvme/*/serial"):
+        m.add_literal("SN", read(f).strip("\x00 "))
+    for line in run(["lsblk", "-dno", "SERIAL,WWN"], timeout=10).split():
+        m.add_literal("SN", line)
+    for f in glob.glob("/dev/disk/by-id/*"):
+        b = os.path.basename(f)
+        mm = re.match(r"^(?:usb|ata|nvme|scsi)-.+?_([A-Za-z0-9]{6,})(?:-0:\d+)?(?:-part\d+)?$", b)
+        if mm:
+            m.add_literal("SN", mm.group(1))
+    hn = socket.gethostname()
+    if hn and hn not in ("fusionos", "localhost"):
+        m.add_literal("GÉP", hn)
+
+
+# --- rendszeroldali rész (root) ----------------------------------------------------------------------
+
+def unit_state(units, user=False):
+    out = []
+    base = ["systemctl"] + (["--user"] if user else [])
+    for u in units:
+        a = run(base + ["is-active", u], timeout=5).strip().splitlines()
+        e = run(base + ["is-enabled", u], timeout=5).strip().splitlines()
+        a, e = (a[0] if a else "?"), (e[0] if e else "?")
+        if a == "inactive" and e in ("disabled", "static", "not-found", "masked") or "not-found" in e or "No such" in e:
+            continue
+        out.append((u, a, e))
+    return out
+
+
+def pss_top(n=15):
+    rows = []
+    for d in glob.glob("/proc/[0-9]*"):
+        try:
+            sm = read(d + "/smaps_rollup")
+            mm = re.search(r"^Pss:\s+(\d+) kB", sm, re.M)
+            if not mm:
+                continue
+            comm = read(d + "/comm")
+            cmd = read(d + "/cmdline").replace("\x00", " ").strip()
+            uid = int(re.search(r"^Uid:\s+(\d+)", read(d + "/status"), re.M).group(1))
+            try:
+                user = pwd.getpwuid(uid).pw_name
+            except KeyError:
+                user = str(uid)
+            rows.append((int(mm.group(1)) * 1024, os.path.basename(d), user, comm, cmd))
+        except (OSError, AttributeError, ValueError):
+            continue
+    rows.sort(reverse=True)
+    total = sum(r[0] for r in rows)
+    return total, rows[:n]
+
+
+def collect_system():
+    """amit csak root lát: a frissítés állapota, a teljes memóriakép (PSS), SMART, a rendszernapló"""
+    s = {}
+    s["update"] = run(["/usr/lib/fusion/bin/fusion-update", "status"], timeout=30).strip()
+    total, top = pss_top()
+    s["pss_total"] = total
+    s["pss_top"] = [f"{human(b):>9}  {pid:>6}  {u:<8} {c:<16} {cmd[:120]}" for b, pid, u, c, cmd in top]
+    s["smart"] = []
+    for disk in sorted(os.listdir("/sys/block")):
+        if re.match(r"^(loop|ram|zram|sr|dm-|md)", disk):
+            continue
+        try:
+            j = json.loads(run(["smartctl", "-j", "-H", "-A", "-i", f"/dev/{disk}"], timeout=20) or "{}")
+        except ValueError:
+            continue
+        if "smart_status" in j:
+            attrs = {a.get("id"): (a.get("raw") or {}).get("value") for a in (j.get("ata_smart_attributes") or {}).get("table", [])}
+            s["smart"].append(f"{disk}: {j.get('model_name', '?')} — SMART: {'rendben' if j['smart_status'].get('passed') else 'HIBÁS'}"
+                              f", hőmérséklet: {(j.get('temperature') or {}).get('current', '?')} °C"
+                              f", üzemóra: {(j.get('power_on_time') or {}).get('hours', '?')}"
+                              f", áthelyezett szektor: {attrs.get(5, '-')}, függő: {attrs.get(197, '-')}")
+    s["dmesg_err"] = run(["dmesg", "--level=emerg,alert,crit,err", "-T"], timeout=10).strip().splitlines()[-40:]
+    s["xorg_root"] = [l for l in read("/var/log/Xorg.0.log").splitlines() if "(EE)" in l][-20:]
+    m = Masker()
+    seed_masker(m)
+    return json.loads(m.text(json.dumps(s, ensure_ascii=False)))
+
+
+# --- a jelentés -------------------------------------------------------------------------------------
+
+def section(title):
+    return ["", title, "-" * len(title)]
+
+
+def indent(text, n=2):
+    return [(" " * n + l)[:MAX_LINE] for l in (text or "").splitlines()]
+
+
+def quick_checks(sysinfo):
+    """gyors, determinisztikus ellenőrzések: [OK] / [FIGY] / [HIBA] / [--]"""
+    res = []
+
+    def add(state, text):
+        res.append(f"  [{state:<4}] {text}")
+
+    st = run(["systemctl", "is-system-running"], timeout=10).strip()
+    add("OK" if st == "running" else "FIGY" if st in ("starting", "degraded") else "HIBA", f"rendszerállapot: {st}")
+    failed = [l.split()[0] for l in run(["systemctl", "--failed", "--no-legend", "--plain"]).splitlines() if "." in l.split(" ")[0]]
+    add("OK" if not failed else "HIBA", "hibás szolgáltatás: " + (", ".join(failed) if failed else "nincs"))
+    bs = read("/run/fusion/boot-state")
+    add("OK" if bs.startswith(("ok", "VÉGLEGES")) or "véglegesített" in bs else "FIGY" if bs else "--",
+        "indulás-ellenőrzés: " + (bs.splitlines()[0] if bs else "nincs adat"))
+    try:
+        sv = os.statvfs("/data")
+        pct = 100 - sv.f_bavail * 100 // max(1, sv.f_blocks)
+        w = os.access("/data", os.W_OK) or os.geteuid() == 0
+        add("OK" if pct < 90 else "FIGY", f"DATA: {pct} % foglalt, szabad: {human(sv.f_bavail * sv.f_frsize)}"
+            + ("" if w else " — NEM ÍRHATÓ"))
+    except OSError:
+        add("HIBA", "DATA nem érhető el (/data)")
+    env = kv("/run/fusion/hardware/display.env")
+    add("OK" if env.get("FUSION_DISPLAY_STATUS") == "ok" else "FIGY",
+        f"kijelzőprofil: {env.get('FUSION_DISPLAY_PROFILE', '?')} ({env.get('FUSION_DISPLAY_STATUS', '?')}, driver: {env.get('FUSION_DISPLAY_DRIVER_STATE', '?')})")
+    ready = os.path.exists("/run/user/1000/fusion-shell.ready")
+    xorg = bool(run(["pgrep", "-x", "Xorg"], timeout=5).strip())
+    add("OK" if ready else "HIBA" if xorg else "--", "Fusion Desktop: " + ("fut (Shell kész)" if ready else
+        "az X fut, de a Shell nem jelzett készenlétet" if xorg else "nem fut (szöveges mód?)"))
+    wl = re.sub(r"\x1b\[[0-9;]*m", "", run(["sh", "-c", "for d in $(ls /sys/class/net); do [ -d /sys/class/net/$d/wireless ] "
+                                              "&& iwctl station $d show; done"], timeout=8))
+    stt = re.search(r"State\s+(\S+)", wl)
+    add("OK" if stt and stt.group(1) == "connected" else "--", "Wi-Fi: " + (stt.group(1) if stt else "nincs Wi-Fi-eszköz / iwd"))
+    defroute = run(["ip", "route", "show", "default"], timeout=5).strip()
+    add("OK" if defroute else "--", "hálózat: " + ("van alapértelmezett útvonal" if defroute else "nincs kapcsolat"))
+    for role in ("laser", "printer"):
+        p = f"/dev/fusion/{role}"
+        add("OK" if os.path.exists(p) else "--", f"{'lézer' if role == 'laser' else '3D-nyomtató'}: "
+            + (f"csatlakoztatva ({os.path.basename(os.path.realpath(p))})" if os.path.exists(p) else "nincs csatlakoztatva"))
+    svc = {u: run(["systemctl", "is-active", u], timeout=5).strip() for u in ("fusion-klipper", "fusion-moonraker", "nginx")}
+    add("OK" if all(v == "active" for v in svc.values()) else "FIGY", "Klipper / Moonraker / nginx: " + ", ".join(svc.values()))
+    errs = len([l for l in run(["journalctl", "-b", "-p", "err", "--no-pager", "-q", "-o", "cat"], timeout=20).splitlines() if l.strip()])
+    add("OK" if errs == 0 else "FIGY", f"hibaüzenet a naplóban ennél az indításnál: {errs}")
+    if sysinfo is None:
+        add("--", "a rendszeroldali rész nem volt elérhető (sudo / fusion-admin)")
+    return res
+
+
+def build(desc, sysinfo, m):
+    rel = kv("/usr/lib/fusion/fusion-release")
+    base = rel.get("FUSION_BASE") or "Ubuntu 24.04 LTS (noble)"
+    now = datetime.datetime.now().astimezone()
+    dmi = lambda k: read(f"/sys/class/dmi/id/{k}")      # noqa: E731
+    mem = {l.split(":")[0]: l.split(":")[1].strip() for l in read("/proc/meminfo").splitlines() if ":" in l}
+    mt = int(mem.get("MemTotal", "0 kB").split()[0]) * 1024
+    ma = int(mem.get("MemAvailable", "0 kB").split()[0]) * 1024
+    cpu = re.search(r"^model name\s*:\s*(.+)$", read("/proc/cpuinfo"), re.M)
+    gpu = [l for l in run(["lspci", "-nn"], timeout=10).splitlines() if re.search(r"VGA|3D controller|Display controller", l)]
+    nv = read("/proc/driver/nvidia/version").splitlines()
+    env = kv("/run/fusion/hardware/display.env")
+    up = float(read("/proc/uptime", "0").split()[0] or 0)
+
+    L = ["FusionOS hibajelentés", "=" * 21,
+         f"Készült:      {now:%Y-%m-%d %H:%M:%S %z}",
+         f"Verzió:       FusionOS {rel.get('FUSION_VERSION', '?')} ({rel.get('FUSION_MILESTONE', '?')}), rendszerkép: {rel.get('FUSION_IMAGE_ID', '?')}",
+         f"Alap:         {base}",
+         f"Kernel:       {os.uname().release}",
+         f"Rendszer:     slot {read('/run/fusion/slot', '?')}, lemez: {read('/run/fusion/boot-disk', '?')}, "
+         f"bekapcsolva: {int(up // 3600)} óra {int(up % 3600 // 60)} perc",
+         f"Gép:          {dmi('sys_vendor')} {dmi('product_name')} (BIOS {dmi('bios_version')} {dmi('bios_date')})",
+         f"Processzor:   {cpu.group(1) if cpu else '?'} ({os.cpu_count()} szál)",
+         f"Memória:      {human(mt - ma)} foglalt / {human(mt)}",
+         f"Grafika:      " + ("; ".join(re.sub(r"^\S+\s+", "", g) for g in gpu) or "?"),
+         f"Videódriver:  " + (nv[0].split("  ", 1)[-1].strip() if nv else "nincs NVIDIA-driver betöltve")
+         + f"   ·   profil: {env.get('FUSION_DISPLAY_PROFILE', '?')} ({env.get('FUSION_DISPLAY_STATUS', '?')})",
+         "", "A felhasználó leírása:"]
+    L += indent(desc.strip(), 2) if desc.strip() else ["  (nincs megadva)"]
+
+    L += section("GYORS ELLENŐRZÉS")
+    L += quick_checks(sysinfo)
+
+    L += section("SZOLGÁLTATÁSOK")
+    for u, a, e in unit_state(FUSION_UNITS):
+        L.append(f"  {u:<28} {a:<10} ({e})")
+    L.append("  felhasználói (a munkamenetben):")
+    uenv = dict(os.environ, XDG_RUNTIME_DIR=f"/run/user/{os.getuid()}") if os.getuid() else None
+    if os.getuid():
+        for u, a, e in unit_state(USER_UNITS, user=True):
+            L.append(f"    {u:<26} {a:<10} ({e})")
+    failed = run(["systemctl", "--failed", "--no-legend", "--plain"]).strip()
+    for u in [l.split()[0] for l in failed.splitlines() if "." in l.split(" ")[0]]:
+        L.append(f"  --- {u} napló (utolsó 15 sor):")
+        L += indent(run(["journalctl", "-b", "-u", u, "--no-pager", "-q", "-n", "15", "-o", "short-monotonic"]), 4)
+
+    L += section("ESZKÖZÖK")
+    L.append("  USB:")
+    L += indent("\n".join(l for l in run(["lsusb"]).splitlines() if "root hub" not in l), 4)
+    tty = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
+    L.append("  Soros portok: " + (" ".join(tty) if tty else "nincs"))
+    L.append("  Eszközszerepek (Fusion eszközréteg):")
+    L += indent(run(["/usr/lib/fusion/devices/fusion-devd", "list"], timeout=10), 4)
+
+    L += section("LEMEZEK")
+    L += indent(run(["lsblk", "-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS,TRAN,MODEL"]), 2)
+    L.append("")
+    L += indent(run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "efivarfs"]), 2)
+    if sysinfo and sysinfo.get("smart"):
+        L.append("  Lemezállapot (SMART):")
+        L += ["    " + x for x in sysinfo["smart"]]
+
+    L += section("HÁLÓZAT")
+    L += indent(run(["ip", "-br", "addr"]), 2)
+    L += indent(run(["ip", "route"]), 2)
+    L += indent(re.sub(r"\x1b\[[0-9;]*m", "", run(["sh", "-c", "for d in $(ls /sys/class/net); do [ -d /sys/class/net/$d/wireless ] "
+                                                       "&& iwctl station $d show; done"], timeout=8)), 2)
+    L.append("  DNS: " + " ".join(re.findall(r"^nameserver\s+(\S+)", read("/etc/resolv.conf"), re.M)))
+
+    L += section("RENDSZERFRISSÍTÉS (A/B)")
+    L += indent(sysinfo.get("update", "") if sysinfo else read("/run/fusion/boot-state") or "nincs adat", 2)
+
+    L += section("PROGRAMOK")
+    try:
+        progs = json.loads(run(["fusion-programs", "list", "--json"], timeout=30) or "[]")
+        for p in progs:
+            L.append(f"  {p.get('id', '?'):<22} {p.get('kind', p.get('type', '')):<10} {p.get('version', '') or ''}  {p.get('name', '')}")
+        if not progs:
+            L.append("  (nincs telepített program)")
+    except ValueError:
+        L.append("  (a Programkezelő listája nem olvasható)")
+    fl = run(["flatpak", "list", "--app", "--columns=application,version,origin"], timeout=30).strip()
+    if fl:
+        L.append("  Flatpak:")
+        L += indent(fl, 4)
+
+    L += section("MEMÓRIA (PSS — a közös könyvtárak arányosan)")
+    if sysinfo and sysinfo.get("pss_top"):
+        L.append(f"  összesen (minden folyamat): {human(sysinfo['pss_total'])}")
+        L += ["  " + x for x in sysinfo["pss_top"]]
+    else:
+        L.append("  (a teljes PSS-kép rootként készül; helyette RSS, kB:)")
+        L += indent("\n".join(run(["ps", "-eo", "rss,pid,user,comm", "--sort=-rss"]).splitlines()[:16]), 2)
+
+    L += section("NAPLÓK")
+    L.append("  Hibák ennél az indításnál (utolsó 80):")
+    L += indent(run(["journalctl", "-b", "-p", "err", "--no-pager", "-q", "-n", "80", "-o", "short-monotonic"], timeout=30), 4)
+    prev = run(["journalctl", "-b", "-1", "-p", "err", "--no-pager", "-q", "-n", "30", "-o", "short-monotonic"], timeout=30).strip()
+    if prev and "No journal" not in prev and "not found" not in prev:
+        L.append("  Hibák az előző indításnál (utolsó 30):")
+        L += indent(prev, 4)
+    L.append("  Kernel — figyelmeztetések és hibák (utolsó 40):")
+    L += indent(run(["journalctl", "-k", "-b", "-p", "warning", "--no-pager", "-q", "-n", "40", "-o", "short-monotonic"], timeout=30), 4)
+    if sysinfo and sysinfo.get("dmesg_err"):
+        L.append("  Kernel (dmesg) hibák:")
+        L += ["    " + x for x in sysinfo["dmesg_err"]]
+    home = os.path.expanduser("~") if os.getuid() else "/home/fusion"
+    for title, path, n in (("Fusion Shell (shell.log)", f"{home}/.local/share/fusion/shell.log", 40),
+                           ("Munkamenet (session.log)", f"{home}/.local/share/fusion/session.log", 30)):
+        t = tail(path, n)
+        if t:
+            L.append(f"  {title}, utolsó {n} sor:")
+            L += indent(t, 4)
+    xl = [l for l in read(f"{home}/.local/share/xorg/Xorg.0.log").splitlines() if "(EE)" in l or "(WW)" in l][-25:]
+    if sysinfo and sysinfo.get("xorg_root"):
+        xl = sysinfo["xorg_root"] + xl
+    if xl:
+        L.append("  Xorg — hibák (EE) és figyelmeztetések (WW):")
+        L += ["    " + x for x in xl]
+    if os.getuid():
+        uj = run(["journalctl", "--user", "-b", "-p", "err", "--no-pager", "-q", "-n", "30", "-o", "short-monotonic"], timeout=20, env=uenv).strip()
+        if uj:
+            L.append("  A munkamenet (felhasználói) naplójának hibái:")
+            L += indent(uj, 4)
+
+    text = "\n".join(L)
+    text = m.text(text)
+    text += "\n\n" + "\n".join(section("ADATVÉDELEM")[1:]) + "\n"
+    text += ("  A jelentés csak ezen a gépen készült, és nem került elküldésre sehova.\n"
+             f"  Maszkolva: {m.summary()}.\n"
+             "  Az álnevek (pl. WIFI-1, SN-2) a jelentésen belül következetesek. Megosztás előtt érdemes átolvasni.\n")
+    return text
+
+
+def default_outdir():
+    if os.getuid() == 0:
+        return "/data/hibajelentes"
+    ud = os.path.expanduser("~/.config/user-dirs.dirs")
+    mm = re.search(r'^XDG_DOWNLOAD_DIR="([^"]+)"', read(ud), re.M)
+    return mm.group(1).replace("$HOME", os.path.expanduser("~")) if mm else os.path.expanduser("~/Letöltések")
+
+
+def main(argv):
+    if argv[:1] == ["--system"]:
+        if os.geteuid() != 0:
+            print("fusion-report --system: rootként kell futnia", file=sys.stderr)
+            return 1
+        json.dump(collect_system(), sys.stdout, ensure_ascii=False)
+        return 0
+    desc, out = "", ""
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-d", "--leiras", "--description") and i + 1 < len(argv):
+            desc = argv[i + 1]; i += 2
+        elif a in ("-o", "--out") and i + 1 < len(argv):
+            out = argv[i + 1]; i += 2
+        elif a in ("-h", "--help"):
+            print(__doc__); return 0
+        else:
+            print(f"fusion-report: ismeretlen paraméter: {a}\n{__doc__}", file=sys.stderr); return 2
+    t0 = time.time()
+    print("Hibajelentés készítése… (fél perc is lehet)", flush=True)
+    if os.geteuid() == 0:
+        sysinfo = collect_system()
+    else:
+        r = run(["sudo", "-n", ADMIN, "report"], timeout=120)
+        try:
+            sysinfo = json.loads(r[r.index("{"):])
+        except ValueError:
+            sysinfo = None
+    m = Masker()
+    seed_masker(m)
+    text = build(desc, sysinfo, m)
+    out = out or default_outdir()
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, f"fusion-hibajelentes-{datetime.datetime.now():%Y%m%d-%H%M%S}.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"kész ({time.time() - t0:.0f} mp, {human(len(text.encode()))}): {path}", flush=True)
+    print(f"maszkolva: {m.summary()}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -156,14 +156,14 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
 echo "  [customize] Fusion Desktop (M6): Fusion Shell, Fájlkezelő, Beállítások"
 DK="$R/usr/lib/fusion/desktop"
 rm -rf "$DK" "$R/usr/lib/fusion/shell"; mkdir -p "$DK"
-for d in lib qml icons shell files settings tasks bin; do
+for d in lib qml icons shell files settings tasks disks bin; do
     cp -r "$FUSION_ROOT/desktop/$d" "$DK/"
 done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
     "$DK/settings/fusion_settings.py" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
-    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin"
+    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py"
 chown -R root:root "$DK"
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
@@ -172,6 +172,8 @@ ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-sound "$R/usr/bin/fusion-sound"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-drive "$R/usr/bin/fusion-drive"
 ln -sf /usr/lib/fusion/desktop/tasks/fusion_tasks_app.py "$R/usr/bin/fusion-tasks"
+ln -sf /usr/lib/fusion/desktop/disks/fusion_disks_app.py "$R/usr/bin/fusion-disks"
+ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
 in_root systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
 for u in pipewire.socket pipewire-pulse.socket wireplumber.service; do
@@ -201,6 +203,8 @@ import sys, os, glob
 sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
 sys.path.insert(0, "/usr/lib/fusion/desktop/files")
 sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
+sys.path.insert(0, "/usr/lib/fusion/desktop/disks")
+import fusion_disks_app
 import fusion_ui, fusion_x11, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
 import fusion_programs, fusion_store, fusion_sound, fusion_drive, fusion_tasks
 assert fusion_apps.fp is fusion_programs, "a Programkezelő modulja nem töltődött be"
@@ -231,6 +235,11 @@ for pkg in modemmanager brltty; do
 done
 
 echo "  [customize] os-release"
+# az alaprendszer neve (a hibajelentéshez) — az Ubuntu os-release-éből, mielőtt felülírjuk
+FUSION_BASE=$(sed -n "s/^FUSION_BASE='\(.*\)'$/\1/p" "$R/usr/lib/fusion/fusion-release" 2>/dev/null)
+if grep -q '^NAME="Ubuntu"' "$R/usr/lib/os-release" 2>/dev/null; then
+    FUSION_BASE=$(. "$R/usr/lib/os-release"; echo "$PRETTY_NAME ($VERSION_CODENAME)")
+fi
 cat > "$R/usr/lib/os-release" <<EOF
 NAME="FusionOS"
 ID=fusionos
@@ -248,6 +257,7 @@ cat > "$R/usr/lib/fusion/fusion-release" <<EOF
 FUSION_VERSION='$FUSION_VERSION'
 FUSION_MILESTONE='$FUSION_MILESTONE'
 FUSION_IMAGE_ID='$(date -u +%Y%m%d%H%M%S)'
+FUSION_BASE='${FUSION_BASE:-Ubuntu 24.04 LTS (noble)}'
 EOF
 
 echo "  [customize] nyelv, időzóna, konzol"
@@ -280,6 +290,12 @@ in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.servi
 in_root systemctl mask nvidia-persistenced.service >/dev/null 2>&1
 # Ctrl+Alt+Del: a Fusion Desktopban a Feladatkezelő; a szöveges konzolon se indítsa újra a gépet
 in_root systemctl mask ctrl-alt-del.target >/dev/null 2>&1
+# Lemezkezelő: a SMART-állapotot kérésre olvassa (smartctl); a háttérfigyelő (smartd, levélküldés) nem kell
+in_root systemctl disable smartd.service smartmontools.service >/dev/null 2>&1 || true
+in_root systemctl mask smartd.service >/dev/null 2>&1 || true
+for t in parted sgdisk mkfs.vfat fatlabel mkfs.exfat exfatlabel mkntfs ntfslabel mkfs.ext4 e2label smartctl wipefs sfdisk partx; do
+    in_root env PATH=/usr/sbin:/usr/bin:/sbin:/bin sh -c "command -v $t" >/dev/null || { echo "  [customize] HIBA: a Lemezkezelőhöz hiányzik: $t"; exit 1; }
+done
 ln -sf /run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"
 
 echo "  [customize] csomagkezelő eltávolítása (a FusionOS-en nincs apt)"

@@ -18,6 +18,10 @@
 #    update-status [--json]           az A/B rendszerfrissítés állapota (csak olvas)
 #    update-apply <fájl.fupd>         rendszerfrissítés az inaktív slotba (fusion-update apply)
 #    update-reboot                    újraindítás a FusionOS-be (UEFI BootNext)
+#    disk list [--smart] | format-disk | format | label | create | delete …
+#                                     Fusion Lemezkezelő (fusion-disk; a paramétereket az ellenőrzi,
+#                                     a lemezíró műveletekhez a lemez nevét is meg kell adni)
+#    report                           a hibajelentés rendszeroldali része (fusion-report --system; csak olvas)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -173,6 +177,8 @@ do_automount() {
     k=$1
     case "$k" in *[!a-zA-Z0-9_-]*|"") fail "érvénytelen név: $k" ;; esac
     removable "$k" || { say "nem cserélhető kötet, kihagyva: $k"; return 0; }
+    # a Lemezkezelő éppen dolgozik a lemezen (formázás, partícionálás): most nem csatolunk
+    [ -e "/run/fusion/disk-busy/$(parent_disk "/dev/$k")" ] && { say "lemezművelet folyamatban, kihagyva: $k"; return 0; }
     fs=$(prop "/dev/$k" TYPE)
     case "$fs" in vfat|exfat|ntfs|ext2|ext3|ext4|btrfs|xfs|iso9660|udf) ;; *) say "nincs csatolható fájlrendszer: $k"; return 0 ;; esac
     ( check_allowed "/dev/$k" ) 2>/dev/null || { say "rendszerkötet, kihagyva: $k"; return 0; }
@@ -218,5 +224,11 @@ case "$cmd" in
     update-reboot)
         [ $# -eq 0 ] || fail "használat: update-reboot"
         exec /usr/lib/fusion/bin/fusion-update reboot ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot" ;;
+    disk)
+        case "${1:-}" in list|format-disk|format|label|create|delete) ;; *) fail "használat: disk list|format-disk|format|label|create|delete …" ;; esac
+        exec /usr/lib/fusion/bin/fusion-disk "$@" ;;
+    report)
+        [ $# -eq 0 ] || fail "használat: report"
+        exec /usr/lib/fusion/bin/fusion-report --system ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report" ;;
 esac

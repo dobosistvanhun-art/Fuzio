@@ -135,3 +135,12 @@ bubblewrap
 xdg-desktop-portal
 xdg-desktop-portal-gtk
 fuse3
+
+# Fusion Lemezkezelő (2026-10-05, István döntése a mérés alapján — saját, a fusion-admin-ra építve):
+# partíciós tábla (parted, sgdisk), formázás (FAT32, exFAT, NTFS; ext4: e2fsprogs), címke, lemezállapot (SMART)
+parted
+gdisk
+dosfstools
+exfatprogs
+ntfs-3g
+smartmontools

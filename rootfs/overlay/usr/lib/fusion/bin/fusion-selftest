@@ -296,6 +296,8 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-files --selftest /tmp/fusion-files-test 2>&1 | sed 's/^/FUSION-M6:   /'
     # Feladatkezelő: egy válaszoló és egy „lefagyott” próbaablak; a lefagyott felismerése és leállítása
     urun timeout -k 5 100 fusion-tasks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
+    # Lemezkezelő: a lemezlista (sudo fusion-admin disk list), a rendszerlemez védelme, a felület betöltése
+    urun timeout -k 5 120 fusion-disks --selftest 2>&1 | sed 's/^/FUSION-M6:   /'
     echo "FUSION-M6: CTRLALTDEL $(grep -c 'key="Delete">exec:fusion-tasks' /etc/jwm/system.jwmrc) target=$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)"
     urun sh -c 'fusion-files /home/fusion /data >/tmp/fusion-files.log 2>&1 &'
     i=0; fw=0; while [ $i -lt 30 ]; do fw=$(winview '/home/fusion'); [ "$fw" = 1 ] && break; sleep 1; i=$((i + 1)); done
@@ -393,6 +395,50 @@ if [ -n "$usbdev" ]; then
     echo "FUSION-M6: EJECT rc=$erc left=$(ls /run/media 2>/dev/null | tr '\n' ' ')$(printf '%s' "$e" | tail -n 1)"
     sleep 3
     echo "FUSION-M6: SHELL-MEDIA $(sed -n 's/.*"media": \[\(.*\)\].*/\1/p' /run/user/1000/fusion-shell.state 2>/dev/null | tr -d ' \n')"
+fi
+# --- Lemezkezelő: valódi műveletek a teszt üres USB-lemezén (FUSIONSCRATCH), a felhasználóként, a segéden át ---
+adm() { runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin "$@"; }
+scr=$(for f in /dev/disk/by-id/usb-*FUSIONSCRATCH*; do case "$f" in *-part*) ;; *) [ -e "$f" ] && readlink -f "$f";; esac; done | head -n 1)
+# tartalék: a 96 MiB-os USB-lemez (ha a sorozatszám nem jelenne meg az udev-ben)
+[ -n "$scr" ] || scr=$(lsblk -dnbo NAME,SIZE,TRAN | awk '$2 == 100663296 && $3 == "usb" {print "/dev/" $1; exit}')
+if [ -n "$scr" ]; then
+    k=$(basename "$scr")
+    dj() { adm disk list | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)['disks'] if x['name']=='$k'][0]; $1"; }
+    echo "FUSION-DISK: LIST $(dj 'print("found removable=%s system=%s table=%s parts=%d" % (d["removable"], d["system"], d["table"] or "-", len(d["partitions"])))')"
+    e=$(adm disk format-disk "$k" dos vfat "Próba" "${k}x" 2>&1); echo "FUSION-DISK: CONFIRM rc=$? $(printf '%s' "$e" | tail -n 1)"
+    adm disk format-disk "$k" dos vfat "Próba" "$k" > /tmp/fd.out 2>&1; rc=$?
+    sleep 2; mp=$(findmnt -rn -S "/dev/${k}1" -o TARGET 2>/dev/null | head -n 1)
+    echo "FUSION-DISK: FORMAT rc=$rc table=$(dj 'print(d["table"])') fs=$(blkid -p -o value -s TYPE "/dev/${k}1") label=$(blkid -p -o value -s LABEL "/dev/${k}1") mounted=${mp:-nincs} write=$(runuser -u fusion -- sh -c "echo ok > '$mp/proba.txt' && cat '$mp/proba.txt'" 2>/dev/null || echo no)"
+    sed 's/^/FUSION-DISK:   /' /tmp/fd.out
+    adm disk label "${k}1" "Új név" >/dev/null 2>&1; rc=$?
+    sleep 1; echo "FUSION-DISK: LABEL rc=$rc label=$(blkid -p -o value -s LABEL "/dev/${k}1") mounted=$(findmnt -rn -S "/dev/${k}1" -o TARGET | head -n 1) file=$(cat "$(findmnt -rn -S "/dev/${k}1" -o TARGET | head -n 1)/proba.txt" 2>/dev/null)"
+    adm disk delete "${k}1" "$k" >/dev/null 2>&1; rc=$?
+    echo "FUSION-DISK: DELETE rc=$rc parts=$(dj 'print(len(d["partitions"]))') free=$(dj 'print(len(d["free"]))') media=$(ls /run/media | tr '\n' ' ')"
+    adm disk create "$k" 1 32 ext4 "linux" "$k" >/dev/null 2>&1; r1=$?
+    adm disk create "$k" 40 40 exfat "Közös" "$k" >/dev/null 2>&1; r2=$?
+    sleep 2
+    l1=$(findmnt -rn -S "/dev/${k}1" -o TARGET | head -n 1); l2=$(findmnt -rn -S "/dev/${k}2" -o TARGET | head -n 1)
+    echo "FUSION-DISK: CREATE rc=$r1,$r2 parts=$(dj 'print(",".join("%s:%s:%s" % (p["number"], p["fstype"], p["label"]) for p in d["partitions"]))') write=$(runuser -u fusion -- sh -c "echo a > '$l1/a' && echo b > '$l2/b' && cat '$l1/a' '$l2/b' | tr -d '\n'" 2>/dev/null || echo no)"
+    adm disk format "${k}2" ntfs "Windows" "$k" >/dev/null 2>&1; rc=$?
+    echo "FUSION-DISK: REFORMAT rc=$rc fs=$(blkid -p -o value -s TYPE "/dev/${k}2") type=$(dj 'print([p["parttype"] for p in d["partitions"] if p["number"]==2][0])')"
+    adm disk format-disk "$k" gpt none "" "$k" >/dev/null 2>&1; rc=$?
+    echo "FUSION-DISK: WIPE rc=$rc table=$(dj 'print(d["table"])') parts=$(dj 'print(len(d["partitions"]))') media=$(ls /run/media | tr '\n' ' ')"
+    bd=$(cat /run/fusion/boot-disk)
+    g1=$(adm disk format-disk "$bd" gpt vfat x "$bd" 2>&1 | tail -n 1); g2=$(adm disk delete "${bd}4" "$bd" 2>&1 | tail -n 1)
+    echo "FUSION-DISK: GUARD $g1 | $g2"
+else
+    echo "FUSION-DISK: nincs teszt-lemez"
+fi
+# --- Hibajelentés: a felhasználóként (a rendszeroldali rész sudo-val), maszkolás ---
+t0=$(date +%s)
+rout=$(urun fusion-report -d "Teszt: a lézer nem látszik. jelszó=Titok123 kapcsolat: teszt.elek@pelda.hu" -o /tmp/fusion-report 2>&1); rrc=$?
+rf=$(ls /tmp/fusion-report/fusion-hibajelentes-*.txt 2>/dev/null | head -n 1)
+echo "FUSION-REPORT: RUN rc=$rrc secs=$(( $(date +%s) - t0 )) size=$(stat -c %s "$rf" 2>/dev/null || echo 0) $(printf '%s' "$rout" | tail -n 1)"
+if [ -n "$rf" ]; then
+    echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
+    echo "FUSION-REPORT: MASK secret=$(grep -c 'Titok123' "$rf") email=$(grep -c 'teszt.elek@pelda.hu' "$rf") ssid=$(grep -c 'FusionTeszt' "$rf") alias=$(grep -c 'EMAIL-1' "$rf")"
+    echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
+    grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'
 fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

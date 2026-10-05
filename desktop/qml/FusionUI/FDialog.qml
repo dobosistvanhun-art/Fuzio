@@ -44,7 +44,7 @@ Popup {
                     Repeater {
                         model: d.buttons
                         FButton { text: modelData[0]; primary: modelData[1] === "primary"; danger: modelData[1] === "danger"
-                                  implicitWidth: Math.max(90, implicitHeight + 40); onClicked: d.press(index) }
+                                  width: Math.max(90, implicitWidth); onClicked: d.press(index) }
                     }
                 }
             }

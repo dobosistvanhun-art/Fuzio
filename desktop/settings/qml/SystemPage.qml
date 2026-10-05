@@ -38,6 +38,8 @@ SettingsPage {
         width: parent.width; spacing: 8
         FButton { text: "Rendszerfrissítés"; icon: "update"; onClicked: settings.pageRequested("update", "") }
         FButton { text: "Feladatkezelő"; icon: "tasks"; onClicked: settings.spawn("fusion-tasks") }
+        FButton { text: "Lemezkezelő"; icon: "disks"; onClicked: settings.spawn("fusion-disks") }
+        FButton { text: "Hibajelentés"; icon: "report"; onClicked: settings.pageRequested("report", "") }
         FButton { text: "Hardverjelentés"; icon: "chip"; onClicked: settings.openTerminal("hwinfo") }
         FButton { text: "Figyelmeztetések (napló)"; icon: "terminal"; onClicked: settings.openTerminal("journal") }
         FButton { text: p.confirm === "reboot" ? "Újraindítás — biztosan?" : "Újraindítás"; icon: "restart"; danger: p.confirm === "reboot"
