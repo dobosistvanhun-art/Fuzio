@@ -251,7 +251,11 @@ def collect_system():
     s["xorg_root"] = [l for l in read("/var/log/Xorg.0.log").splitlines() if "(EE)" in l][-20:]
     m = Masker()
     seed_masker(m)
-    return json.loads(m.text(json.dumps(s, ensure_ascii=False)))
+    out = json.loads(m.text(json.dumps(s, ensure_ascii=False)))
+    # a csak root által olvasható személyes értékek (megjegyzett Wi-Fi-hálózatok, gyári sorozatszámok) a
+    # felhasználói rész maszkolásához is kellenek
+    out["_seed"] = [[v, c] for v, c in m.literal.items()]
+    return out
 
 
 # --- a jelentés -------------------------------------------------------------------------------------
@@ -485,6 +489,8 @@ def main(argv):
             sysinfo = None
     m = Masker()
     seed_masker(m)
+    for v, c in (sysinfo or {}).get("_seed", []):
+        m.add_literal(c, v)
     text = build(desc, sysinfo, m)
     out = out or default_outdir()
     os.makedirs(out, exist_ok=True)
