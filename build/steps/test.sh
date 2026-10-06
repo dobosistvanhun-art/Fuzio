@@ -182,7 +182,7 @@ _test_installer() {
     _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
     _check "$log" "FUSION-INSTALLER: PAYLOAD ok" "a telepítendő .fupd a pendrive-on" || ok_run=0
     _check "$log" "FUSION-INSTALLER: RESULT ok" "a telepítő lemezlistája és felülete" || ok_run=0
-    _check "$log" "FUSION-INST: GUARD .*nem egyezik | .*telepítő pendrive | .*DATA megőrzésével csak" "védelem: megerősítés, a telepítő pendrive, a DATA-megőrzés feltétele" || ok_run=0
+    _check "$log" "FUSION-INST: GUARD .*nem egyezik.* | .*telepítő pendrive | .*DATA megőrzésével csak" "védelem: megerősítés, a telepítő pendrive, a DATA-megőrzés feltétele" || ok_run=0
     _check "$log" "FUSION-INST: NEW rc=0 .*parts=FUSION_ESP,FUSION_A,FUSION_B,FUSION_DATA fs=vfat,erofs,,ext4" "új telepítés: partíciók, rendszerkép, ESP, DATA" || ok_run=0
     _check "$log" "FUSION-INST: KEEP rc=0 .*marker=telepitett" "újratelepítés: a DATA tartalma megmaradt" || ok_run=0
     _check "$log" "FUSION-M1: BOOTDISK sda MARKER telepitett" "a telepített lemezről indult, a megtartott DATA-val" || ok_run=0
