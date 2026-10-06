@@ -145,3 +145,6 @@ dosfstools
 exfatprogs
 ntfs-3g
 smartmontools
+
+# telepítő (T2): UEFI boot-bejegyzés a telepített lemezhez
+efibootmgr

@@ -80,9 +80,15 @@ if [ -r /lib/modules/fusion/modules.order ]; then
     done < /lib/modules/fusion/modules.order
 fi
 
-# 2. slot
-SLOT=$(arg_val fusion.slot)
-case "$SLOT" in A|B) ;; *) rescue "Érvénytelen vagy hiányzó slot a kernel parancssorában (fusion.slot=$SLOT)." ;; esac
+# 2. slot — telepítő módban (fusion.installer, a telepítő pendrive): a rendszerkép a FUSION_ISYS
+#    partícióról, az írható réteg RAM-ban (a pendrive-ra nem ír, többször használható)
+INSTALLER=""; has_arg fusion.installer && INSTALLER=1
+if [ -n "$INSTALLER" ]; then
+    SLOT=I
+else
+    SLOT=$(arg_val fusion.slot)
+    case "$SLOT" in A|B) ;; *) rescue "Érvénytelen vagy hiányzó slot a kernel parancssorában (fusion.slot=$SLOT)." ;; esac
+fi
 
 # A boot-lemez: ahonnan az UEFI a FusionOS-t indította. A systemd-boot a
 # LoaderDevicePartUUID EFI-változóban megadja az ESP partíció-azonosítóját; a lemezek
@@ -130,12 +136,16 @@ BOOTDISK=""
 i=0
 while :; do
     [ -n "$BOOTDISK" ] || BOOTDISK=$(boot_disk)
-    ROOTDEV=$(find_part "FUSION_$SLOT"); DATADEV=$(find_part FUSION_DATA)
+    if [ -n "$INSTALLER" ]; then
+        ROOTDEV=$(find_part FUSION_ISYS); DATADEV=tmpfs
+    else
+        ROOTDEV=$(find_part "FUSION_$SLOT"); DATADEV=$(find_part FUSION_DATA)
+    fi
     [ -n "$ROOTDEV" ] && [ -n "$DATADEV" ] && break
     i=$((i + 1)); [ $i -ge 30 ] && break
     sleep 0.5
 done
-[ -n "$ROOTDEV" ] || rescue "A FUSION_$SLOT partíció nem található."
+[ -n "$ROOTDEV" ] || rescue "A rendszerkép partíciója nem található ($([ -n "$INSTALLER" ] && echo FUSION_ISYS || echo "FUSION_$SLOT"))."
 [ -n "$DATADEV" ] || rescue "A FUSION_DATA partíció nem található."
 
 # 3. rendszerkép (EROFS, csak olvasható)
@@ -144,9 +154,13 @@ mount -t erofs -o ro "$ROOTDEV" /lower 2>/dev/null \
     || rescue "A(z) $SLOT slot rendszerképe ($ROOTDEV) nem csatolható. Üres vagy sérült a slot?"
 [ -x /lower/sbin/init ] || rescue "A(z) $SLOT slot rendszerképében nincs /sbin/init."
 
-# 4. adatpartíció
-mount -t ext4 -o rw,noatime "$DATADEV" /data 2>/dev/null \
-    || rescue "A FUSION_DATA partíció ($DATADEV) nem csatolható."
+# 4. adatpartíció (telepítő módban: RAM)
+if [ -n "$INSTALLER" ]; then
+    mount -t tmpfs -o mode=0755,size=60% tmpfs /data || rescue "A telepítő írható rétege (RAM) nem hozható létre."
+else
+    mount -t ext4 -o rw,noatime "$DATADEV" /data 2>/dev/null \
+        || rescue "A FUSION_DATA partíció ($DATADEV) nem csatolható."
+fi
 
 # 4b. rendszerfrissítés után (új rendszerkép, megtartott DATA): a korábbi rendszerből a DATA-n
 # maradt felhasználó-adatbázis és könyvtár-gyorsítótár ne takarja el az új rendszerképét
@@ -183,6 +197,7 @@ echo "${BOOTDISK:-ismeretlen}" > /run/fusion/boot-disk
 [ -n "${IMAGE_CHANGED:-}" ] && echo 1 > /run/fusion/image-changed
 echo "$ROOTDEV" > /run/fusion/root-device
 echo "$DATADEV" > /run/fusion/data-device
+[ -n "$INSTALLER" ] && echo 1 > /run/fusion/installer
 
 # 6. átadás
 for m in /dev /proc /sys /run; do

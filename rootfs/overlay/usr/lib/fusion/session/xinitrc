@@ -27,6 +27,11 @@ export PATH="/data/dev/node/bin:$HOME/.local/bin:$PATH" NPM_CONFIG_PREFIX="$HOME
 export XDG_CURRENT_DESKTOP=FusionOS XDG_SESSION_TYPE=x11
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null
 [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
+# telepítő pendrive (fusion.installer): a Fusion Telepítő a Fusion Shell helyett
+if [ -e /run/fusion/installer ]; then
+    fusion-installer &
+    exec jwm
+fi
 # Programkezelő: a parancssorból telepített Flatpakok és a régi helyű Windows-programok leírást kapnak
 timeout 30 fusion-programs sync >/dev/null 2>&1
 fusion-shell run &

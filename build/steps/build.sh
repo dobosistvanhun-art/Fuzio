@@ -125,6 +125,9 @@ step_build() {
     done
     _make_uki "$out/$diag" "$out/initramfs-diag.cpio.zst" "$cm_diag" \
         "FusionOS diagnosztika" "$FUSION_VERSION-diag"
+    # telepítő pendrive (T2): ugyanaz a rendszer telepítő módban (FUSION_ISYS, írható réteg RAM-ban)
+    _make_uki "$out/fusion-installer.efi" "$out/initramfs-fusion.cpio.zst" "$cm_base fusion.installer=1" \
+        "FusionOS $FUSION_VERSION telepítő" "$FUSION_VERSION-$BUILD_STAMP-installer"
 
     step "ESP-fa (systemd-boot)"
     local esp="$out/esp"
@@ -147,6 +150,11 @@ step_build() {
         n=$((n + 1))
     done <<< "${BOOT_MEASURE_ENTRIES:-}"
     ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
+
+    # a telepítőnek: a céllemez ESP-jének állandó része (systemd-boot, loader.conf, bejegyzések, diagnosztika) —
+    # a rendszer UKI-ja a .fupd-ből kerül mellé
+    tar -C "$esp" --owner=0 --group=0 --numeric-owner --exclude='./EFI/Linux/fusionos-*' -cf "$out/esp-static.tar" . \
+        || die "az esp-static.tar nem készült el"
 
     _make_update_dir "$out/update" "$out/$uki" "$out/$ukib"
     _make_fupd "$out/update" "$out/fusionos-$FUSION_VERSION-$FUSION_MILESTONE-$BUILD_STAMP.fupd"

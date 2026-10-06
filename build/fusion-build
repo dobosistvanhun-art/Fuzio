@@ -26,6 +26,8 @@
 #                       rendszerfrissítés meglévő FusionOS-lemezen, a nem aktív slotba (A/B, M7) —
 #                       a DATA (programok, adatok) megmarad; --hibas-proba: a visszaállás próbája
 #    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
+#    installer <eszköz> telepítő pendrive (T2): a Fusion Telepítő — új telepítés vagy újratelepítés a DATA
+#                       megőrzésével, Mint nélkül (root: sudo build/fusion-build installer /dev/sdX)
 #    clean              a build/out törlése (a letöltött cache marad)
 # =============================================================================
 set -euo pipefail
@@ -71,7 +73,7 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -86,13 +88,15 @@ case "$cmd" in
     vdi)      step_vdi ;;
     vm)       step_vm "$@" ;;
     vm-start) step_vm_start ;;
-    all)      step_fetch; ensure_rootfs; step_build; step_image
+    all)      step_fetch; ensure_rootfs; step_build; step_image; step_installer_image
               if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
     test)     step_test ;;
     usb)      step_usb "$@" ;;
     install)  step_install "$@" ;;
     update)   step_update "$@" ;;
     bootentry) step_bootentry "$@" ;;
+    installer-image) step_installer_image ;;
+    installer) step_installer "$@" ;;
     clean)    step_clean ;;
     ""|-h|--help|help) usage ;;
     *)        usage; die "ismeretlen parancs: $cmd" ;;

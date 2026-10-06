@@ -78,7 +78,7 @@ _qemu_run() {
     local accel="tcg"; [ -w /dev/kvm ] && accel="kvm"
     local diskdev
     case "$bus" in
-        sata) diskdev=(-device "ahci,id=ahci0" -device "ide-hd,drive=disk0,bus=ahci0.0") ;;
+        sata) diskdev=(-device "ahci,id=ahci0" -device "ide-hd,drive=disk0,bus=ahci0.0${QEMU_DISK_OPTS:+,$QEMU_DISK_OPTS}") ;;
         usb)  diskdev=(-device "qemu-xhci,id=xhci0" -device "usb-storage,drive=disk0,bus=xhci0.0") ;;
     esac
     cp "$(_ovmf_vars)" "$out/vars-$cfg.fd"
@@ -167,6 +167,35 @@ _test_ab() {
     warn "SIKERTELEN — napló: $log"; return 1
 }
 
+_test_installer() {
+    local out="$OUT_DIR/test" log="$OUT_DIR/test/qemu-installer.log" ok_run=1
+    step "QEMU EFI boot → telepítő pendrive (USB) → új telepítés és újratelepítés (DATA megmarad) → indítás a céllemezről"
+    [ -r "$out/fusionos-telepito.img" ] || FUSION_VARIANT="test" step_installer_image
+    rm -f "$out/target.img"; truncate -s 12G "$out/target.img"
+    # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
+    QEMU_EXTRA=(-drive "file=$out/fusionos-telepito.img,format=raw,if=none,id=inst0,snapshot=on"
+                -device qemu-xhci,id=ixhci -device "usb-storage,drive=inst0,bus=ixhci.0,removable=on,bootindex=1")
+    QEMU_HOTPLUG=0
+    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=2400 \
+        _qemu_run installer std sata "$log" "FUSION-M1: POWEROFF"
+    _check "$log" "FUSION-INST: BOOT slot=I installer=1 data=tmpfs state=running failed=0" "a telepítő pendrive elindul (telepítő mód, írható réteg RAM-ban)" || ok_run=0
+    _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
+    _check "$log" "FUSION-INSTALLER: PAYLOAD ok" "a telepítendő .fupd a pendrive-on" || ok_run=0
+    _check "$log" "FUSION-INSTALLER: RESULT ok" "a telepítő lemezlistája és felülete" || ok_run=0
+    _check "$log" "FUSION-INST: GUARD .*nem egyezik | .*telepítő pendrive | .*DATA megőrzésével csak" "védelem: megerősítés, a telepítő pendrive, a DATA-megőrzés feltétele" || ok_run=0
+    _check "$log" "FUSION-INST: NEW rc=0 .*parts=FUSION_ESP,FUSION_A,FUSION_B,FUSION_DATA fs=vfat,erofs,,ext4" "új telepítés: partíciók, rendszerkép, ESP, DATA" || ok_run=0
+    _check "$log" "FUSION-INST: KEEP rc=0 .*marker=telepitett" "újratelepítés: a DATA tartalma megmaradt" || ok_run=0
+    _check "$log" "FUSION-M1: BOOTDISK sda MARKER telepitett" "a telepített lemezről indult, a megtartott DATA-val" || ok_run=0
+    _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
+    _check "$log" "FUSION-M7: BOOTCHECK ok: véglegesített rendszer" "a telepített rendszer véglegesített (nem próba)" || ok_run=0
+    _check "$log" "FUSION-M1: FAILEDCOUNT 0" "a telepített rendszeren nincs hibás szolgáltatás" || ok_run=0
+    _check "$log" "FUSION-M6: SHELL ready=yes" "Fusion Desktop a telepített rendszeren" || ok_run=0
+    grep -a 'FUSION-INST' "$log" | grep -v '^.*FUSION-INST:   *\(  \|LÉPÉS\)' | sed 's/^/      /' | tail -n 40 >&2
+    rm -f "$out/target.img"
+    if [ "$ok_run" -eq 1 ]; then ok "SIKERES ($RUN_SECS mp)"; return 0; fi
+    warn "SIKERTELEN — napló: $log"; return 1
+}
+
 step_test() {
     not_root
     QEMU_EXTRA=(); QEMU_HOTPLUG=0
@@ -177,6 +206,7 @@ step_test() {
 
     FUSION_VARIANT="test" step_build
     FUSION_VARIANT="test" step_image
+    FUSION_VARIANT="test" step_installer_image
 
     for cfg in std-sata vmware-sata std-usb; do
         vga=${cfg%-*}; bus=${cfg#*-}
@@ -401,6 +431,9 @@ step_test() {
     #   3–5. A próba: a fusion-init nem tud csatolni → újraindítás; 3 sikertelen próba után
     #   6. magától a B (véglegesített) indul; az A bejegyzés „hibás” (+0-3)
     _test_ab || fails=$((fails + 1))
+
+    # T2 — telepítő pendrive: telepítés egy üres céllemezre (új + a DATA megőrzésével), majd indítás arról
+    _test_installer || fails=$((fails + 1))
 
     # diagnosztika: a boot menü második bejegyzése, alapértelmezettként beállítva
     FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-diag*" step_build >/dev/null

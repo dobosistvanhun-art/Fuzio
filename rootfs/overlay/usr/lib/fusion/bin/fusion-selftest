@@ -33,6 +33,44 @@ if [ -e /data/.fusion-test-ab ]; then
     esac
     exit 0
 fi
+# --- T2: telepítő pendrive (fusion.installer): a Fusion Telepítő, majd valódi telepítés a teszt céllemezére
+#     (FUSIONTARGET): új telepítés → jelölő a DATA-n → újratelepítés a DATA megőrzésével → újraindítás a céllemezről
+if grep -qw 'fusion.installer' /proc/cmdline; then
+    iurun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion \
+              USER=fusion DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus PATH=/usr/local/bin:/usr/bin:/bin "$@"; }
+    iadm() { runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin "$@"; }
+    echo "FUSION-INST: BOOT slot=$(cat /run/fusion/slot) installer=$(cat /run/fusion/installer 2>/dev/null) data=$(findmnt -no FSTYPE /data) state=$(systemctl is-system-running) failed=$(systemctl --failed --no-legend --plain | wc -l) disk=$(cat /run/fusion/boot-disk)"
+    systemctl --failed --no-legend --plain | sed 's/^/FUSION-INST:   /'
+    i=0; w=0
+    while [ $i -lt 180 ]; do
+        for x in $(iurun xwininfo -root -tree 2>/dev/null | grep -F 'FusionOS telepítő' | awk '{print $1}'); do
+            iurun xwininfo -id "$x" 2>/dev/null | grep -q IsViewable && w=1
+        done
+        [ "$w" = 1 ] && break; sleep 1; i=$((i + 1))
+    done
+    echo "FUSION-INST: WINDOW $w wait=${i}s"
+    iurun timeout -k 5 240 fusion-installer --selftest 2>&1 | sed 's/^/FUSION-INST:   /'
+    k=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONTARGET" {print $1; exit}')
+    bd=$(cat /run/fusion/boot-disk)
+    echo "FUSION-INST: TARGET ${k:-nincs} boot=$bd"
+    if [ -n "$k" ]; then
+        g1=$(iadm install run "$k" new "${k}x" 2>&1 | tail -n 1); g2=$(iadm install run "$bd" new "$bd" 2>&1 | tail -n 1)
+        g3=$(iadm install run "$k" keep-data "$k" 2>&1 | tail -n 1)
+        echo "FUSION-INST: GUARD $g1 | $g2 | $g3"
+        t0=$(date +%s); iadm install run "$k" new "$k" > /tmp/inst-new.out 2>&1; rc=$?
+        grep -v '^PROGRESS' /tmp/inst-new.out | sed 's/^/FUSION-INST:   /'
+        echo "FUSION-INST: NEW rc=$rc secs=$(( $(date +%s) - t0 )) parts=$(lsblk -lno PARTLABEL "/dev/$k" | sed '/^$/d' | paste -sd, -) fs=$(for n in 1 2 3 4; do blkid -p -o value -s TYPE "/dev/${k}$n"; echo; done | paste -sd, -)"
+        mkdir -p /tmp/tdata; mount "/dev/${k}4" /tmp/tdata && echo telepitett > /tmp/tdata/.fusion-test-marker && umount /tmp/tdata
+        t0=$(date +%s); iadm install run "$k" keep-data "$k" > /tmp/inst-keep.out 2>&1; rc=$?
+        grep -v '^PROGRESS' /tmp/inst-keep.out | sed 's/^/FUSION-INST:   /'
+        mount -o ro "/dev/${k}4" /tmp/tdata; mk=$(cat /tmp/tdata/.fusion-test-marker 2>/dev/null); umount /tmp/tdata
+        echo "FUSION-INST: KEEP rc=$rc secs=$(( $(date +%s) - t0 )) marker=${mk:-nincs}"
+        echo "FUSION-INST: UEFI $(efibootmgr 2>/dev/null | grep -c 'FusionOS')"
+    fi
+    echo "FUSION-INST: DONE"
+    sync; systemctl reboot --no-block
+    exit 0
+fi
 state=$(systemctl is-system-running 2>/dev/null)
 root=$(findmnt -no FSTYPE /)
 usr="$(findmnt -no FSTYPE /usr) $(findmnt -no OPTIONS /usr | cut -d, -f1)"

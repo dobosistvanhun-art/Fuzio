@@ -1,0 +1,497 @@
+#!/usr/bin/python3
+"""FusionOS — fusion-install: a Fusion Telepítő rendszeroldali része (root, csak a telepítő pendrive-on, telepítő módban)
+
+    fusion-install list                                     a telepítendő csomag, a gép és a lemezek (JSON)
+    fusion-install run <lemez> <new|keep-data> <megerősítés> [--fupd <fájl>]
+                                                            telepítés (a megerősítés: a lemez neve, pl. sda)
+    fusion-install report                                   hibajelentés a telepítő pendrive-ra (hibajelentes/)
+
+Módok:
+  new         a lemez TELJES tartalma törlődik: ESP 512 MiB + A 4 GiB + B 4 GiB + DATA (a maradék)
+  keep-data   meglévő FusionOS-lemezen: az ESP és az A slot újraíródik, a B kiürül, a DATA (programok,
+              Wi-Fi, beállítások) MEGMARAD — az első indításkor a fusion-init az új rendszerképhez igazítja
+
+A kimenet sorai: „LÉPÉS i/n: …”, „PROGRESS <0-100>”, a végén „KÉSZ: …” vagy „fusion-install: <hiba>”.
+"""
+import glob
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+
+os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
+os.environ["LC_ALL"] = "C.UTF-8"
+ADMIN = "/usr/lib/fusion/bin/fusion-admin"
+PAYLOAD = "/run/fusion/payload"
+MIB = 1024 * 1024
+ESP_MIB, SLOT_MIB = 512, 4096
+MIN_GIB = 10
+TYPE_ESP = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
+TYPE_ROOT = "4F68BCE3-E8CD-4C4C-A2BA-B7DC76B5BEB9"
+TYPE_DATA = "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+STEPS = 7
+
+
+def _load_update():
+    loader = importlib.machinery.SourceFileLoader("fusion_update", "/usr/lib/fusion/bin/fusion-update")
+    spec = importlib.util.spec_from_loader("fusion_update", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+fu = _load_update()
+
+
+class InstallError(Exception):
+    pass
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def step(i, text):
+    say(f"LÉPÉS {i}/{STEPS}: {text}")
+
+
+def progress(pct):
+    say(f"PROGRESS {max(0, min(100, int(pct)))}")
+
+
+def run(cmd, check=True, timeout=1800, inp=None):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=inp, errors="replace")
+    if check and r.returncode != 0:
+        err = [l for l in (r.stderr or r.stdout or "").strip().splitlines() if l.strip() and "dmesg(1)" not in l]
+        raise InstallError(f"{os.path.basename(cmd[0])}: " + (err[-1] if err else f"hibakód {r.returncode}"))
+    return r
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def installer_mode():
+    return os.path.exists("/run/fusion/installer")
+
+
+def boot_disk():
+    return read("/run/fusion/boot-disk")
+
+
+def part_on(disk, label):
+    """a lemez adott GPT-nevű partíciója (a kernel PARTNAME-je, vagy — ha a partíciót a partx vette fel,
+    és ezért nincs neve a kernelben — közvetlenül a partíciós táblából)"""
+    for n in sorted(os.listdir(f"/sys/block/{disk}")):
+        if n.startswith(disk) and read(f"/sys/block/{disk}/{n}/partition"):
+            u = read(f"/sys/block/{disk}/{n}/uevent")
+            name = re.search(r"^PARTNAME=(.*)$", u, re.M)
+            name = name.group(1) if name else run(["blkid", "-p", "-s", "PART_ENTRY_NAME", "-o", "value", f"/dev/{n}"],
+                                                   check=False).stdout.strip()
+            if name == label:
+                return f"/dev/{n}"
+    return ""
+
+
+def part_num(disk, num):
+    for n in sorted(os.listdir(f"/sys/block/{disk}")):
+        if n.startswith(disk) and read(f"/sys/block/{disk}/{n}/partition") == str(num):
+            return f"/dev/{n}"
+    return ""
+
+
+# --- a telepítendő csomag (a pendrive FUSION_IPAY partíciója) -------------------------------------
+
+def mount_payload():
+    if os.path.ismount(PAYLOAD):
+        return PAYLOAD
+    bd = boot_disk()
+    dev = part_on(bd, "FUSION_IPAY") if bd and os.path.isdir(f"/sys/block/{bd}") else ""
+    if not dev:
+        raise InstallError("a telepítő pendrive csomag-partíciója (FUSION_IPAY) nem található")
+    os.makedirs(PAYLOAD, exist_ok=True)
+    run(["mount", "-t", "vfat", "-o", "ro,nodev,nosuid,noexec,utf8", dev, PAYLOAD])
+    return PAYLOAD
+
+
+def payload():
+    """a legújabb .fupd a csomag-partíción: verzió, méret, hiba"""
+    d = mount_payload()
+    best = None
+    for p in glob.glob(os.path.join(d, "*.fupd")):
+        try:
+            meta, files = fu.read_manifest(fu.Source(p))
+        except Exception as e:      # noqa: BLE001 — a hibás csomag ne állítsa le a listát
+            if not best:
+                best = {"path": p, "error": str(e)}
+            continue
+        info = {"path": p, "name": os.path.basename(p), "version": meta.get("FUSION_VERSION", "?"),
+                "milestone": meta.get("FUSION_MILESTONE", ""), "stamp": meta.get("BUILD_STAMP", ""),
+                "image": files["rootfs.erofs"][1], "error": ""}
+        if not best or best.get("error") or info["stamp"] > best.get("stamp", ""):
+            best = info
+    if not best:
+        return {"error": "nincs .fupd fájl a telepítő pendrive-on"}
+    if not best.get("error") and not os.path.isfile(os.path.join(d, "esp-static.tar")):
+        best["error"] = "hiányzik az esp-static.tar a telepítő pendrive-ról"
+    return best
+
+
+# --- a gép és a lemezek -------------------------------------------------------------------------------
+
+def machine():
+    dmi = lambda k: read(f"/sys/class/dmi/id/{k}")      # noqa: E731
+    mem = {l.split(":")[0]: l.split(":")[1] for l in read("/proc/meminfo").splitlines() if ":" in l}
+    env = dict(l.split("=", 1) for l in read("/run/fusion/hardware/display.env").splitlines() if "=" in l)
+    ac = [read(p + "/online") for p in glob.glob("/sys/class/power_supply/*") if read(p + "/type") == "Mains"]
+    bat = [p for p in glob.glob("/sys/class/power_supply/*") if read(p + "/type") == "Battery"]
+    return {"model": (dmi("sys_vendor") + " " + dmi("product_name")).strip() or "ismeretlen gép",
+            "memory": int(mem.get("MemTotal", "0 kB").split()[0]) * 1024,
+            "display": env.get("FUSION_DISPLAY_PROFILE", "?").strip('"') + " (" + env.get("FUSION_DISPLAY_STATUS", "?").strip('"') + ")",
+            "efi": os.path.isdir("/sys/firmware/efi"),
+            "ac": (ac[0] == "1") if ac else None, "battery": bool(bat),
+            "batteryPct": int(read(bat[0] + "/capacity", "0") or 0) if bat else None}
+
+
+def fusion_info(d):
+    """meglévő FusionOS a lemezen: verzió (az ESP UKI-jai), DATA mérete és foglaltsága, kiosztás"""
+    labels = {p["partlabel"]: p for p in d["partitions"]}
+    if not {"FUSION_ESP", "FUSION_A", "FUSION_B", "FUSION_DATA"} <= set(labels):
+        return None
+    info = {"version": "", "dataSize": labels["FUSION_DATA"]["size"], "dataUsed": None, "layoutOk": True, "reason": ""}
+    for k in ("FUSION_A", "FUSION_B"):
+        if labels[k]["size"] < SLOT_MIB * MIB:
+            info["layoutOk"], info["reason"] = False, f"a {k[-1]} slot kisebb a szokásosnál ({labels[k]['size'] >> 20} MiB)"
+    if labels["FUSION_ESP"]["size"] < 256 * MIB:
+        info["layoutOk"], info["reason"] = False, "az ESP túl kicsi"
+    with tempfile.TemporaryDirectory() as t:
+        if run(["mount", "-t", "vfat", "-o", "ro", labels["FUSION_ESP"]["path"], t], check=False).returncode == 0:
+            try:
+                names = [os.path.basename(p) for p in glob.glob(os.path.join(t, "EFI", "Linux", "fusionos-*.efi"))]
+                best = sorted((n for n in names if "+0-" not in n), reverse=True)
+                m = re.match(r"^fusionos-(.+?)-([a-z0-9]+)-(\d{14})-[AB]", best[0]) if best else None
+                if m:
+                    info["version"] = f"{m.group(1)} ({m.group(2)})"
+            finally:
+                run(["umount", t], check=False)
+    r = run(["dumpe2fs", "-h", labels["FUSION_DATA"]["path"]], check=False, timeout=30)
+    bc = re.search(r"^Block count:\s+(\d+)", r.stdout, re.M)
+    fb = re.search(r"^Free blocks:\s+(\d+)", r.stdout, re.M)
+    bs = re.search(r"^Block size:\s+(\d+)", r.stdout, re.M)
+    if bc and fb and bs:
+        info["dataUsed"] = (int(bc.group(1)) - int(fb.group(1))) * int(bs.group(1))
+    else:
+        info["layoutOk"], info["reason"] = False, "a DATA nem olvasható (nem ext4, vagy sérült)"
+    return info
+
+
+def disks():
+    r = run([ADMIN, "disk", "list"], check=False, timeout=120)
+    try:
+        data = json.loads(r.stdout[r.stdout.index("{"):])
+    except ValueError:
+        raise InstallError("a lemezlista nem olvasható: " + (r.stderr or r.stdout).strip()[-200:])
+    out = []
+    for d in data["disks"]:
+        e = {k: d[k] for k in ("name", "path", "model", "size", "kind", "removable", "table", "otheros")}
+        e["fusion"] = fusion_info(d)
+        e["parts"] = [{"name": p["name"], "label": p["label"] or p["partlabel"], "fstype": p["fstype"], "size": p["size"]}
+                      for p in d["partitions"]]
+        e["eligible"], e["reason"] = True, ""
+        if d["system"]:
+            e["eligible"], e["reason"] = False, "ez a telepítő pendrive"
+        elif d["ro"]:
+            e["eligible"], e["reason"] = False, "írásvédett"
+        elif d["size"] < MIN_GIB * 1024 * MIB:
+            e["eligible"], e["reason"] = False, f"túl kicsi (legalább {MIN_GIB} GiB kell)"
+        elif d.get("inuse"):
+            e["eligible"], e["reason"] = False, "használatban: " + d["inuse"]
+        e["keepData"] = bool(e["eligible"] and e["fusion"] and e["fusion"]["layoutOk"])
+        out.append(e)
+    return out
+
+
+def cmd_list():
+    res = {"installer": installer_mode(), "machine": machine(), "disks": [], "payload": {}, "error": ""}
+    try:
+        res["payload"] = payload()
+    except InstallError as e:
+        res["payload"] = {"error": str(e)}
+    try:
+        res["disks"] = disks()
+    except InstallError as e:
+        res["error"] = str(e)
+    json.dump(res, sys.stdout, ensure_ascii=False)
+    print()
+
+
+# --- telepítés ----------------------------------------------------------------------------------------
+
+def unmount_disk(disk):
+    for line in read("/proc/self/mounts").splitlines():
+        dev, mp = line.split()[:2]
+        mp = mp.replace("\\040", " ")
+        if os.path.realpath(dev).startswith(f"/dev/{disk}") and dev != "tmpfs":
+            if not mp.startswith("/run/media/"):
+                raise InstallError(f"a lemez egy kötetét a rendszer használja: {mp}")
+            r = run([ADMIN, "unmount", mp], check=False)
+            if r.returncode != 0:
+                raise InstallError((r.stderr or r.stdout).strip().replace("fusion-admin: ", ""))
+            say(f"leválasztva: {mp}")
+
+
+def sync_kernel(disk, want):
+    for _ in range(10):
+        run(["partx", "-u", f"/dev/{disk}"], check=False)
+        run(["partx", "-a", f"/dev/{disk}"], check=False)
+        run(["udevadm", "settle", "--timeout=15"], check=False)
+        if all(part_num(disk, i) for i in range(1, want + 1)):
+            return
+        time.sleep(1)
+    raise InstallError("a kernel nem látja az új partíciókat (húzza ki és dugja vissza a lemezt, majd próbálja újra)")
+
+
+def esp_partuuid(disk):
+    p = part_num(disk, 1)
+    return run(["blkid", "-p", "-s", "PART_ENTRY_UUID", "-o", "value", p], check=False).stdout.strip().lower() if p else ""
+
+
+def boot_entry(disk, removable, old_uuid):
+    """UEFI-bejegyzés „FusionOS” néven (belső lemezre); a mostani első bejegyzés marad elöl (D3)"""
+    if removable:
+        say("UEFI: cserélhető lemez — a gép boot menüjében (F9) magától megjelenik")
+        return
+    if not os.path.isdir("/sys/firmware/efi") or run(["sh", "-c", "command -v efibootmgr"], check=False).returncode:
+        say("UEFI: efibootmgr nem érhető el — a lemez a boot menüben (F9) választható")
+        return
+    v = run(["efibootmgr", "-v"], check=False).stdout
+    new_uuid = esp_partuuid(disk)
+    order = re.search(r"^BootOrder:\s*(\S+)", v, re.M)
+    order = order.group(1).split(",") if order else []
+    # a céllemez korábbi FusionOS-bejegyzése (a régi vagy az új partíció-azonosítóval) törlődik
+    for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+FusionOS\b.*$", v, re.M):
+        line = m.group(0).lower()
+        if (old_uuid and old_uuid in line) or (new_uuid and new_uuid in line):
+            run(["efibootmgr", "-q", "-b", m.group(1), "-B"], check=False)
+            order = [o for o in order if o.upper() != m.group(1).upper()]
+            say(f"UEFI: a lemez régi bejegyzése törölve (Boot{m.group(1)})")
+    label = "FusionOS"
+    run(["efibootmgr", "-q", "-c", "-d", f"/dev/{disk}", "-p", "1", "-L", label, "-l", "\\EFI\\BOOT\\BOOTX64.EFI"])
+    v2 = run(["efibootmgr", "-v"], check=False).stdout
+    new = next((m.group(1) for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+FusionOS\b.*$", v2, re.M)
+                if new_uuid and new_uuid in m.group(0).lower()), None)
+    if not new:
+        say("UEFI: a bejegyzés nem látszik az efibootmgr listájában — a lemez a boot menüben (F9) választható")
+        return
+    names = {m.group(1).upper(): m.group(2) for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+(.*)$", v2, re.M)}
+    order = [o for o in order if o.upper() != new.upper()]
+    first = order[0] if order else ""
+    # D3: ha a mostani első egy másik rendszer (pl. a Mint), az marad elöl, a FusionOS mögötte (F9-cel választható)
+    if first and not names.get(first.upper(), "").startswith("FusionOS"):
+        new_order = [first, new] + order[1:]
+        msg = f"UEFI: „FusionOS” (Boot{new}) — az alapértelmezett indítás változatlan ({names.get(first.upper(), first).split(chr(9))[0][:40]}); F9-cel választható"
+    else:
+        new_order = [new] + order
+        msg = f"UEFI: „FusionOS” (Boot{new}) — ez indul alapértelmezettként"
+    run(["efibootmgr", "-q", "-o", ",".join(new_order)], check=False)
+    say(msg)
+
+
+def cmd_run(disk, mode, confirm, fupd=None):
+    if not installer_mode():
+        raise InstallError("csak a telepítő pendrive-ról indított rendszerben használható")
+    if mode not in ("new", "keep-data"):
+        raise InstallError("mód: new vagy keep-data")
+    t0 = time.time()
+    step(1, "ellenőrzés")
+    pay = {"path": fupd} if fupd else payload()
+    if pay.get("error"):
+        raise InstallError(pay["error"])
+    d = next((x for x in disks() if x["name"] == disk), None)
+    if not d:
+        raise InstallError(f"nincs ilyen lemez: {disk}")
+    if not d["eligible"]:
+        raise InstallError(f"{disk}: {d['reason']}")
+    if confirm.strip() != disk:
+        raise InstallError(f"a megerősítés nem egyezik: a lemez neve „{disk}”, beírva: „{confirm}”")
+    if mode == "keep-data" and not d["keepData"]:
+        raise InstallError(f"{disk}: a DATA megőrzésével csak meglévő FusionOS-lemezre lehet telepíteni"
+                           + (f" ({d['fusion']['reason']})" if d["fusion"] and d["fusion"]["reason"] else ""))
+    src = fu.Source(pay["path"])
+    meta, files = fu.read_manifest(src)
+    esp_static = os.path.join(os.path.dirname(pay["path"]), "esp-static.tar")
+    if not os.path.isfile(esp_static):
+        raise InstallError("hiányzik az esp-static.tar a telepítő pendrive-ról")
+    ver = f"FusionOS {meta.get('FUSION_VERSION', '?')} ({meta.get('FUSION_MILESTONE', '')})"
+    say(f"telepítés: {ver} → /dev/{disk} ({d['model']}, {d['size'] >> 30} GiB), mód: "
+        + ("új telepítés" if mode == "new" else "újratelepítés a DATA megőrzésével"))
+    progress(2)
+
+    step(2, "a telepítőcsomag ellenőrzése (SHA-256)")
+    for name, w0, w1 in (("uki-A.efi", 2, 4), ("rootfs.erofs", 4, 25)):
+        want, size = files[name]
+        if fu.sha256(src, name, size) != want:
+            raise InstallError(f"{name}: az ellenőrzőösszeg nem egyezik — sérült a .fupd fájl (másolja újra a pendrive-ra)")
+        progress(w1)
+    say("a csomag ép")
+
+    old_uuid = esp_partuuid(disk)
+    unmount_disk(disk)
+    if mode == "new":
+        step(3, "particionálás (a lemez teljes tartalma törlődik)")
+        for p in d["parts"]:
+            run(["wipefs", "-a", "-q", f"/dev/{p['name']}"], check=False)
+        run(["wipefs", "-a", "-q", f"/dev/{disk}"])
+        m = 2048
+        a0 = m + ESP_MIB * m
+        b0 = a0 + SLOT_MIB * m
+        d0 = b0 + SLOT_MIB * m
+        script = (f"label: gpt\nstart={m}, size={ESP_MIB * m}, type={TYPE_ESP}, name=\"FUSION_ESP\"\n"
+                  f"start={a0}, size={SLOT_MIB * m}, type={TYPE_ROOT}, name=\"FUSION_A\"\n"
+                  f"start={b0}, size={SLOT_MIB * m}, type={TYPE_ROOT}, name=\"FUSION_B\"\n"
+                  f"start={d0}, type={TYPE_DATA}, name=\"FUSION_DATA\"\n")
+        run(["sfdisk", "-q", "--wipe", "always", "--wipe-partitions", "always", f"/dev/{disk}"], inp=script)
+        sync_kernel(disk, 4)
+        say("partíciók: ESP 512 MiB, A 4 GiB, B 4 GiB, DATA " + f"{(d['size'] - (d0 + 2048) * 512) >> 30} GiB")
+    else:
+        step(3, "a meglévő FusionOS-partíciók (a DATA megmarad)")
+    pesp, pa, pb, pdata = (part_on(disk, x) for x in ("FUSION_ESP", "FUSION_A", "FUSION_B", "FUSION_DATA"))
+    if not all((pesp, pa, pb, pdata)):
+        raise InstallError("a FusionOS-partíciók nem találhatók a lemezen")
+    progress(28)
+
+    step(4, "a rendszerkép írása az A slotba (visszaolvasással)")
+    want, size = files["rootfs.erofs"]
+    orig_say = fu.say
+
+    def slot_say(msg):
+        mm = re.match(r"\s*írás (\d+)%", msg)
+        if mm:
+            progress(28 + int(mm.group(1)) * 52 // 100)
+        else:
+            say(msg)
+    fu.say = slot_say
+    try:
+        fu.write_slot(src, size, want, pa)
+    finally:
+        fu.say = orig_say
+    run(["wipefs", "-a", "-q", pb], check=False)
+    say("B slot: üres (a következő frissítés ide kerül)")
+    progress(82)
+
+    step(5, "rendszerbetöltő (ESP)")
+    run(["mkfs.vfat", "-F", "32", "-n", "FUSION_ESP", pesp])
+    uki = meta.get("UKI_A") or ""
+    if not re.match(r"^fusionos-.+-A\.efi$", uki):
+        raise InstallError("a csomag manifestjében nincs érvényes UKI_A")
+    with tempfile.TemporaryDirectory() as t:
+        run(["mount", "-t", "vfat", "-o", "rw,nodev,nosuid,noexec", pesp, t])
+        try:
+            with tarfile.open(esp_static) as tf:
+                for m in tf.getmembers():
+                    if m.name.startswith("/") or ".." in m.name.split("/") or not (m.isfile() or m.isdir()):
+                        raise InstallError(f"esp-static.tar: érvénytelen elem: {m.name}")
+                tf.extractall(t, filter="data")
+            os.makedirs(os.path.join(t, "EFI", "Linux"), exist_ok=True)
+            for old in glob.glob(os.path.join(t, "EFI", "Linux", "fusionos-*.efi")):
+                os.unlink(old)
+            with src.open("uki-A.efi") as s, open(os.path.join(t, "EFI", "Linux", uki), "wb") as o:
+                while True:
+                    b = s.read(4 << 20)
+                    if not b:
+                        break
+                    o.write(b)
+            fu.fix_entries(t, uki, "A")
+            for need in ("EFI/BOOT/BOOTX64.EFI", "loader/loader.conf", f"EFI/Linux/{uki}"):
+                if not os.path.isfile(os.path.join(t, need)):
+                    raise InstallError(f"az ESP-ről hiányzik: {need}")
+            say(f"ESP: systemd-boot + {uki}")
+        finally:
+            os.sync()
+            run(["umount", t], check=False)
+    r = run(["fsck.vfat", "-n", pesp], check=False)
+    if r.returncode not in (0, 1):
+        raise InstallError("az ESP ellenőrzése hibát talált: " + r.stdout.strip()[-200:])
+    progress(88)
+
+    step(6, "adatpartíció (DATA)")
+    if mode == "new":
+        run(["mkfs.ext4", "-q", "-F", "-E", "nodiscard", "-L", "FUSION_DATA", pdata])
+        say("DATA: új, üres (ext4)")
+    else:
+        r = run(["e2fsck", "-n", pdata], check=False, timeout=1800)
+        say("DATA: megtartva" + ("" if r.returncode == 0 else
+                                 f" — FIGYELEM: a fájlrendszer-ellenőrzés eltérést jelzett (kód {r.returncode}); "
+                                 "az első indításkor a rendszer javítja"))
+    progress(94)
+
+    step(7, "UEFI boot-bejegyzés")
+    try:
+        boot_entry(disk, d["removable"], old_uuid)
+    except InstallError as e:
+        say(f"UEFI: a bejegyzés nem sikerült ({e}) — a lemez a boot menüben (F9) választható")
+    os.sync()
+    progress(100)
+    say(f"KÉSZ: {ver} telepítve: /dev/{disk} ({int(time.time() - t0)} mp). Vegye ki a telepítő pendrive-ot, majd indítsa újra a gépet.")
+
+
+def cmd_report():
+    """hibajelentés a telepítő pendrive-ra (a RAM-ban lévő Letöltések újraindításkor elveszne)"""
+    bd = boot_disk()
+    dev = part_on(bd, "FUSION_IPAY") if bd else ""
+    if not dev:
+        raise InstallError("a telepítő pendrive csomag-partíciója (FUSION_IPAY) nem található")
+    if os.path.ismount(PAYLOAD):
+        run(["umount", PAYLOAD], check=False)
+    with tempfile.TemporaryDirectory() as t:
+        run(["mount", "-t", "vfat", "-o", "rw,nodev,nosuid,noexec,utf8", dev, t])
+        try:
+            out = os.path.join(t, "hibajelentes")
+            os.makedirs(out, exist_ok=True)
+            r = run(["/usr/lib/fusion/bin/fusion-report", "-d", "A Fusion Telepítő hibajelentése", "-o", out],
+                    check=False, timeout=300)
+            say(r.stdout.strip().splitlines()[-2] if r.stdout.strip() else "a hibajelentés nem készült el")
+            say("a telepítő pendrive „FUSIONINST” kötetén, a hibajelentes mappában")
+        finally:
+            os.sync()
+            run(["umount", t], check=False)
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        print("fusion-install: rootként kell futnia (sudo -n fusion-admin install …)", file=sys.stderr)
+        return 1
+    try:
+        if argv[:1] == ["list"] and len(argv) == 1:
+            cmd_list()
+        elif argv[:1] == ["run"] and len(argv) in (4, 6):
+            fupd = argv[5] if len(argv) == 6 and argv[4] == "--fupd" else None
+            if len(argv) == 6 and argv[4] != "--fupd":
+                raise InstallError("ismeretlen kapcsoló: " + argv[4])
+            cmd_run(argv[1], argv[2], argv[3], fupd)
+        elif argv == ["report"]:
+            cmd_report()
+        else:
+            print(__doc__, file=sys.stderr)
+            return 2
+    except (InstallError, fu.UpdateError) as e:
+        print(f"fusion-install: {e}", file=sys.stderr, flush=True)
+        return 1
+    except subprocess.TimeoutExpired as e:
+        print(f"fusion-install: időtúllépés: {e.cmd[0]}", file=sys.stderr, flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

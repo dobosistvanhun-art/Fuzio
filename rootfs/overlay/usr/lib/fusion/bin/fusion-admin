@@ -22,6 +22,8 @@
 #                                     Fusion Lemezkezelő (fusion-disk; a paramétereket az ellenőrzi,
 #                                     a lemezíró műveletekhez a lemez nevét is meg kell adni)
 #    report                           a hibajelentés rendszeroldali része (fusion-report --system; csak olvas)
+#    install list | run <lemez> <new|keep-data> <megerősítés> | report
+#                                     Fusion Telepítő (fusion-install) — csak a telepítő pendrive-ról indítva
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -235,8 +237,16 @@ case "$cmd" in
     disk)
         case "${1:-}" in list|format-disk|format|label|create|delete) ;; *) fail "használat: disk list|format-disk|format|label|create|delete …" ;; esac
         exec /usr/lib/fusion/bin/fusion-disk "$@" ;;
+    install)
+        [ -e /run/fusion/installer ] || fail "a telepítés csak a telepítő pendrive-ról indított rendszerben érhető el"
+        case "${1:-}" in
+            list|report) [ $# -eq 1 ] || fail "használat: install list|report" ;;
+            run) [ $# -eq 4 ] || fail "használat: install run <lemez> <new|keep-data> <megerősítés>" ;;
+            *) fail "használat: install list | run <lemez> <new|keep-data> <megerősítés> | report" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-install "$@" ;;
     report)
         [ $# -eq 0 ] || fail "használat: report"
         exec /usr/lib/fusion/bin/fusion-report --system ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report" ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install" ;;
 esac

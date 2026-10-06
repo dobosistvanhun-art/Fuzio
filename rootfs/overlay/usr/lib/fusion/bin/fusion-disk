@@ -68,7 +68,7 @@ def run(cmd, check=True, timeout=600, inp=None):
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=inp, errors="replace")
     if check and r.returncode != 0:
         err = (r.stderr or r.stdout or "").strip().splitlines()
-        err = [l for l in err if l.strip()]
+        err = [l for l in err if l.strip() and "dmesg(1)" not in l]
         raise DiskError(f"{os.path.basename(cmd[0])}: " + (err[-1] if err else f"hibakód {r.returncode}"))
     return r
 
