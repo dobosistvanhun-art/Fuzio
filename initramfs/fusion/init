@@ -145,6 +145,12 @@ while :; do
     i=$((i + 1)); [ $i -ge 30 ] && break
     sleep 0.5
 done
+# a boot-lemez felismerése a ciklus után is (a telepítő módban a ciklus azonnal kiléphet, ha az USB-lemez épp
+# a boot_disk és a find_part között jelent meg); végső tartalék telepítő módban: a FUSION_ISYS lemeze
+[ -n "$BOOTDISK" ] || BOOTDISK=$(boot_disk)
+if [ -z "$BOOTDISK" ] && [ -n "$INSTALLER" ] && [ -n "$ROOTDEV" ]; then
+    BOOTDISK=$(basename "$(readlink -f "/sys/class/block/${ROOTDEV#/dev/}/..")")
+fi
 [ -n "$ROOTDEV" ] || rescue "A rendszerkép partíciója nem található ($([ -n "$INSTALLER" ] && echo FUSION_ISYS || echo "FUSION_$SLOT"))."
 [ -n "$DATADEV" ] || rescue "A FUSION_DATA partíció nem található."
 

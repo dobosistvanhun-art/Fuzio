@@ -68,7 +68,9 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
         echo "FUSION-INST: UEFI $(efibootmgr 2>/dev/null | grep -c 'FusionOS')"
     fi
     echo "FUSION-INST: DONE"
-    sync; systemctl reboot --no-block
+    # sikeres telepítés után a céllemezről indul tovább; különben kikapcsol (ne induljon újra a telepítő)
+    if grep -q '^KÉSZ' /tmp/inst-keep.out 2>/dev/null; then sync; systemctl reboot --no-block
+    else echo "FUSION-M1: POWEROFF"; systemctl poweroff --no-block; fi
     exit 0
 fi
 state=$(systemctl is-system-running 2>/dev/null)
