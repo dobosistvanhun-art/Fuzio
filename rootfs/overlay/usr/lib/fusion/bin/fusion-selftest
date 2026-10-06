@@ -59,7 +59,7 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
         echo "FUSION-INST: GUARD $g1 | $g2 | $g3"
         t0=$(date +%s); iadm install run "$k" new "$k" > /tmp/inst-new.out 2>&1; rc=$?
         grep -v '^PROGRESS' /tmp/inst-new.out | sed 's/^/FUSION-INST:   /'
-        echo "FUSION-INST: NEW rc=$rc secs=$(( $(date +%s) - t0 )) parts=$(lsblk -lno PARTLABEL "/dev/$k" | sed '/^$/d' | paste -sd, -) fs=$(for n in 1 2 3 4; do blkid -p -o value -s TYPE "/dev/${k}$n"; echo; done | paste -sd, -)"
+        echo "FUSION-INST: NEW rc=$rc secs=$(( $(date +%s) - t0 )) parts=$(lsblk -lno PARTLABEL "/dev/$k" | sed '/^$/d' | paste -sd, -) fs=$(for n in 1 2 3 4; do printf '%s,' "$(blkid -p -o value -s TYPE "/dev/${k}$n")"; done)"
         mkdir -p /tmp/tdata; mount "/dev/${k}4" /tmp/tdata && echo telepitett > /tmp/tdata/.fusion-test-marker && umount /tmp/tdata
         t0=$(date +%s); iadm install run "$k" keep-data "$k" > /tmp/inst-keep.out 2>&1; rc=$?
         grep -v '^PROGRESS' /tmp/inst-keep.out | sed 's/^/FUSION-INST:   /'
