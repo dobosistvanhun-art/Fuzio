@@ -2,9 +2,14 @@
 """FusionOS — fusion-install: a Fusion Telepítő rendszeroldali része (root, csak a telepítő pendrive-on, telepítő módban)
 
     fusion-install list                                     a telepítendő csomag, a gép és a lemezek (JSON)
-    fusion-install run <lemez> <new|keep-data> <megerősítés> [--fupd <fájl>]
-                                                            telepítés (a megerősítés: a lemez neve, pl. sda)
+    fusion-install run <lemez> <new|keep-data> <megerősítés> [--fupd <fájl>] [--restore <mentés>] [--wifi]
+                                                            telepítés (a megerősítés: a lemez neve, pl. sda);
+                                                            --restore: új telepítéskor a DATA egy mentésből
+                                                            (fusion-backup); --wifi: a telepítőben beállított
+                                                            Wi-Fi-hálózat(ok) átvétele
     fusion-install report                                   hibajelentés a telepítő pendrive-ra (hibajelentes/)
+    fusion-install media <fájl.fupd> <lemez> <megerősítés>  telepítő pendrive készítése egy .fupd-ből (T3 —
+                                                            a futó FusionOS-ből is, Mint nélkül)
 
 Módok:
   new         a lemez TELJES tartalma törlődik: ESP 512 MiB + A 4 GiB + B 4 GiB + DATA (a maradék)
@@ -21,6 +26,7 @@ import os
 import re
 import subprocess
 import sys
+import shutil
 import tarfile
 import tempfile
 import time
@@ -124,6 +130,19 @@ def mount_payload():
     return PAYLOAD
 
 
+def esp_static_of(src, fupd_path):
+    """a céllemez ESP-jének állandó része: a .fupd esp-static.tar tagja (0.0.29-től), különben a mellette lévő fájl"""
+    if src.tar is not None and "esp-static.tar" in src.members:
+        out = "/run/fusion/esp-static.tar"
+        with src.open("esp-static.tar") as s_, open(out, "wb") as o:
+            shutil.copyfileobj(s_, o, 4 << 20)
+        return out
+    f = os.path.join(os.path.dirname(fupd_path), "esp-static.tar")
+    if os.path.isfile(f):
+        return f
+    raise InstallError("hiányzik az esp-static.tar (a .fupd-ben vagy mellette)")
+
+
 def payload():
     """a legújabb .fupd a csomag-partíción: verzió, méret, hiba"""
     d = mount_payload()
@@ -142,8 +161,10 @@ def payload():
             best = info
     if not best:
         return {"error": "nincs .fupd fájl a telepítő pendrive-on"}
-    if not best.get("error") and not os.path.isfile(os.path.join(d, "esp-static.tar")):
-        best["error"] = "hiányzik az esp-static.tar a telepítő pendrive-ról"
+    if not best.get("error"):
+        src = fu.Source(best["path"])
+        if "esp-static.tar" not in src.members and not os.path.isfile(os.path.join(d, "esp-static.tar")):
+            best["error"] = "hiányzik az esp-static.tar a telepítő pendrive-ról"
     return best
 
 
@@ -222,7 +243,8 @@ def disks():
 
 
 def cmd_list():
-    res = {"installer": installer_mode(), "machine": machine(), "disks": [], "payload": {}, "error": ""}
+    res = {"installer": installer_mode(), "machine": machine(), "disks": [], "payload": {}, "error": "",
+           "backups": backups(), "wifi": wifi_known()}
     try:
         res["payload"] = payload()
     except InstallError as e:
@@ -307,7 +329,86 @@ def boot_entry(disk, removable, old_uuid):
     say(msg)
 
 
-def cmd_run(disk, mode, confirm, fupd=None):
+def wifi_known():
+    out = []
+    for f in sorted(glob.glob("/var/lib/iwd/*.psk") + glob.glob("/var/lib/iwd/*.open")):
+        n = os.path.basename(f).rsplit(".", 1)[0]
+        if n.startswith("="):
+            try:
+                n = bytes.fromhex(n[1:]).decode(errors="replace")
+            except ValueError:
+                pass
+        out.append(n)
+    return out
+
+
+def backups():
+    out = []
+    for info_f in sorted(glob.glob("/run/media/*/FusionOS-mentes/*.info.json"), reverse=True):
+        try:
+            with open(info_f) as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            continue
+        base = info_f[:-len(".info.json")]
+        parts = sorted(glob.glob(glob.escape(base) + ".[0-9][0-9][0-9]")) or ([base] if os.path.isfile(base) else [])
+        if not info.get("complete") or not parts:
+            continue
+        info.update(path=base, parts=parts, volume=os.path.dirname(os.path.dirname(base)), name=os.path.basename(base))
+        out.append(info)
+    return out
+
+
+def find_backup(path):
+    b = next((x for x in backups() if x["path"] == os.path.realpath(path) or x["path"] == path), None)
+    if not b:
+        raise InstallError(f"a mentés nem található (csatolt külső lemez, FusionOS-mentes mappa): {path}")
+    return b
+
+
+def restore_into(target, b):
+    """a mentés kicsomagolása az új DATA-ra (tulajdonosok, jogok, bővített attribútumok megtartásával)"""
+    say(f"visszaállítás a mentésből: {b['name']} ({b.get('version', '?')}, {b.get('date', '')[:16]}), "
+        f"{b.get('bytes', 0) >> 20} MiB tömörítve")
+    cat = subprocess.Popen(["cat"] + b["parts"], stdout=subprocess.PIPE)
+    zst = subprocess.Popen(["zstd", "-q", "-dc"], stdin=cat.stdout, stdout=subprocess.PIPE)
+    cat.stdout.close()
+    tar = subprocess.Popen(["tar", "-x", "-p", "-f", "-", "-C", target, "--numeric-owner", "--xattrs", "--xattrs-include=*",
+                            "--acls", "--exclude=fusion-backup.info", "--checkpoint=2560", "--checkpoint-action=echo=CKPT %u"],
+                           stdin=zst.stdout, stderr=subprocess.PIPE, text=True, errors="replace")
+    zst.stdout.close()
+    total, errs, last = max(1, b.get("dataUsed", 1)), [], -5
+    for line in tar.stderr:
+        m = re.search(r"CKPT (\d+)$", line.strip())
+        if m:
+            pct = min(99, int(m.group(1)) * 10240 * 100 // total)
+            if pct >= last + 5:
+                last = pct - pct % 5
+                progress(88 + pct * 8 // 100)
+        elif line.strip():
+            errs.append(line.strip())
+    rt, rz, rc = tar.wait(), zst.wait(), cat.wait()
+    if rt != 0 or rz != 0 or rc != 0:
+        raise InstallError("a visszaállítás nem sikerült: " + ("; ".join(errs[-3:]) or f"tar {rt}, zstd {rz}"))
+    say("DATA: visszaállítva a mentésből")
+
+
+def copy_wifi(target):
+    src = "/var/lib/iwd"
+    files = [f for f in glob.glob(os.path.join(src, "*")) if f.rsplit(".", 1)[-1] in ("psk", "open", "8021x")]
+    if not files:
+        say("Wi-Fi: a telepítőben nincs beállított hálózat — kihagyva")
+        return
+    dst = os.path.join(target, "overlay", "root", "upper", "var", "lib", "iwd")
+    os.makedirs(dst, mode=0o700, exist_ok=True)
+    os.chmod(dst, 0o700)
+    for f in files:
+        shutil.copy2(f, dst)
+        os.chmod(os.path.join(dst, os.path.basename(f)), 0o600)
+    say(f"Wi-Fi: {len(files)} hálózat átvéve ({', '.join(wifi_known())})")
+
+
+def cmd_run(disk, mode, confirm, fupd=None, restore=None, wifi=False):
     if not installer_mode():
         raise InstallError("csak a telepítő pendrive-ról indított rendszerben használható")
     if mode not in ("new", "keep-data"):
@@ -329,9 +430,12 @@ def cmd_run(disk, mode, confirm, fupd=None):
                            + (f" ({d['fusion']['reason']})" if d["fusion"] and d["fusion"]["reason"] else ""))
     src = fu.Source(pay["path"])
     meta, files = fu.read_manifest(src)
-    esp_static = os.path.join(os.path.dirname(pay["path"]), "esp-static.tar")
-    if not os.path.isfile(esp_static):
-        raise InstallError("hiányzik az esp-static.tar a telepítő pendrive-ról")
+    esp_static = esp_static_of(src, pay["path"])
+    backup = find_backup(restore) if restore else None
+    if backup and mode != "new":
+        raise InstallError("mentésből csak új telepítéskor lehet visszaállítani")
+    if backup and backup["dataUsed"] > d["size"] - (ESP_MIB + 2 * SLOT_MIB + 64) * MIB:
+        raise InstallError("a mentés nem fér el a lemezen")
     ver = f"FusionOS {meta.get('FUSION_VERSION', '?')} ({meta.get('FUSION_MILESTONE', '')})"
     say(f"telepítés: {ver} → /dev/{disk} ({d['model']}, {d['size'] >> 30} GiB), mód: "
         + ("új telepítés" if mode == "new" else "újratelepítés a DATA megőrzésével"))
@@ -424,16 +528,27 @@ def cmd_run(disk, mode, confirm, fupd=None):
         raise InstallError("az ESP ellenőrzése hibát talált: " + r.stdout.strip()[-200:])
     progress(88)
 
-    step(6, "adatpartíció (DATA)")
+    step(6, "adatpartíció (DATA)" + (" — visszaállítás a mentésből" if backup else ""))
     if mode == "new":
         run(["mkfs.ext4", "-q", "-F", "-E", "nodiscard", "-L", "FUSION_DATA", pdata])
-        say("DATA: új, üres (ext4)")
+        say("DATA: új (ext4)")
+        if backup or wifi:
+            with tempfile.TemporaryDirectory() as t:
+                run(["mount", "-t", "ext4", pdata, t])
+                try:
+                    if backup:
+                        restore_into(t, backup)
+                    if wifi:
+                        copy_wifi(t)
+                finally:
+                    os.sync()
+                    run(["umount", t], check=False)
     else:
         r = run(["e2fsck", "-n", pdata], check=False, timeout=1800)
         say("DATA: megtartva" + ("" if r.returncode == 0 else
                                  f" — FIGYELEM: a fájlrendszer-ellenőrzés eltérést jelzett (kód {r.returncode}); "
                                  "az első indításkor a rendszer javítja"))
-    progress(94)
+    progress(97)
 
     step(7, "UEFI boot-bejegyzés")
     try:
@@ -443,6 +558,158 @@ def cmd_run(disk, mode, confirm, fupd=None):
     os.sync()
     progress(100)
     say(f"KÉSZ: {ver} telepítve: /dev/{disk} ({int(time.time() - t0)} mp). Vegye ki a telepítő pendrive-ot, majd indítsa újra a gépet.")
+
+
+INST_ESP_MIB = 256
+
+
+def fs_disk_of(path):
+    """a fájlt tartalmazó kötet lemeze (a forrás nem lehet a céllemezen)"""
+    best, dev = "", ""
+    for line in read("/proc/self/mounts").splitlines():
+        p = line.split()
+        mp = p[1].replace("\\040", " ")
+        if (path == mp or path.startswith(mp.rstrip("/") + "/")) and len(mp) > len(best) and p[0].startswith("/dev/"):
+            best, dev = mp, os.path.realpath(p[0])
+    if not dev:
+        return ""
+    n = os.path.basename(dev)
+    parent = os.path.basename(os.path.dirname(os.path.realpath(f"/sys/class/block/{n}")))
+    return parent if os.path.isdir(f"/sys/block/{parent}") else n
+
+
+def cmd_media(fupd, disk, confirm):
+    """telepítő pendrive egy .fupd-ből: FUSION_IESP (systemd-boot + a telepítő UKI-ja), FUSION_ISYS (a rendszerkép),
+    FUSION_IPAY (FAT32 „FUSIONINST”: maga a .fupd) — ugyanaz, mint a Minten a fusion-build installer"""
+    t0 = time.time()
+    steps = 6
+
+    def mstep(i, text):
+        say(f"LÉPÉS {i}/{steps}: {text}")
+    mstep(1, "ellenőrzés")
+    fupd = os.path.realpath(fupd)
+    if not fupd.endswith(".fupd") or not os.path.isfile(fupd):
+        raise InstallError(f"nem .fupd fájl: {fupd}")
+    src = fu.Source(fupd)
+    meta, files = fu.read_manifest(src)
+    if "uki-installer.efi" not in files or "esp-static.tar" not in files:
+        raise InstallError("ebből a .fupd-ből nem készíthető telepítő (régebbi csomag, 0.0.29 előtti) — egy újabb .fupd kell")
+    d = next((x for x in disks() if x["name"] == disk), None)
+    if not d:
+        raise InstallError(f"nincs ilyen lemez: {disk}")
+    if d["reason"] == "ez a telepítő pendrive" or disk == boot_disk():
+        raise InstallError(f"{disk}: a futó rendszer lemeze")
+    if not d["removable"]:
+        raise InstallError(f"{disk}: csak cserélhető lemezre (pendrive, SD-kártya) készíthető telepítő")
+    if fs_disk_of(fupd) == disk:
+        raise InstallError(f"{disk}: a .fupd fájl ezen a lemezen van — az törlődne; másolja előbb máshová (pl. Letöltések)")
+    img = files["rootfs.erofs"][1]
+    sys_mib = (img // MIB + 64 + 63) // 64 * 64
+    need = (1 + INST_ESP_MIB + sys_mib + 1) * MIB + os.path.getsize(fupd) + (64 << 20)
+    if d["size"] < need:
+        raise InstallError(f"{disk}: túl kicsi — legalább {need >> 20} MiB kell")
+    if confirm.strip() != disk:
+        raise InstallError(f"a megerősítés nem egyezik: a lemez neve „{disk}”, beírva: „{confirm}”")
+    ver = f"FusionOS {meta.get('FUSION_VERSION', '?')} ({meta.get('FUSION_MILESTONE', '')})"
+    say(f"telepítő pendrive: {ver} → /dev/{disk} ({d['model']}, {d['size'] >> 20} MiB)")
+
+    mstep(2, "a csomag ellenőrzése (SHA-256)")
+    n = 0
+    for name, (want, size) in files.items():
+        if fu.sha256(src, name, size) != want:
+            raise InstallError(f"{name}: az ellenőrzőösszeg nem egyezik — sérült a .fupd fájl")
+        n += 1
+        progress(2 + n * 18 // len(files))
+
+    mstep(3, "particionálás (a pendrive teljes tartalma törlődik)")
+    unmount_disk(disk)
+    for p in d["parts"]:
+        run(["wipefs", "-a", "-q", f"/dev/{p['name']}"], check=False)
+    run(["wipefs", "-a", "-q", f"/dev/{disk}"])
+    m = 2048
+    s1, s2 = m, m + INST_ESP_MIB * m
+    s3 = s2 + sys_mib * m
+    script = (f"label: gpt\nstart={s1}, size={INST_ESP_MIB * m}, type={TYPE_ESP}, name=\"FUSION_IESP\"\n"
+              f"start={s2}, size={sys_mib * m}, type={TYPE_DATA}, name=\"FUSION_ISYS\"\n"
+              f"start={s3}, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=\"FUSION_IPAY\"\n")
+    run(["sfdisk", "-q", "--wipe", "always", "--wipe-partitions", "always", f"/dev/{disk}"], inp=script)
+    sync_kernel(disk, 3)
+    pesp, psys, ppay = part_num(disk, 1), part_num(disk, 2), part_num(disk, 3)
+    progress(22)
+
+    mstep(4, "a rendszerkép (visszaolvasással)")
+    want, size = files["rootfs.erofs"]
+    orig_say = fu.say
+
+    def slot_say(msg):
+        mm = re.match(r"\s*írás (\d+)%", msg)
+        if mm:
+            progress(22 + int(mm.group(1)) * 40 // 100)
+        else:
+            say(msg)
+    fu.say = slot_say
+    try:
+        fu.write_slot(src, size, want, psys)
+    finally:
+        fu.say = orig_say
+    progress(62)
+
+    mstep(5, "rendszerbetöltő (ESP)")
+    run(["mkfs.vfat", "-F", "32", "-n", "FUSIONIESP", pesp])
+    esp_static = esp_static_of(src, fupd)
+    with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as x:
+        with tarfile.open(esp_static) as tf:
+            tf.extractall(x, filter="data")
+        run(["mount", "-t", "vfat", "-o", "rw,nodev,nosuid,noexec", pesp, t])
+        try:
+            for sub in ("EFI/BOOT", "EFI/systemd", "EFI/Linux", "loader"):
+                os.makedirs(os.path.join(t, sub), exist_ok=True)
+            shutil.copyfile(os.path.join(x, "EFI/BOOT/BOOTX64.EFI"), os.path.join(t, "EFI/BOOT/BOOTX64.EFI"))
+            shutil.copyfile(os.path.join(x, "EFI/systemd/systemd-bootx64.efi"), os.path.join(t, "EFI/systemd/systemd-bootx64.efi"))
+            if os.path.isfile(os.path.join(x, "EFI/Linux/fusion-diag.efi")):
+                shutil.copyfile(os.path.join(x, "EFI/Linux/fusion-diag.efi"), os.path.join(t, "EFI/Linux/fusion-diag.efi"))
+            with src.open("uki-installer.efi") as s_, open(os.path.join(t, "EFI/Linux/fusion-installer.efi"), "wb") as o:
+                shutil.copyfileobj(s_, o, 4 << 20)
+            with open(os.path.join(t, "loader/loader.conf"), "w") as f:
+                f.write("timeout 3\ndefault fusion-installer*\nconsole-mode keep\neditor yes\n")
+        finally:
+            os.sync()
+            run(["umount", t], check=False)
+    progress(68)
+
+    mstep(6, "a telepítendő csomag (FUSIONINST)")
+    run(["mkfs.vfat", "-F", "32", "-n", "FUSIONINST", ppay])
+    with tempfile.TemporaryDirectory() as t:
+        run(["mount", "-t", "vfat", "-o", "rw,nodev,nosuid,noexec,utf8", ppay, t])
+        try:
+            total, done, last = os.path.getsize(fupd), 0, -5
+            with open(fupd, "rb") as s_, open(os.path.join(t, os.path.basename(fupd)), "wb") as o:
+                while True:
+                    b = s_.read(8 << 20)
+                    if not b:
+                        break
+                    o.write(b)
+                    done += len(b)
+                    pct = done * 100 // total
+                    if pct >= last + 5:
+                        last = pct - pct % 5
+                        progress(68 + pct * 30 // 100)
+                o.flush()
+                os.fsync(o.fileno())
+            os.makedirs(os.path.join(t, "hibajelentes"), exist_ok=True)
+            with open(os.path.join(t, "OLVASS-EL.txt"), "w") as f:
+                f.write(f"FusionOS telepítő pendrive ({ver})\n\nIndítás: a gép boot menüje (ZBook: F9) -> ez a pendrive.\n"
+                        "Új telepítés, újratelepítés a DATA megőrzésével, vagy új telepítés egy mentésből.\n"
+                        "A .fupd kicserélhető egy újabbra (egyszerre csak egy legyen itt).\n")
+        finally:
+            os.sync()
+            run(["umount", t], check=False)
+    r = run(["fsck.vfat", "-n", ppay], check=False)
+    if r.returncode not in (0, 1):
+        raise InstallError("a csomag-partíció ellenőrzése hibát talált")
+    progress(100)
+    say(f"KÉSZ: telepítő pendrive ({ver}) a /dev/{disk} lemezen ({int(time.time() - t0)} mp). "
+        "Indítás: a gép boot menüje (ZBook: F9) → ez a pendrive.")
 
 
 def cmd_report():
@@ -474,11 +741,19 @@ def main(argv):
     try:
         if argv[:1] == ["list"] and len(argv) == 1:
             cmd_list()
-        elif argv[:1] == ["run"] and len(argv) in (4, 6):
-            fupd = argv[5] if len(argv) == 6 and argv[4] == "--fupd" else None
-            if len(argv) == 6 and argv[4] != "--fupd":
-                raise InstallError("ismeretlen kapcsoló: " + argv[4])
-            cmd_run(argv[1], argv[2], argv[3], fupd)
+        elif argv[:1] == ["run"] and len(argv) >= 4:
+            opts, rest = {"fupd": None, "restore": None, "wifi": False}, argv[4:]
+            while rest:
+                if rest[0] in ("--fupd", "--restore") and len(rest) >= 2:
+                    opts[rest[0][2:]] = rest[1]
+                    rest = rest[2:]
+                elif rest[0] == "--wifi":
+                    opts["wifi"], rest = True, rest[1:]
+                else:
+                    raise InstallError("ismeretlen kapcsoló: " + rest[0])
+            cmd_run(argv[1], argv[2], argv[3], **opts)
+        elif argv[:1] == ["media"] and len(argv) == 4:
+            cmd_media(argv[1], argv[2], argv[3])
         elif argv == ["report"]:
             cmd_report()
         else:

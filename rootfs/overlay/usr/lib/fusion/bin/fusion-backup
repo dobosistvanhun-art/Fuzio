@@ -1,0 +1,245 @@
+#!/usr/bin/python3
+"""FusionOS — fusion-backup: a DATA mentése egy külső lemezre (root, a fusion-admin hívja)
+
+    fusion-backup list                  a lehetséges célok (csatolt külső kötetek) és a meglévő mentések (JSON)
+    fusion-backup create <kötet>        mentés a <kötet>/FusionOS-mentes/ mappába (a kötet: /run/media/…)
+
+A mentés: fusion-data-<dátum>.tar.zst (tar, zstd-tömörítéssel) — a programok (Windows-programok, Flatpak,
+Linux-programok), a beállítások, a Wi-Fi, a saját fájlok, a nyomtató adatai; a tulajdonosok, jogok és
+bővített attribútumok megmaradnak. FAT32-n (4 GB-os fájlméret-korlát) 3900 MB-os darabokban (.000, .001 …).
+Mellette: <név>.info.json (verzió, dátum, méret). Visszaállítás: a Fusion Telepítőben (új telepítés + mentés).
+A mentés jelszavakat is tartalmaz (Wi-Fi, Google Drive) — a felhasználónak biztonságban kell tartania.
+"""
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+
+os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
+os.environ["LC_ALL"] = "C.UTF-8"
+MEDIA = "/run/media"
+DATA = os.environ.get("FUSION_BACKUP_DATA", "/data")    # a másik érték csak fejlesztői próbához (a sudo nem engedi át)
+DIR = "FusionOS-mentes"
+PART = 3900 * 1024 * 1024
+EXCLUDES = ["./lost+found", "./overlay/root/work", "./overlay/stale", "./overlay/root/upper/tmp",
+            "./overlay/root/upper/var/tmp", "./overlay/root/upper/var/cache", "./overlay/root/upper/home/*/.cache",
+            "./import"]
+
+
+class BackupError(Exception):
+    pass
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def release():
+    return {k: v.strip().strip("'\"") for k, v in (l.split("=", 1) for l in read("/usr/lib/fusion/fusion-release").splitlines() if "=" in l)}
+
+
+def media_mounts():
+    out = []
+    for line in read("/proc/self/mounts").splitlines():
+        p = line.split()
+        mp = p[1].replace("\\040", " ")
+        if mp.startswith(MEDIA + "/"):
+            out.append((p[0], mp, p[2], "ro" in p[3].split(",")))
+    return out
+
+
+def data_used():
+    s = os.statvfs(DATA)
+    return (s.f_blocks - s.f_bfree) * s.f_frsize
+
+
+def backups_in(mp):
+    out = []
+    d = os.path.join(mp, DIR)
+    try:
+        names = sorted(os.listdir(d), reverse=True)
+    except OSError:
+        return out
+    for n in names:
+        if not n.endswith(".info.json"):
+            continue
+        try:
+            with open(os.path.join(d, n)) as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            continue
+        base = n[:-len(".info.json")]
+        parts = sorted(x for x in os.listdir(d) if x == base or re.fullmatch(re.escape(base) + r"\.\d{3}", x))
+        if not parts or not info.get("complete"):
+            continue
+        info.update(path=os.path.join(d, base), parts=[os.path.join(d, x) for x in parts], volume=mp)
+        out.append(info)
+    return out
+
+
+def cmd_list():
+    used = data_used()
+    targets, backups = [], []
+    for dev, mp, fs, ro in media_mounts():
+        st = os.statvfs(mp)
+        free = st.f_bavail * st.f_frsize
+        t = {"mountpoint": mp, "device": dev, "fstype": fs, "free": free, "ro": ro,
+             "label": os.path.basename(mp), "ok": not ro and free > used * 0.7 + (64 << 20),
+             "split": fs == "vfat"}
+        if ro:
+            t["reason"] = "csak olvasható"
+        elif not t["ok"]:
+            t["reason"] = "kevés a szabad hely"
+        targets.append(t)
+        backups += backups_in(mp)
+    json.dump({"dataUsed": used, "targets": targets, "backups": backups,
+               "version": release().get("FUSION_VERSION", "?")}, sys.stdout, ensure_ascii=False)
+    print()
+
+
+def cmd_create(mp):
+    mp = os.path.realpath(mp)
+    m = next((x for x in media_mounts() if x[1] == mp), None)
+    if not m:
+        raise BackupError(f"nem csatolt külső kötet: {mp} (csak a /run/media alatti kötetekre lehet menteni)")
+    if m[3]:
+        raise BackupError("a kötet csak olvasható")
+    used = data_used()
+    st = os.statvfs(mp)
+    if st.f_bavail * st.f_frsize < used * 0.7 + (64 << 20):
+        raise BackupError(f"kevés a szabad hely a köteten (kell kb. {int(used * 0.7) >> 20} MiB)")
+    rel = release()
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    d = os.path.join(mp, DIR)
+    os.makedirs(d, exist_ok=True)
+    base = os.path.join(d, f"fusion-data-{stamp}.tar.zst")
+    info = {"format": 1, "version": rel.get("FUSION_VERSION", "?"), "milestone": rel.get("FUSION_MILESTONE", ""),
+            "date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "dataUsed": used,
+            "split": m[2] == "vfat", "complete": False}
+    tmpinfo = "/run/fusion/fusion-backup.info"
+    with open(tmpinfo, "w") as f:
+        json.dump(info, f, ensure_ascii=False)
+    say(f"mentés: DATA ({used >> 20} MiB foglalt) → {base}" + (" (FAT32: 3900 MB-os darabokban)" if info["split"] else ""))
+    t0 = time.time()
+    tar_cmd = ["tar", "--create", "--file=-", "--numeric-owner", "--xattrs", "--xattrs-include=*", "--acls", "--sparse",
+               "--warning=no-file-changed", "--warning=no-file-ignored", "--checkpoint=2560",
+               "--checkpoint-action=echo=CKPT %u"]
+    tar_cmd += [f"--exclude={e}" for e in EXCLUDES]
+    tar_cmd += ["-C", "/run/fusion", "fusion-backup.info", "-C", DATA, "."]
+    tar = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    zst = subprocess.Popen(["zstd", "-q", "-T0", "-3", "-c"], stdin=tar.stdout, stdout=subprocess.PIPE)
+    tar.stdout.close()
+    errs = []
+
+    def progress():
+        last = -5
+        for line in tar.stderr:
+            line = line.decode(errors="replace").strip()
+            mm = re.search(r"CKPT (\d+)$", line)
+            if mm:
+                pct = min(99, int(mm.group(1)) * 10240 * 100 // max(1, used))   # %u: a kiírt rekordok (10 KiB)
+                if pct >= last + 5:
+                    last = pct - pct % 5
+                    say(f"PROGRESS {last}")
+            elif line:
+                errs.append(line)
+    th = threading.Thread(target=progress, daemon=True)
+    th.start()
+    files, written = [], 0
+    try:
+        idx, out = 0, None
+        while True:
+            chunk = zst.stdout.read(4 << 20)
+            if not chunk:
+                break
+            while chunk:
+                if out is None:
+                    name = base + (f".{idx:03d}" if info["split"] else "") + ".part"
+                    out = open(name, "wb")
+                    files.append(name)
+                    cur = 0
+                room = PART - cur if info["split"] else len(chunk)
+                piece, chunk = chunk[:room], chunk[room:]
+                out.write(piece)
+                cur += len(piece)
+                written += len(piece)
+                if info["split"] and cur >= PART:
+                    out.close()
+                    out, idx = None, idx + 1
+        if out:
+            out.close()
+    except OSError as e:
+        tar.kill()
+        zst.kill()
+        for f in files:
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+        raise BackupError(f"az írás nem sikerült: {e}")
+    rt, rz = tar.wait(), zst.wait()
+    th.join(timeout=5)
+    if rt not in (0, 1) or rz != 0:
+        for f in files:
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+        raise BackupError("a mentés nem sikerült: " + ("; ".join(errs[-3:]) or f"tar {rt}, zstd {rz}"))
+    say("PROGRESS 99")
+    say("ellenőrzés (a tömörített adat olvasása)…")
+    for f in files:
+        os.sync()
+    cat = subprocess.Popen(["cat"] + files, stdout=subprocess.PIPE)
+    r = subprocess.run(["zstd", "-q", "-t"], stdin=cat.stdout, capture_output=True, text=True)
+    cat.wait()
+    if r.returncode != 0:
+        raise BackupError("a mentés ellenőrzése hibát talált: " + r.stderr.strip()[-200:])
+    final = []
+    for f in files:
+        os.replace(f, f[:-len(".part")])
+        final.append(f[:-len(".part")])
+    info.update(complete=True, bytes=written, parts=len(final), seconds=int(time.time() - t0))
+    with open(base + ".info.json", "w") as f:
+        json.dump(info, f, ensure_ascii=False, indent=1)
+    os.sync()
+    say("PROGRESS 100")
+    say(f"kész: {base} ({written >> 20} MiB, {len(final)} fájl, {int(time.time() - t0)} mp)"
+        + (f" — figyelmeztetés: {errs[-1]}" if errs else ""))
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        print("fusion-backup: rootként kell futnia (sudo -n fusion-admin backup …)", file=sys.stderr)
+        return 1
+    try:
+        if argv == ["list"]:
+            cmd_list()
+        elif len(argv) == 2 and argv[0] == "create":
+            if not shutil.which("zstd"):
+                raise BackupError("hiányzik a zstd")
+            cmd_create(argv[1])
+        else:
+            print(__doc__, file=sys.stderr)
+            return 2
+    except BackupError as e:
+        print(f"fusion-backup: {e}", file=sys.stderr, flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

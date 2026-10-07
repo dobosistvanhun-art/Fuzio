@@ -53,6 +53,23 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
     k=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONTARGET" {print $1; exit}')
     bd=$(cat /run/fusion/boot-disk)
     echo "FUSION-INST: TARGET ${k:-nincs} boot=$bd"
+    # T3: ha a teszt mentőlemezén már van mentés, ez a 3. indítás — a FusionOS-ben készített telepítő pendrive-ról:
+    # új telepítés a mentésből (+ Wi-Fi átvétele), majd indítás a céllemezről
+    j=0; while [ $j -lt 40 ] && [ -n "$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP"')" ] && ! ls /run/media/*/FusionOS-mentes/*.info.json >/dev/null 2>&1; do sleep 1; j=$((j + 1)); done
+    bk=$(ls /run/media/*/FusionOS-mentes/*.tar.zst /run/media/*/FusionOS-mentes/*.tar.zst.000 2>/dev/null | head -n 1 | sed 's/\.000$//')
+    if [ -n "$k" ] && [ -n "$bk" ]; then
+        echo "FUSION-T3: MEDIA-BOOT $(lsblk -dno SERIAL "/dev/$bd") backup=$(basename "$bk")"
+        install -d -m 0700 /var/lib/iwd; printf '[Security]\nPassphrase=tesztjelszo\n' > /var/lib/iwd/T3Teszt.psk; chmod 0600 /var/lib/iwd/T3Teszt.psk
+        t0=$(date +%s); iadm install run "$k" new "$k" --restore "$bk" --wifi > /tmp/inst-restore.out 2>&1; rc=$?
+        grep -v '^PROGRESS' /tmp/inst-restore.out | sed 's/^/FUSION-INST:   /'
+        mkdir -p /tmp/tdata; mount "/dev/${k}4" /tmp/tdata
+        mk=$(cat /tmp/tdata/.fusion-test-marker 2>/dev/null); wf=$(ls /tmp/tdata/overlay/root/upper/var/lib/iwd/T3Teszt.psk 2>/dev/null | wc -l)
+        echo restored > /tmp/tdata/.fusion-test-restored; umount /tmp/tdata
+        echo "FUSION-T3: RESTORE rc=$rc secs=$(( $(date +%s) - t0 )) marker=${mk:-nincs} wifi=$wf"
+        echo "FUSION-INST: DONE"
+        if [ "$rc" = 0 ]; then sync; systemctl reboot --no-block; else echo "FUSION-M1: POWEROFF"; systemctl poweroff --no-block; fi
+        exit 0
+    fi
     if [ -n "$k" ]; then
         g1=$(iadm install run "$k" new "${k}x" 2>&1 | tail -n 1); g2=$(iadm install run "$bd" new "$bd" 2>&1 | tail -n 1)
         g3=$(iadm install run "$k" keep-data "$k" 2>&1 | tail -n 1)
@@ -480,6 +497,31 @@ if [ -n "$rf" ]; then
     echo "FUSION-REPORT: MASK secret=$(grep -c 'Titok123' "$rf") email=$(grep -c 'teszt.elek@pelda.hu' "$rf") ssid=$(grep -c 'FusionTeszt' "$rf") alias=$(grep -c 'EMAIL-1' "$rf")"
     echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
     grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'
+fi
+# --- T3: DATA mentése és telepítő pendrive készítése a futó FusionOS-ből (a telepítő-teszt 2. indítása) ---
+t3b=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP" {print $1; exit}')
+t3m=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONMEDIA" {print $1; exit}')
+if [ -n "$t3b" ] && [ -n "$t3m" ] && [ ! -e /data/.fusion-test-restored ]; then
+    adm() { runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin "$@"; }
+    adm disk format-disk "$t3b" gpt exfat MENTES "$t3b" > /tmp/t3fd.out 2>&1; echo "FUSION-T3: FORMAT rc=$? $(tail -n 1 /tmp/t3fd.out)"
+    i=0; while [ $i -lt 20 ] && [ ! -d /run/media/MENTES ]; do sleep 1; i=$((i + 1)); done
+    echo mentett > /data/.fusion-test-marker; sync
+    t0=$(date +%s); adm backup create /run/media/MENTES > /tmp/t3b.out 2>&1; rc=$?
+    grep -v '^PROGRESS' /tmp/t3b.out | sed 's/^/FUSION-T3:   /'
+    echo "FUSION-T3: BACKUP rc=$rc secs=$(( $(date +%s) - t0 )) complete=$(python3 -c 'import json,glob; print(json.load(open(sorted(glob.glob("/run/media/MENTES/FusionOS-mentes/*.info.json"))[-1]))["complete"])' 2>/dev/null)"
+    adm backup list | python3 -c 'import json,sys; d=json.load(sys.stdin); print("FUSION-T3: LIST targets=%d backups=%d" % (len(d["targets"]), len(d["backups"])))'
+    # a .fupd a telepítő pendrive-ról (FUSION_IPAY) — mintha a felhasználó a Letöltésekbe másolta volna
+    ip=$(blkid -t PARTLABEL=FUSION_IPAY -o device | head -n 1); mkdir -p /data/import/inst; mount -o ro "$ip" /data/import/inst
+    fu=$(ls /data/import/inst/*.fupd | head -n 1)
+    g=$(adm installer-media "$fu" "$t3m" "${t3m}x" 2>&1 | tail -n 1)
+    t0=$(date +%s); adm installer-media "$fu" "$t3m" "$t3m" > /tmp/t3m.out 2>&1; rc=$?
+    grep -v '^PROGRESS' /tmp/t3m.out | sed 's/^/FUSION-T3:   /'
+    sleep 2
+    echo "FUSION-T3: MEDIA rc=$rc secs=$(( $(date +%s) - t0 )) parts=$(lsblk -lno PARTLABEL "/dev/$t3m" | sed '/^$/d' | paste -sd, -) guard=$(printf '%s' "$g" | grep -c 'nem egyezik')"
+    umount /data/import/inst
+    bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} .*FUSIONMEDIA.*/\1/p' | head -n 1)
+    [ -n "$bn" ] && efibootmgr -q -n "$bn" && echo "FUSION-T3: BOOTNEXT ok ($bn)" || { echo "FUSION-T3: BOOTNEXT nincs"; efibootmgr | sed 's/^/FUSION-T3:   /'; }
+    if [ "$rc" = 0 ] && [ -n "$bn" ]; then sync; systemctl reboot --no-block; exit 0; fi
 fi
 echo "FUSION-M1: POWEROFF"
 systemctl poweroff --no-block

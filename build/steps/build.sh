@@ -165,8 +165,10 @@ step_build() {
 _make_fupd() {  # <frissítőcsomag-mappa> <kimenet .fupd>
     local d="$1" f="$2"
     rm -f "$(dirname "$f")"/fusionos-*.fupd
+    local extra=""; [ -r "$d/uki-installer.efi" ] && extra="uki-installer.efi esp-static.tar"
+    # shellcheck disable=SC2086
     tar -C "$d" --format=gnu --owner=0 --group=0 --numeric-owner -cf "$f.tmp" \
-        fusion-update.manifest uki-A.efi uki-B.efi rootfs.erofs || die "a frissítőfájl nem készült el: $f"
+        fusion-update.manifest uki-A.efi uki-B.efi rootfs.erofs $extra || die "a frissítőfájl nem készült el: $f"
     mv "$f.tmp" "$f"
     ok "frissítőfájl: $(basename "$f") ($(du -h "$f" | cut -f1))"
 }
@@ -174,11 +176,18 @@ _make_fupd() {  # <frissítőcsomag-mappa> <kimenet .fupd>
 # frissítőcsomag-mappa (M7): fusion-update.manifest + rootfs.erofs + uki-A.efi + uki-B.efi
 # (a fájlok kemény hivatkozások — nem foglalnak külön helyet)
 _make_update_dir() {  # <mappa> <A uki> <B uki> [rendszerkép]
-    local d="$1" ua="$2" ub="$3" img="${4:-$(rootfs_img)}" f
+    local d="$1" ua="$2" ub="$3" img="${4:-$(rootfs_img)}" f out; out=$(dirname "$ua")
     rm -rf "$d"; mkdir -p "$d"
     ln "$img" "$d/rootfs.erofs" 2>/dev/null || cp "$img" "$d/rootfs.erofs"
     ln "$ua" "$d/uki-A.efi" 2>/dev/null || cp "$ua" "$d/uki-A.efi"
     ln "$ub" "$d/uki-B.efi" 2>/dev/null || cp "$ub" "$d/uki-B.efi"
+    # T3: a telepítő pendrive a .fupd-ből is elkészíthető (a FusionOS-ből, Mint nélkül)
+    local extra=""
+    if [ -r "$out/fusion-installer.efi" ] && [ -r "$out/esp-static.tar" ]; then
+        ln "$out/fusion-installer.efi" "$d/uki-installer.efi" 2>/dev/null || cp "$out/fusion-installer.efi" "$d/uki-installer.efi"
+        ln "$out/esp-static.tar" "$d/esp-static.tar" 2>/dev/null || cp "$out/esp-static.tar" "$d/esp-static.tar"
+        extra="uki-installer.efi esp-static.tar"
+    fi
     {
         echo "# FusionOS frissítőcsomag (fusion-update apply <mappa>)"
         echo "FUSION_VERSION=$FUSION_VERSION"
@@ -186,7 +195,7 @@ _make_update_dir() {  # <mappa> <A uki> <B uki> [rendszerkép]
         echo "BUILD_STAMP=$BUILD_STAMP"
         echo "UKI_A=$(basename "$ua")"
         echo "UKI_B=$(basename "$ub")"
-        for f in rootfs.erofs uki-A.efi uki-B.efi; do
+        for f in rootfs.erofs uki-A.efi uki-B.efi $extra; do
             echo "$f $(sha256sum "$d/$f" | cut -d' ' -f1) $(stat -c %s "$d/$f")"
         done
     } > "$d/fusion-update.manifest"

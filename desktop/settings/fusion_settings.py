@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "update", "report", "system"]
+PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "update", "backup", "report", "system"]
 
 
 def selftest():
@@ -57,6 +57,8 @@ def selftest():
     print(f"FUSION-SETTINGS: UPDATE version={u['version']} slot={u['slot']} entries="
           + (",".join(f"{e['slot']}:{e['state']}{'*' if e['running'] else ''}" for e in u["entries"]) or "-")
           + f" files={len(u['files'])} error={u['error'] or '-'}", flush=True)
+    b = sb.backup_state()
+    print(f"FUSION-SETTINGS: BACKUP error={b['error'] or '-'} data={b['dataUsedText']} targets={len(b['targets'])} backups={len(b['backups'])}", flush=True)
     r = sb.report_files()
     print(f"FUSION-SETTINGS: REPORT dir={sb.report_dir()} files={len(r)}", flush=True)
     all_apps = fusion_apps.load()

@@ -14,10 +14,14 @@ FWindow {
     property string target: ""
     property string mode: "new"
     property string msg: ""
+    property string restore: ""           // mentés (új telepítéskor): a fájl útvonala
+    property bool wifi: true
     readonly property var d: inst.data || ({ disks: [], payload: {}, machine: {} })
     readonly property var pay: d.payload || ({})
     readonly property var mach: d.machine || ({})
     readonly property var disk: (d.disks || []).find(x => x.name === target) || null
+    readonly property var backup: (d.backups || []).find(b => b.path === restore) || null
+    readonly property bool wifiAvail: (d.wifi || []).length > 0
     readonly property bool payOk: !!pay.version && !pay.error
     readonly property var pages: ["Üdvözlés", "Céllemez", "Telepítés módja", "Megerősítés", "Telepítés"]
 
@@ -59,6 +63,7 @@ FWindow {
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 20; x: 20; width: parent.width - 40; spacing: 6
                 Text { text: "ESZKÖZÖK"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11; font.bold: true }
                 FButton { width: parent.width; text: "Lemezkezelő"; icon: "disks"; onClicked: inst.tool("disks") }
+                FButton { width: parent.width; text: "Wi-Fi"; icon: "wifi"; onClicked: inst.tool("wifi") }
                 FButton { width: parent.width; text: "Terminál"; icon: "terminal"; onClicked: inst.tool("terminal") }
                 FButton { width: parent.width; text: "Újraindítás"; icon: "restart"; enabled: inst.state !== "running"; onClicked: inst.power("reboot") }
                 FButton { width: parent.width; text: "Kikapcsolás"; icon: "power"; enabled: inst.state !== "running"; onClicked: inst.power("poweroff") }
@@ -147,7 +152,7 @@ FWindow {
                             model: [["keep-data", "Újratelepítés, a DATA megőrzésével",
                                      "A rendszer újraíródik, a programok (pl. LightBurn), a Wi-Fi, a beállítások és a saját fájlok MEGMARADNAK. Ha a FusionOS elromlott, ez a helyreállítás."],
                                     ["new", "Új telepítés",
-                                     "A lemez TELJES tartalma törlődik; tiszta FusionOS kerül rá (új, üres DATA)."]]
+                                     "A lemez TELJES tartalma törlődik; tiszta FusionOS kerül rá — üres DATA-val, vagy a DATA egy mentésből (lent)."]]
                             Rectangle {
                                 readonly property bool avail: modelData[0] === "new" || (!!win.disk && win.disk.keepData)
                                 width: body.width; height: mcol.implicitHeight + 24; radius: Theme.radius
@@ -164,6 +169,31 @@ FWindow {
                                 MouseArea { anchors.fill: parent; enabled: parent.avail; onClicked: win.mode = modelData[0] }
                             }
                         }
+                        // új telepítés: a DATA egy mentésből (T3), Wi-Fi átvétele
+                        Column {
+                            visible: win.mode === "new"; width: parent.width; spacing: 8; topPadding: 8
+                            Text { text: "DATA AZ ÚJ TELEPÍTÉSHEZ"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11; font.bold: true }
+                            Repeater {
+                                model: [{ path: "", title: "Üres DATA (tiszta rendszer)", sub: "a programokat és a beállításokat újra kell telepíteni / megadni" }].concat(
+                                       (win.d.backups || []).map(b => ({ path: b.path, title: "Visszaállítás mentésből: " + b.when + " (FusionOS " + b.version + ")",
+                                                                         sub: b.where + "   ·   " + b.sizeText + " tömörítve, " + b.dataText + " adat" })))
+                                Rectangle {
+                                    width: body.width; height: 50; radius: Theme.radius
+                                    color: win.restore === modelData.path ? Theme.selected : (rma.containsMouse ? Theme.hover : Theme.panel)
+                                    border.color: win.restore === modelData.path ? Theme.accent : "transparent"
+                                    MouseArea { id: rma; anchors.fill: parent; hoverEnabled: true; onClicked: win.restore = modelData.path }
+                                    Column {
+                                        x: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 32
+                                        Text { text: modelData.title; color: Theme.text; font.family: Theme.font; font.pixelSize: 13; font.bold: true }
+                                        Text { text: modelData.sub; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11; elide: Text.ElideRight; width: parent.width }
+                                    }
+                                }
+                            }
+                            Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11
+                                   text: "Mentés: FusionOS → Beállítások → Mentés. A mentést tartalmazó lemezt dugja be, majd: Céllemez → Lista frissítése." }
+                            FCheck { visible: win.wifiAvail; checked: win.wifi; onToggled: win.wifi = checked
+                                     text: "A telepítőben beállított Wi-Fi átvétele (" + (win.d.wifi || []).join(", ") + ")" }
+                        }
                     }
 
                     // 3 — megerősítés
@@ -177,7 +207,9 @@ FWindow {
                                     model: !win.disk ? [] : [["Rendszer", "FusionOS " + (win.pay.version || "?") + (win.pay.milestone ? " (" + win.pay.milestone + ")" : "")],
                                                              ["Céllemez", win.disk.model + " — " + win.disk.name + ", " + win.disk.sizeText],
                                                              ["Most rajta", win.disk.content],
-                                                             ["Mód", win.mode === "new" ? "új telepítés — a lemez TELJES tartalma törlődik" : "újratelepítés — a DATA megmarad"]]
+                                                             ["Mód", win.mode === "new" ? "új telepítés — a lemez TELJES tartalma törlődik" : "újratelepítés — a DATA megmarad"]].concat(
+                                                             win.mode === "new" ? [["DATA", win.backup ? "visszaállítás mentésből: " + win.backup.when + " (" + win.backup.where + ")" : "üres"]] : []).concat(
+                                                             win.mode === "new" && win.wifiAvail && win.wifi ? [["Wi-Fi", "átvétel: " + (win.d.wifi || []).join(", ")]] : [])
                                     Row {
                                         spacing: 12
                                         Text { width: 120; text: modelData[0]; color: Theme.dim; font.family: Theme.font; font.pixelSize: 13 }
@@ -252,7 +284,9 @@ FWindow {
                         visible: win.page === 3
                         text: win.mode === "new" ? "Telepítés (a lemez törlődik)" : "Újratelepítés"; danger: true
                         enabled: !!win.disk && confirmField.text.trim() === win.target
-                        onClicked: { win.page = 4; win.msg = ""; inst.install(win.target, win.mode, confirmField.text.trim()) }
+                        onClicked: { win.page = 4; win.msg = ""
+                                     inst.install(win.target, win.mode, confirmField.text.trim(), win.mode === "new" ? win.restore : "",
+                                                  win.mode === "new" && win.wifiAvail && win.wifi) }
                     }
                 }
             }

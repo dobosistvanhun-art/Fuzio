@@ -295,7 +295,7 @@ in_root systemctl mask ctrl-alt-del.target >/dev/null 2>&1
 # Lemezkezelő: a SMART-állapotot kérésre olvassa (smartctl); a háttérfigyelő (smartd, levélküldés) nem kell
 in_root systemctl disable smartd.service smartmontools.service >/dev/null 2>&1 || true
 in_root systemctl mask smartd.service >/dev/null 2>&1 || true
-for t in efibootmgr dumpe2fs fsck.vfat e2fsck parted sgdisk mkfs.vfat fatlabel mkfs.exfat exfatlabel mkntfs ntfslabel mkfs.ext4 e2label smartctl wipefs sfdisk partx; do
+for t in zstd efibootmgr dumpe2fs fsck.vfat e2fsck parted sgdisk mkfs.vfat fatlabel mkfs.exfat exfatlabel mkntfs ntfslabel mkfs.ext4 e2label smartctl wipefs sfdisk partx; do
     in_root env PATH=/usr/sbin:/usr/bin:/sbin:/bin sh -c "command -v $t" >/dev/null || { echo "  [customize] HIBA: a Lemezkezelőhöz hiányzik: $t"; exit 1; }
 done
 ln -sf /run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"

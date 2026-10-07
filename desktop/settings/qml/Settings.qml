@@ -21,6 +21,7 @@ FWindow {
         { id: "store", title: "Programbolt", icon: "store", qml: "StorePage.qml" },
         { id: "desktop", title: "Asztal", icon: "desktop", qml: "DesktopPage.qml" },
         { id: "update", title: "Rendszerfrissítés", icon: "update", qml: "UpdatePage.qml" },
+        { id: "backup", title: "Mentés", icon: "archive-in", qml: "BackupPage.qml" },
         { id: "report", title: "Hibajelentés", icon: "report", qml: "ReportPage.qml" },
         { id: "system", title: "Rendszer", icon: "chip", qml: "SystemPage.qml" }
     ]

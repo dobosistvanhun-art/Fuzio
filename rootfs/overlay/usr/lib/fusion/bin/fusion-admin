@@ -22,8 +22,11 @@
 #                                     Fusion Lemezkezelő (fusion-disk; a paramétereket az ellenőrzi,
 #                                     a lemezíró műveletekhez a lemez nevét is meg kell adni)
 #    report                           a hibajelentés rendszeroldali része (fusion-report --system; csak olvas)
-#    install list | run <lemez> <new|keep-data> <megerősítés> | report
+#    install list | run <lemez> <new|keep-data> <megerősítés> [--restore <mentés>] [--wifi] | report
 #                                     Fusion Telepítő (fusion-install) — csak a telepítő pendrive-ról indítva
+#    installer-media <fájl.fupd> <lemez> <megerősítés>
+#                                     telepítő pendrive készítése egy .fupd-ből (a futó FusionOS-ből is)
+#    backup list | create <kötet>     a DATA mentése egy csatolt külső kötetre (fusion-backup)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -241,12 +244,26 @@ case "$cmd" in
         [ -e /run/fusion/installer ] || fail "a telepítés csak a telepítő pendrive-ról indított rendszerben érhető el"
         case "${1:-}" in
             list|report) [ $# -eq 1 ] || fail "használat: install list|report" ;;
-            run) [ $# -eq 4 ] || fail "használat: install run <lemez> <new|keep-data> <megerősítés>" ;;
+            run) [ $# -ge 4 ] && [ $# -le 8 ] || fail "használat: install run <lemez> <new|keep-data> <megerősítés> [--restore <mentés>] [--wifi]" ;;
             *) fail "használat: install list | run <lemez> <new|keep-data> <megerősítés> | report" ;;
         esac
         exec /usr/lib/fusion/bin/fusion-install "$@" ;;
+    installer-media)
+        [ $# -eq 3 ] || fail "használat: installer-media <fájl.fupd> <lemez> <megerősítés>"
+        case "$1" in /*.fupd) ;; *) fail "csak abszolút útvonalú .fupd fájlból" ;; esac
+        f=$(readlink -f -- "$1") || fail "nem található: $1"
+        case "$f" in /home/*|/run/media/*|/data/import/*|/run/fusion/payload/*) ;; *) fail "a .fupd helye nem engedélyezett: $f" ;; esac
+        exec /usr/lib/fusion/bin/fusion-install media "$f" "$2" "$3" ;;
+    backup)
+        case "${1:-}" in
+            list) [ $# -eq 1 ] || fail "használat: backup list" ;;
+            create) [ $# -eq 2 ] || fail "használat: backup create <kötet>"
+                    case "$(realpath -m "$2")" in "$MEDIA"/?*) ;; *) fail "csak a $MEDIA alatti kötetre lehet menteni" ;; esac ;;
+            *) fail "használat: backup list | create <kötet>" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-backup "$@" ;;
     report)
         [ $# -eq 0 ] || fail "használat: report"
         exec /usr/lib/fusion/bin/fusion-report --system ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install" ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install, installer-media, backup" ;;
 esac

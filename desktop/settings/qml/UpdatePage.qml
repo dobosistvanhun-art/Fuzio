@@ -14,9 +14,11 @@ SettingsPage {
     property string msg: ""
     property string chosen: ""
     property bool pending: false
+    property var mjob: ({ running: false, lines: [], rc: null, title: "" })
+    property var mdisks: []
     busy: job.running
     onRefresh: settings.updateRefresh()
-    Component.onCompleted: { settings.updateRefresh(); settings.updateJobWatch() }
+    Component.onCompleted: { settings.updateRefresh(); settings.updateJobWatch(); settings.mediaJobWatch() }
     Timer { interval: 8000; running: p.visible && !p.job.running; repeat: true; onTriggered: settings.updateRefresh() }
     Connections {
         target: settings
@@ -26,6 +28,10 @@ SettingsPage {
                 if (r.job && !p.job.running) p.job = r.job
                 if (p.chosen && !r.files.find(f => f.path === p.chosen)) p.chosen = ""
                 if (!p.chosen && r.files.length && r.files[0].newer) p.chosen = r.files[0].path
+            } else if (tag === "media-job") {
+                p.mjob = r
+            } else if (tag === "media-disks") {
+                p.mdisks = r.disks
             } else if (tag === "update-job") {
                 var was = p.job.running || p.pending
                 p.job = r
@@ -112,7 +118,60 @@ SettingsPage {
         FButton { text: "Telepítés"; primary: true; icon: "update"; visible: p.s.files.length > 0
                   enabled: p.chosen !== "" && !p.job.running && (p.s.files.find(f => f.path === p.chosen) || {}).newer === true
                   onClicked: { var e = settings.updateInstall(p.chosen); p.msg = e ? "hiba: " + e : ""; if (!e) p.pending = true } }
+        FButton { text: "Telepítő pendrive készítése…"; icon: "drive-usb"; visible: p.s.files.length > 0
+                  enabled: p.chosen !== "" && !p.mjob.running && (p.s.files.find(f => f.path === p.chosen) || {}).media === true
+                  tip: (p.s.files.find(f => f.path === p.chosen) || {}).media === false ? "ebből a .fupd-ből nem készíthető telepítő (0.0.29 előtti)" : "a kijelölt .fupd-ből egy telepítő pendrive (Fusion Telepítő)"
+                  onClicked: { p.mdisks = []; settings.mediaDisks(); mediaDlg.open() } }
         Text { visible: p.msg !== ""; text: p.msg; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+    }
+    Section {
+        visible: p.mjob.title !== "" && p.mjob.recent === true && (p.mjob.running || p.mjob.rc !== null)
+        title: p.mjob.running ? "FOLYAMATBAN: " + p.mjob.title.toUpperCase() : (p.mjob.rc === 0 ? "KÉSZ: " : "SIKERTELEN: ") + p.mjob.title.toUpperCase()
+        Column {
+            x: 12; width: parent.width - 24; topPadding: 8; bottomPadding: 8
+            Repeater {
+                model: (p.mjob.lines || []).filter(l => !/^PROGRESS /.test(l))
+                Text { width: parent.width; text: modelData; elide: Text.ElideMiddle; textFormat: Text.PlainText
+                       color: /^fusion-|sikertelen|nem sikerült/i.test(modelData) ? Theme.danger : Theme.dim
+                       font.family: Theme.mono; font.pixelSize: 11 }
+            }
+        }
+    }
+    FDialog {
+        id: mediaDlg
+        property string disk: ""
+        title: "Telepítő pendrive készítése"
+        buttons: [["Mégse", ""], ["Készítés (a pendrive törlődik)", "danger"]]
+        onOpened: { disk = ""; mconfirm.text = "" }
+        onButtonClicked: (i) => {
+            if (i === 0) { close(); return }
+            if (!disk || mconfirm.text.trim() !== disk) return
+            var e = settings.mediaCreate(p.chosen, disk, mconfirm.text.trim())
+            p.msg = e ? "hiba: " + e : ""
+            close()
+        }
+        Column {
+            x: 20; y: 16; width: 520; spacing: 10
+            Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 13
+                   text: "A kijelölt frissítőfájlból (" + p.chosen.replace(/^.*\//, "") + ") egy telepítő pendrive készül: új telepítés, " +
+                         "újratelepítés a DATA megőrzésével, vagy visszaállítás mentésből — Mint nélkül. Legalább 4 GB-os pendrive kell." }
+            Text { text: "Pendrive"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12 }
+            Repeater {
+                model: p.mdisks
+                Rectangle {
+                    width: 520; height: 40; radius: Theme.radius
+                    color: mediaDlg.disk === modelData.name ? Theme.selected : (dma.containsMouse ? Theme.hover : Theme.panel)
+                    MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true; onClicked: mediaDlg.disk = modelData.name }
+                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 24; elide: Text.ElideRight
+                           text: modelData.model + "   ·   " + modelData.name + "   ·   " + modelData.sizeText + "   ·   " + modelData.content
+                           color: Theme.text; font.family: Theme.font; font.pixelSize: 12 }
+                }
+            }
+            Text { visible: p.mdisks.length === 0; text: "nincs bedugott pendrive (vagy még tölt)…"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12 }
+            Text { visible: mediaDlg.disk !== ""; width: parent.width; wrapMode: Text.Wrap; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12; textFormat: Text.StyledText
+                   text: "A(z) <b>" + mediaDlg.disk + "</b> TELJES tartalma törlődik. Megerősítéshez írja be a nevét:" }
+            FTextField { id: mconfirm; visible: mediaDlg.disk !== ""; width: 160 }
+        }
     }
     Text {
         width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11

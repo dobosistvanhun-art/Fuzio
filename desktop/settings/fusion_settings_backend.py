@@ -202,7 +202,9 @@ def fupd_info(path):
     if "FUSION_VERSION" not in kv:
         return None
     return {"version": kv.get("FUSION_VERSION", "?"), "milestone": kv.get("FUSION_MILESTONE", ""),
-            "stamp": kv.get("BUILD_STAMP", "")}
+            "stamp": kv.get("BUILD_STAMP", ""),
+            # T3: telepítő pendrive is készíthető belőle (a telepítő UKI-ja és az ESP-fájlok benne vannak)
+            "media": bool(re.search(r"(?m)^uki-installer\.efi ", txt)) and bool(re.search(r"(?m)^esp-static\.tar ", txt))}
 
 
 def update_files():
@@ -250,6 +252,36 @@ def update_state():
             "slot": st.get("slot", _read("/run/fusion/slot", "?")), "state": st.get("state", ""),
             "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "files": files,
             "stamp": stamp}
+
+
+# --- Mentés (T3) és telepítő pendrive ---
+def backup_state():
+    rc, out = ui.admin("backup", "list", timeout=60)
+    try:
+        d = json.loads(out[out.index("{"):])
+    except ValueError:
+        return {"error": (out.strip().splitlines() or ["ismeretlen hiba"])[-1].replace("fusion-admin: ", ""),
+                "targets": [], "backups": [], "dataUsed": 0}
+    d["error"] = ""
+    d["dataUsedText"] = ui.human_size(d.get("dataUsed", 0))
+    for t in d["targets"]:
+        t["freeText"] = ui.human_size(t["free"])
+    for b in d["backups"]:
+        b["sizeText"] = ui.human_size(b.get("bytes", 0))
+        b["when"] = b.get("date", "")[:16].replace("T", " ")
+    return d
+
+
+def media_disks():
+    """a cserélhető lemezek (telepítő pendrive készítéséhez)"""
+    rc, out = ui.admin("disk", "list", timeout=60)
+    try:
+        d = json.loads(out[out.index("{"):])
+    except ValueError:
+        return []
+    return [{"name": x["name"], "model": x["model"], "size": x["size"], "sizeText": ui.human_size(x["size"]),
+             "content": ", ".join((p["label"] or p["partlabel"] or p["name"]) for p in x["partitions"][:4]) or "üres"}
+            for x in d.get("disks", []) if x["removable"] and not x["system"]]
 
 
 # --- Hibajelentés ---
@@ -790,6 +822,40 @@ class Settings(QObject):
     @pyqtSlot()
     def updateReboot(self):
         self._async("power", lambda: dict(zip(("rc", "msg"), ui.admin("update-reboot"))))
+
+    # --- Mentés (T3) ---
+    @pyqtSlot()
+    def backupRefresh(self):
+        self._async("backup", lambda: dict(backup_state(), job=self._job_state("backup")))
+
+    @pyqtSlot(str, result=str)
+    def backupCreate(self, mountpoint):
+        return self._job("DATA mentése", [mountpoint], kind="backup", cmd=("sudo", "-n", ui.ADMIN, "backup", "create"),
+                         app="Mentés", icon="archive-in", okpat="^kész")
+
+    @pyqtSlot()
+    def backupJobWatch(self):
+        if self._job_state("backup")["running"]:
+            self._job_watch("backup")
+
+    # --- telepítő pendrive a Rendszerfrissítés oldalról (T3) ---
+    @pyqtSlot()
+    def mediaDisks(self):
+        self._async("media-disks", lambda: {"disks": media_disks()})
+
+    @pyqtSlot(str, str, str, result=str)
+    def mediaCreate(self, fupd, disk, confirm):
+        info = fupd_info(fupd) or {}
+        if not info.get("media"):
+            return "ebből a .fupd-ből nem készíthető telepítő (0.0.29 előtti csomag)"
+        return self._job("Telepítő pendrive: FusionOS " + info.get("version", "?"), [fupd, disk, confirm], kind="media",
+                         cmd=("sudo", "-n", ui.ADMIN, "installer-media"), app="Rendszerfrissítés", icon="drive-usb",
+                         okpat="^KÉSZ:")
+
+    @pyqtSlot()
+    def mediaJobWatch(self):
+        if self._job_state("media")["running"]:
+            self._job_watch("media")
 
     # --- Hibajelentés ---
     @pyqtSlot()

@@ -44,6 +44,11 @@ def load_list():
                                      for p in x["parts"][:4]) + (" …" if len(x["parts"]) > 4 else "")
         else:
             x["content"] = "üres"
+    for b in d.get("backups", []):
+        b["sizeText"] = ui.human_size(b.get("bytes", 0))
+        b["dataText"] = ui.human_size(b.get("dataUsed", 0))
+        b["when"] = b.get("date", "")[:16].replace("T", " ")
+        b["where"] = b.get("volume", "").replace("/run/media/", "")
     m = d.get("machine", {})
     if m.get("memory"):
         m["memoryText"] = ui.human_size(m["memory"])
@@ -101,8 +106,8 @@ class Backend(QObject):
     def result(self):
         return self._result
 
-    @pyqtSlot(str, str, str)
-    def install(self, disk, mode, confirm):
+    @pyqtSlot(str, str, str, str, bool)
+    def install(self, disk, mode, confirm, restore, wifi):
         if self._state == "running":
             return
         self._state, self._step, self._pct, self._log, self._result = "running", "indítás…", 0, [], ""
@@ -111,7 +116,8 @@ class Backend(QObject):
         def work():
             ok, last = False, ""
             try:
-                p = subprocess.Popen(admin_cmd("install", "run", disk, mode, confirm), stdout=subprocess.PIPE,
+                extra = (["--restore", restore] if restore else []) + (["--wifi"] if wifi else [])
+                p = subprocess.Popen(admin_cmd("install", "run", disk, mode, confirm, *extra), stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, errors="replace", stdin=subprocess.DEVNULL)
                 for line in p.stdout:
                     line = line.rstrip()

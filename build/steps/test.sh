@@ -171,12 +171,16 @@ _test_installer() {
     local out="$OUT_DIR/test" log="$OUT_DIR/test/qemu-installer.log" ok_run=1
     step "QEMU EFI boot → telepítő pendrive (USB) → új telepítés és újratelepítés (DATA megmarad) → indítás a céllemezről"
     [ -r "$out/fusionos-telepito.img" ] || FUSION_VARIANT="test" step_installer_image
-    rm -f "$out/target.img"; truncate -s 12G "$out/target.img"
+    rm -f "$out/target.img" "$out/t3backup.img" "$out/t3media.img"
+    truncate -s 12G "$out/target.img"; truncate -s 4G "$out/t3backup.img"; truncate -s 3G "$out/t3media.img"
+    # T3: mentőlemez (FUSIONBACKUP) és egy üres pendrive a FusionOS-ben készülő telepítőnek (FUSIONMEDIA)
     # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
     QEMU_EXTRA=(-drive "file=$out/fusionos-telepito.img,format=raw,if=none,id=inst0,snapshot=on"
-                -device qemu-xhci,id=ixhci -device "usb-storage,drive=inst0,bus=ixhci.0,removable=on,bootindex=1")
+                -device qemu-xhci,id=ixhci -device "usb-storage,drive=inst0,bus=ixhci.0,removable=on,bootindex=1"
+                -drive "file=$out/t3backup.img,format=raw,if=none,id=bk0" -device "usb-storage,drive=bk0,bus=ixhci.0,removable=on,serial=FUSIONBACKUP"
+                -drive "file=$out/t3media.img,format=raw,if=none,id=md0" -device "usb-storage,drive=md0,bus=ixhci.0,removable=on,serial=FUSIONMEDIA")
     QEMU_HOTPLUG=0
-    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=2400 \
+    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=4200 \
         _qemu_run installer std sata "$log" "FUSION-M1: POWEROFF"
     _check "$log" "FUSION-INST: BOOT slot=I installer=1 data=tmpfs state=running failed=0" "a telepítő pendrive elindul (telepítő mód, írható réteg RAM-ban)" || ok_run=0
     _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
@@ -190,8 +194,17 @@ _test_installer() {
     _check "$log" "FUSION-M7: BOOTCHECK ok: véglegesített rendszer" "a telepített rendszer véglegesített (nem próba)" || ok_run=0
     _check "$log" "FUSION-M1: FAILEDCOUNT 0" "a telepített rendszeren nincs hibás szolgáltatás" || ok_run=0
     _check "$log" "FUSION-M6: SHELL ready=yes" "Fusion Desktop a telepített rendszeren" || ok_run=0
+    # T3: mentés és telepítő pendrive a futó FusionOS-ből; indítás az új pendrive-ról; új telepítés a mentésből
+    _check "$log" "FUSION-T3: BACKUP rc=0 .*complete=True" "DATA mentése egy külső lemezre (fusion-backup)" || ok_run=0
+    _check "$log" "FUSION-T3: LIST targets=[1-9] backups=1" "a mentés a listában" || ok_run=0
+    _check "$log" "FUSION-T3: MEDIA rc=0 .*parts=FUSION_IESP,FUSION_ISYS,FUSION_IPAY guard=1" "telepítő pendrive a FusionOS-ből (.fupd-ből), gépelt megerősítéssel" || ok_run=0
+    _check "$log" "FUSION-T3: BOOTNEXT ok" "indítás az új telepítő pendrive-ról (UEFI BootNext)" || ok_run=0
+    _check "$log" "FUSION-T3: MEDIA-BOOT FUSIONMEDIA" "a FusionOS-ben készült telepítő pendrive elindul" || ok_run=0
+    _check "$log" "FUSION-T3: RESTORE rc=0 .*marker=mentett wifi=1" "új telepítés a mentésből, Wi-Fi átvétele" || ok_run=0
+    _check "$log" "FUSION-M1: BOOTDISK sda MARKER mentett" "a visszaállított rendszer elindul (a mentett DATA-val)" || ok_run=0
+    grep -a 'FUSION-T3: [A-Z]' "$log" | sed 's/^/      /' >&2
     grep -a 'FUSION-INST' "$log" | grep -v '^.*FUSION-INST:   *\(  \|LÉPÉS\)' | sed 's/^/      /' | tail -n 40 >&2
-    rm -f "$out/target.img"
+    rm -f "$out/target.img" "$out/t3backup.img" "$out/t3media.img"
     if [ "$ok_run" -eq 1 ]; then ok "SIKERES ($RUN_SECS mp)"; return 0; fi
     warn "SIKERTELEN — napló: $log"; return 1
 }

@@ -148,3 +148,5 @@ smartmontools
 
 # telepítő (T2): UEFI boot-bejegyzés a telepített lemezhez
 efibootmgr
+# T3: a DATA mentése (tar + zstd)
+zstd
