@@ -519,7 +519,11 @@ if [ -n "$t3b" ] && [ -n "$t3m" ] && [ ! -e /data/.fusion-test-restored ]; then
     sleep 2
     echo "FUSION-T3: MEDIA rc=$rc secs=$(( $(date +%s) - t0 )) parts=$(lsblk -lno PARTLABEL "/dev/$t3m" | sed '/^$/d' | paste -sd, -) guard=$(printf '%s' "$g" | grep -c 'nem egyezik')"
     umount /data/import/inst
-    bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} .*FUSIONMEDIA.*/\1/p' | head -n 1)
+    # az OVMF csak az induláskor bootolható lemezeknek ad bejegyzést: a most készült pendrive-hoz mi hozunk létre egyet
+    bo=$(efibootmgr | sed -n 's/^BootOrder: //p')
+    efibootmgr -q -c -d "/dev/$t3m" -p 1 -L "FusionOS-T3-teszt" -l '\EFI\BOOT\BOOTX64.EFI' 2>/dev/null
+    [ -n "$bo" ] && efibootmgr -q -o "$bo"     # csak egyszer (BootNext), az indítási sorrend marad
+    bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} FusionOS-T3-teszt.*/\1/p' | head -n 1)
     [ -n "$bn" ] && efibootmgr -q -n "$bn" && echo "FUSION-T3: BOOTNEXT ok ($bn)" || { echo "FUSION-T3: BOOTNEXT nincs"; efibootmgr | sed 's/^/FUSION-T3:   /'; }
     if [ "$rc" = 0 ] && [ -n "$bn" ]; then sync; systemctl reboot --no-block; exit 0; fi
 fi
