@@ -388,6 +388,7 @@ def quick_checks(sysinfo):
 
 
 def build(desc, sysinfo, m):
+    from fusion import power as fpower
     rel = kv("/usr/lib/fusion/fusion-release")
     base = rel.get("FUSION_BASE") or "Ubuntu 24.04 LTS (noble)"
     now = datetime.datetime.now().astimezone()
@@ -411,6 +412,7 @@ def build(desc, sysinfo, m):
          f"Gép:          {dmi('sys_vendor')} {dmi('product_name')} (BIOS {dmi('bios_version')} {dmi('bios_date')})",
          f"Processzor:   {cpu.group(1) if cpu else '?'} ({os.cpu_count()} szál)",
          f"Memória:      {human(mt - ma)} foglalt / {human(mt)}",
+         f"Akkumulátor:  {fpower.summary() or 'nincs'}",
          f"Grafika:      " + ("; ".join(re.sub(r"^\S+\s+", "", g) for g in gpu) or "?"),
          f"Videódriver:  " + (nv[0].split("  ", 1)[-1].strip() if nv else "nincs NVIDIA-driver betöltve")
          + f"   ·   profil: {env.get('FUSION_DISPLAY_PROFILE', '?')} ({env.get('FUSION_DISPLAY_STATUS', '?')})",

@@ -582,13 +582,13 @@ apir=$(python3 -c "import fusion.hardware as h; print(h.summary())" 2>&1 | tail 
 echo "FUSION-API: USER $api ROOT $apir"
 echo "FUSION-API: NOTIFY $(urun fusion-notify -u low -i settings "Fusion API" "értesítés a fusion.notify-on át" && echo ok || echo HIBA)"
 # M8b: a `fusion` parancssor — minden lekérdezés JSON-kimenete a leírás (docs/api/cli.md) szerinti kulcsokkal
-urun sh -c 'for c in "api-version" "system" "hardware" "devices" "volumes" "jobs" "schema" "programs list"; do
+urun sh -c 'for c in "api-version" "system" "hardware" "devices" "volumes" "power" "jobs" "schema" "programs list"; do
     printf "%s\t" "$c"; fusion $c --json 2>&1 | tr -d "\n"; echo; done' > /tmp/fusion-cli.txt
 python3 - /tmp/fusion-cli.txt <<'PYEOF'
 import json, sys
 need = {"api-version": {"api"}, "system": {"api", "version", "milestone", "base", "kernel", "slot", "bootState", "display", "render"},
         "hardware": {"profile", "status", "driverState", "adapterCount"}, "devices": {"role", "name", "present", "dev", "key", "programs", "com"},
-        "volumes": {"kind", "name", "path", "fstype", "size", "free"}, "jobs": {"name", "title", "running", "rc", "step", "progress", "lines"},
+        "volumes": {"kind", "name", "path", "fstype", "size", "free"}, "power": {"ac", "batteries"}, "jobs": {"name", "title", "running", "rc", "step", "progress", "lines"},
         "schema": {"version", "program", "role"}, "programs list": {"id", "name", "type"}}
 res = []
 for line in open(sys.argv[1], encoding="utf-8"):
@@ -604,6 +604,8 @@ print("FUSION-CLI: JSON " + " ".join(res))
 PYEOF
 echo "FUSION-CLI: VERSION $(urun fusion system --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["version"], j["api"], j["display"]["profile"])')"
 echo "FUSION-CLI: VALIDATE $(urun fusion validate /usr/lib/fusion/fwr/profiles/*.fwr /usr/lib/fusion/devices/roles/*.role >/dev/null 2>&1 && echo ok || echo HIBA) rc-hibas=$(printf 'id = Rossz\n' > /tmp/rossz.fusion; urun fusion validate /tmp/rossz.fusion >/dev/null 2>&1; echo $?)"
+# M8d: a Lézer állapot próba-program (csak a Fusion API-n át) — önteszt a valódi eszközréteggel
+urun env QT_QPA_PLATFORM=offscreen fusion-laser --selftest 2>&1 | grep '^FUSION-LASER:'
 # feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át; az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt
 jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/settings'); sys.path.insert(0, '/usr/lib/fusion/desktop/lib')
 import fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok')" 2>&1 | tail -n 1)

@@ -37,6 +37,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **0.0.34 (m8a)**: Fusion API 1. lépés — a `fusion` Python-csomag (kv, hardware, devices, notify, x11, permissions), a kettőzések megszüntetése, látható változás nélkül — `docs/M8a-rendrakas.md`
 - **0.0.35 (m8a1)**: a pendrive-ok helye `/run/media/fusion/<címke>` — így a Flatpak-programok (PrusaSlicer …) fájlválasztójában is eszközként látszanak — `docs/M8a1-pendrive-flatpak.md`
 - **0.0.36 (m8b)**: Windows-programok (LightBurn) fájlválasztója: Adatok (D:, a DATA felhasználói mappái), pendrive (E:), Asztal-hivatkozások, Dokumentumok → Projektek, a „/” elrejtve; hibajelentés: WI-FI szakasz (iwd, kernel, energiatakarékosság) — `docs/J5-lightburn-fajlok-wifi.md`; M8b: a Fusion API leírása (`docs/api/`), `fusion` parancs `--json`-nal, leíró-sémák, feladat-protokoll — `docs/M8b-leiras-cli.md`
+- **0.0.37 (m8d)**: Lézer állapot (Start → Műhely) — az első program kizárólag a Fusion API-n át; akkumulátor az Asztal Rendszer kártyáján, a hibajelentésben és a `fusion power` parancsban — `docs/M8d-lezer-allapot.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
   alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`

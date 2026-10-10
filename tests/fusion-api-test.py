@@ -146,5 +146,34 @@ rc, o = run_cli("volumes", "--json")
 check("cli volumes --json", rc == 0 and isinstance(json.loads(o), list))
 rc, o = run_cli("nincs-ilyen", "--json")
 check("cli ismeretlen parancs → 2, JSON-hiba", rc == 2 and "error" in json.loads(o))
+# --- M8d / akkumulátor: fusion.power (hamis /sys/class/power_supply) ---
+from fusion import power  # noqa: E402
+ps = os.path.join(T, "ps")
+for name, files in {"AC": {"type": "Mains", "online": "0"},
+                    "BAT0": {"type": "Battery", "status": "Discharging", "capacity": "84", "energy_now": "42000000",
+                             "energy_full": "50000000", "energy_full_design": "70000000", "power_now": "14000000",
+                             "cycle_count": "312", "manufacturer": "HP", "model_name": "AI06XL"},
+                    "hidpp_battery_0": {"type": "Battery", "scope": "Device", "capacity": "50"}}.items():
+    os.makedirs(os.path.join(ps, name))
+    for k, v in files.items():
+        open(os.path.join(ps, name, k), "w").write(v + "\n")
+power.PS_DIR = ps
+b = power.batteries()
+check("power.batteries (az egér akkuja kimarad)", len(b) == 1 and b[0]["name"] == "BAT0", b)
+check("power: töltöttség, idő, állapot", b[0]["percent"] == 84 and b[0]["minutes"] == 180 and b[0]["health"] == 71
+      and b[0]["cycles"] == 312 and b[0]["plugged"] is False and b[0]["statusText"] == "merül", b[0])
+check("power.summary", power.summary() == "84 %, merül — még 3 ó 00 p, állapot: 71 % a gyárihoz képest", power.summary())
+open(os.path.join(ps, "BAT0", "status"), "w").write("Charging\n")
+open(os.path.join(ps, "AC", "online"), "w").write("1\n")
+b = power.batteries()[0]
+check("power: töltés, becsült idő a teljesig", b["status"] == "Charging" and b["minutes"] == 34 and b["plugged"] is True, b)
+power.PS_DIR = os.path.join(T, "nincs")
+check("power: akkumulátor nélkül üres", power.batteries() == [] and power.summary() == "")
+rc, o = run_cli("power", "--json")
+check("cli power --json", rc == 0 and json.loads(o) == {"ac": None, "batteries": []}, o)
+# fusion.programs (a Programkezelő API-felülete)
+from fusion import programs as fprog  # noqa: E402
+check("programs.users_of", fprog.users_of("laser") == [{"id": "lightburn", "name": "LightBurn", "com": "COM3"}], fprog.users_of("laser"))
+check("programs.info ismeretlen", fprog.info("nincs-ilyen") is None and fprog.info("../x") is None)
 print(f"Eredmény: {ok} sikeres, {fail} hibás")
 sys.exit(1 if fail else 0)

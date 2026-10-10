@@ -7,6 +7,8 @@
 | `fusion.schema` | `validate_program()`, `validate_role()`, `validate_file()`, `apply_recipe()`, `describe()` — [leirok.md](leirok.md) |
 | `fusion.hardware` | `display()` (profil, állapot, driver, adapterek), `summary()` — csak olvas |
 | `fusion.devices` | `roles()`, `present()`, `com_usage()`, `assign(szerep, eszköz)`, `forget(szerep)` (a `fusion-admin` kapun át) |
+| `fusion.programs` | `list_programs()`, `info(id)`, `run(id, fájlok)`, `opener(fájl)`, `users_of(szerep)` — a Programkezelő felülete |
+| `fusion.power` | `batteries()` (töltöttség, töltés / merülés, becsült idő, állapot a gyárihoz képest, ciklusok), `ac_online()`, `summary()` |
 | `fusion.jobs` | `start()`, `state()`, `list_jobs()`, `parse_line()` — [feladatok.md](feladatok.md) |
 | `fusion.notify` | `send(cím, szöveg, ikon, program, sürgősség, ms)` — `org.freedesktop.Notifications` |
 | `fusion.ui` | `render_mode()`, `render_forced()`, `RENDER_FILE` — a felület rajzolása (Qt nélkül) |

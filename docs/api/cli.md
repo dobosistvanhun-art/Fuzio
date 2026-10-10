@@ -21,6 +21,7 @@ fusion <terület> <művelet> [--json]        fusion help
 | `fusion devices assign <szerep> <eszköz>` | objektum | `ok`, `message` |
 | `fusion devices forget <szerep>` | objektum | `ok`, `message` |
 | `fusion volumes` | lista | `kind` (`removable` / `data`), `name`, `path`, `device`, `fstype`, `size`, `free` (bájt), `readonly` |
+| `fusion power` | objektum | `ac` (bool / null), `batteries` [{`name`, `percent`, `status`, `statusText`, `plugged`, `minutes`, `health`, `cycles`, `model`, `technology`}] — akkumulátor nélkül üres lista |
 | `fusion programs list` | lista | `id`, `name`, `type`, `typeName`, `version`, `icon`, `exe`, `prefix`, `open`, `devices` {COMn: szerep}, `folders` {betű: mappa} … (= `fusion-programs list --json`) |
 | `fusion programs info <id>` | objektum | mint a lista egy eleme |
 | `fusion jobs [list]` | lista | `name`, `title`, `app`, `icon`, `running`, `rc` (null, ha még fut), `started`, `finished`, `recent`, `step` {`i`, `n`, `text`}, `progress`, `lines` |

@@ -116,6 +116,11 @@ Rectangle {
             Bar { pct: sc.s.cpuPct || 0 }
             KV { k: "Memória"; v: (sc.s.mem || "") + "  (" + (sc.s.memPct || 0) + " %)" }
             Bar { pct: sc.s.memPct || 0 }
+            // akkumulátor (csak ha van) — alacsony töltöttségnél sárga / piros
+            KV { visible: !!(sc.s.battery && sc.s.battery.text); k: "Akkumulátor"; v: (sc.s.battery && sc.s.battery.text) || "" }
+            Bar { visible: !!(sc.s.battery && sc.s.battery.text); pct: (sc.s.battery && sc.s.battery.pct) || 0
+                  fill: pct < 15 ? Theme.danger : (pct < 30 ? Theme.warn : Theme.ok) }
+            KV { visible: !!(sc.s.battery && sc.s.battery.health); k: "Akku állapota"; v: (sc.s.battery && sc.s.battery.health) || "" }
             KV { k: "DATA"; v: (sc.s.data && sc.s.data.free) ? (sc.s.data.free + " szabad / " + sc.s.data.total) : "—" }
             Bar { pct: (sc.s.data && sc.s.data.pct) || 0 }
             KV { k: "Bekapcsolva"; v: sc.s.uptime || "" }

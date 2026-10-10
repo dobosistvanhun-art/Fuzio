@@ -1,7 +1,7 @@
 """FusionOS — Fusion Shell: irányítópult (az asztalon, minden ablak alatt)
 
 Egy pillantásra: lézer, 3D nyomtató (Klipper: állapot, nyomtatás, hőmérsékletek), hálózat,
-rendszer (CPU, hőmérséklet, memória, DATA), meghajtók, gyorsindítás.
+rendszer (CPU, hőmérséklet, memória, akkumulátor, DATA), meghajtók, gyorsindítás.
 A lekérdezések külön szálon futnak (a Moonraker nem válaszolhat időben — a felület ne akadjon meg).
 A nyomtatás végéről / hibájáról értesítés jön.
 Ki-/bekapcsolás: Beállítások → Asztal (~/.config/fusion/dashboard: on | off).
@@ -16,6 +16,7 @@ from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
 
 import fusion_net
 import fusion_ui as ui
+from fusion import power as fpower
 
 MOONRAKER = os.environ.get("FUSION_MOONRAKER", "http://127.0.0.1:7125")
 QUERY = "/printer/objects/query?webhooks&print_stats&display_status&virtual_sdcard&extruder&heater_bed"
@@ -79,7 +80,23 @@ def system_status():
     up = float(_read("/proc/uptime", "0").split()[0] or 0)
     return {"version": ui.fusion_version(), "memPct": round(100.0 * used / tot), "mem": f"{ui.human_size(used)} / {ui.human_size(tot)}",
             "cpuPct": min(100, round(100.0 * float(load) / ncpu)), "load": load, "temp": temp, "data": data,
-            "uptime": f"{int(up // 3600)} óra {int(up % 3600 // 60)} perc", "wired": fusion_net.wired()}
+            "uptime": f"{int(up // 3600)} óra {int(up % 3600 // 60)} perc", "wired": fusion_net.wired(),
+            "battery": _battery()}
+
+
+def _battery():
+    """az első akkumulátor (a Fusion API fusion.power) — akkumulátor nélküli gépen üres"""
+    bs = fpower.batteries()
+    if not bs:
+        return {}
+    b = bs[0]
+    t = f"{b['percent']} %" if b["percent"] is not None else "?"
+    t += "  ·  " + b["statusText"]
+    if b["minutes"] is not None:
+        t += ("  ·  még " if b["status"] == "Discharging" else "  ·  tele: ") + fpower.hm(b["minutes"])
+    return {"pct": b["percent"] if b["percent"] is not None else 0, "text": t,
+            "health": (f"{b['health']} % a gyárihoz képest" + (f", {b['cycles']} ciklus" if b["cycles"] else ""))
+            if b["health"] is not None else "", "charging": b["status"] in ("Charging", "Full")}
 
 
 class Dashboard(QObject):

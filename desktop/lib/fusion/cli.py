@@ -7,6 +7,7 @@
     fusion devices assign <szerep> <eszköz>   pl. assign laser ttyUSB0 (a fusion-admin kapun át)
     fusion devices forget <szerep>
     fusion volumes [--json]                   csatolt cserélhető kötetek (pendrive, SD) és a DATA
+    fusion power [--json]                     akkumulátor (töltöttség, töltés / merülés, becsült idő, állapot)
     fusion programs …                         = fusion-programs … (list --json, info, install, run …)
     fusion notify [-i ikon] [-u sürgősség] [-a program] [-t ms] <cím> [szöveg]
     fusion jobs [list] [--json]               a hosszú műveletek állapota (feladat-protokoll)
@@ -22,7 +23,7 @@ import os
 import shutil
 import sys
 
-from . import API_VERSION, MEDIA, PREFIX, RUN, devices, hardware, jobs, kv, notify, schema, ui
+from . import API_VERSION, MEDIA, PREFIX, RUN, devices, hardware, jobs, kv, notify, power, schema, ui
 
 
 class UsageError(Exception):
@@ -130,6 +131,10 @@ def main(argv=None):
             _out(v, as_json, lambda: "\n".join(
                 f"{x['name']:<20} {x['path']:<32} {x['fstype']:<6} szabad: {_gb(x['free'])} / {_gb(x['size'])}" for x in v)
                 or "nincs csatolt kötet")
+            return 0
+        if cmd == "power":
+            b = power.batteries()
+            _out({"ac": power.ac_online(), "batteries": b}, as_json, lambda: power.summary() or "nincs akkumulátor")
             return 0
         if cmd == "programs":
             exe = shutil.which("fusion-programs") or os.path.join(PREFIX, "programs", "fusion-programs")

@@ -301,12 +301,14 @@ step_test() {
             _check "$log" "FUSION-API: USER version=1 profile=generic-kms roles=laser,printer present=[a-z,-]* ROOT generic-kms (ok, driver: none)" "Fusion API (M8): a fusion csomag felhasználóként és rootként" || ok_run=0
             _check "$log" "FUSION-API: NOTIFY ok" "Fusion API: értesítés a fusion-notify-on át" || ok_run=0
             # M8b: a fusion parancssor, sémák, feladat-protokoll
-            _check "$log" "FUSION-CLI: JSON api-version=ok system=ok hardware=ok devices=ok volumes=ok jobs=ok schema=ok programs list=ok" "fusion CLI: minden lekérdezés JSON-ja a leírás szerint" || ok_run=0
+            _check "$log" "FUSION-CLI: JSON api-version=ok system=ok hardware=ok devices=ok volumes=ok power=ok jobs=ok schema=ok programs list=ok" "fusion CLI: minden lekérdezés JSON-ja a leírás szerint" || ok_run=0
             _check "$log" "FUSION-CLI: VERSION $FUSION_VERSION 1 generic-kms" "fusion system: verzió, API, kijelzőprofil" || ok_run=0
+            _check "$log" "FUSION-LASER: STATE ok present=[TF][a-z]* dev=" "Lézer állapot (M8d): a szerep a Fusion API-ból" || ok_run=0
+            _check "$log" "FUSION-LASER: QML ok" "Lézer állapot: a felület betöltődik" || ok_run=0
             _check "$log" "FUSION-CLI: VALIDATE ok rc-hibas=1" "fusion validate: a receptek és szerepfájlok érvényesek, a hibás leírás 1-es kóddal" || ok_run=0
             _check "$log" "FUSION-CLI: JOB start=ok running=False rc=0 title=Hibajelentés file=van" "feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át" || ok_run=0
             _check "$log" "FUSION-M6: CTRLALTDEL 1 target=masked" "Ctrl+Alt+Del: Feladatkezelő (a konzolon nem indít újra)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,mainsail,files,settings,programs,store,drive,tasks,disks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,laser,mainsail,files,settings,programs,store,drive,tasks,disks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0

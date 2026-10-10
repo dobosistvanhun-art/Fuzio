@@ -1,5 +1,6 @@
 [
   {"id": "printer", "name": "Nyomtató", "desc": "Klipper — Fluidd", "icon": "printer", "type": "web", "exec": "fusion-printer ui", "keywords": "klipper fluidd 3d moonraker", "group": "muhely"},
+  {"id": "laser", "name": "Lézer állapot", "desc": "A lézer csatlakozása, COM-portja, a LightBurn indítása", "icon": "laser", "type": "fusion", "exec": "fusion-laser", "keywords": "lézer laser grbl com port lightburn állapot eszköz", "group": "muhely"},
   {"id": "mainsail", "name": "Nyomtató (Mainsail)", "desc": "Klipper — Mainsail", "icon": "printer", "type": "web", "exec": "fusion-printer ui mainsail", "keywords": "klipper 3d", "group": "muhely"},
   {"id": "files", "name": "Fájlkezelő", "desc": "Kétpaneles fájlkezelő", "icon": "files", "type": "fusion", "exec": "fusion-files", "keywords": "fájlok mappa files explorer commander", "group": "rendszer"},
   {"id": "settings", "name": "Beállítások", "desc": "Wi-Fi, kijelző, eszközök, rendszer", "icon": "settings", "type": "fusion", "exec": "fusion-settings", "keywords": "settings vezérlőpult", "group": "rendszer"},
