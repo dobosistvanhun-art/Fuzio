@@ -50,6 +50,8 @@ FWindow {
                                font.family: Theme.font; font.pixelSize: 15; font.bold: true }
                     }
                 }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: tasks.summary.memDetail || ""
+                       color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
             }
         }
         // --- fülek ---
@@ -82,7 +84,7 @@ FWindow {
                     Text { x: 46; anchors.verticalCenter: parent.verticalCenter; text: "Program"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
                     Text { x: parent.width - 330; anchors.verticalCenter: parent.verticalCenter; text: "Állapot"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
                     Text { x: parent.width - 170; anchors.verticalCenter: parent.verticalCenter; text: "CPU"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
-                    Text { x: parent.width - 95; anchors.verticalCenter: parent.verticalCenter; text: "Memória"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
+                    Text { x: parent.width - 95; anchors.verticalCenter: parent.verticalCenter; text: "Memória (PSS)"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
                 }
                 delegate: Rectangle {
                     required property var modelData
@@ -132,7 +134,7 @@ FWindow {
                 header: Rectangle {
                     width: flist.width; height: 26; color: Theme.panel
                     Repeater {
-                        model: [[10, "Folyamat"], [flist.width - 300, "Azonosító"], [flist.width - 200, "CPU"], [flist.width - 110, "Memória"]]
+                        model: [[10, "Folyamat"], [flist.width - 300, "Azonosító"], [flist.width - 200, "CPU"], [flist.width - 110, "Memória (PSS)"]]
                         Text { x: modelData[0]; anchors.verticalCenter: parent.verticalCenter; text: modelData[1]; color: Theme.dim
                                font.family: Theme.font; font.pixelSize: 11 }
                     }

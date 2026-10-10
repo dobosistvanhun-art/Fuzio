@@ -13,12 +13,9 @@ import os
 import sys
 
 APPS_FILE = os.environ.get("FUSION_APPS", "")
-_PROG_LIB = os.environ.get("FUSION_PROGRAMS_LIB") or next(
-    (p for p in ("/usr/lib/fusion/programs",
-                 os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "programs"))
-     if os.path.isfile(os.path.join(p, "fusion_programs.py"))), "/usr/lib/fusion/programs")
-if _PROG_LIB not in sys.path:
-    sys.path.insert(0, _PROG_LIB)
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import fusion  # noqa: E402  (Fusion API: a modulok helye egy helyen — fusion.PROGRAMS_LIB)
+fusion.add_paths()
 try:
     import fusion_programs as fp
 except ImportError:      # a Programkezelő nélkül is legyen Start menü

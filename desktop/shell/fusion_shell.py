@@ -27,10 +27,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 import fusion_ui as ui  # noqa: E402  (a környezeti változókat a Qt betöltése előtt állítja)
+import fusion  # noqa: E402
 import fusion_apps  # noqa: E402
 import fusion_net  # noqa: E402
 import fusion_sound  # noqa: E402
-from fusion_x11 import PANEL_HEIGHT, X11  # noqa: E402
+from fusion.x11 import PANEL_HEIGHT, X11  # noqa: E402
+from fusion import devices as fdev  # noqa: E402
 from dashboard import Dashboard  # noqa: E402
 
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
@@ -47,11 +49,9 @@ CAL_W, CAL_H = 300, 300
 SOUND_W, SOUND_H = 340, 300
 TOAST_W = 380
 STATE_FILE = os.path.join(ui.RUNTIME, "fusion-shell.state")
-DEV_DIR = os.environ.get("FUSION_DEV_DIR", "/dev/fusion")
-MEDIA_DIR = os.environ.get("FUSION_MEDIA_DIR", "/run/media")
+MEDIA_DIR = fusion.MEDIA
 HU_DAYS = ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"]
 HU_MONTHS = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."]
-ROLE_NAMES = {"laser": "Lézer", "printer": "3D nyomtató"}
 TILE_ALIAS = {"drive-usb": "usb", "download": "settings", "power": "settings", "bell": "app", "dialog-information": "app"}
 CLASS_ICONS = {"xterm": "terminal", "fusion-files": "files", "fusion-settings": "settings",
                "fusion-web": "web", "lightburn.exe": "laser"}
@@ -686,12 +686,7 @@ class Shell(QObject):
             ui.run(["xset", "s", "off", "-dpms"], timeout=3)
 
     def tick_devices(self):
-        devs = []
-        for role in ("laser", "printer"):
-            p = os.path.join(DEV_DIR, role)
-            present = os.path.exists(p)
-            dev = os.path.basename(os.path.realpath(p)) if present else ""
-            devs.append({"role": role, "name": ROLE_NAMES.get(role, role), "present": present, "dev": dev})
+        devs = fdev.present()      # Fusion API: minden .role szerep (egy új szerep kódváltozás nélkül megjelenik)
         media = []
         try:
             with open("/proc/self/mounts") as f:
@@ -790,6 +785,18 @@ def main():
         t.start(ms)
         timers.append(t)
     app._timers = timers
+
+    def teardown():
+        """leállításkor (pl. újraindítás a rajzolási mód váltása után) előbb a QML-felületek ürülnek ki, amíg a
+        Shell-objektum még él — különben a kötések „Cannot read property … of null” sorokkal töltik a naplót"""
+        for t in timers:
+            t.stop()
+        for name in ("toast", "snd", "cal", "center", "menu", "panel", "desk"):
+            v = getattr(shell, name, None)
+            if v is not None:
+                v.hide()
+                v.setSource(QUrl())
+    app.aboutToQuit.connect(teardown)
     return app.exec()
 
 

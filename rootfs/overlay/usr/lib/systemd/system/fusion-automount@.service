@@ -1,4 +1,4 @@
-# FusionOS — cserélhető kötet (USB-meghajtó, SD-kártya) csatolása bedugáskor a /run/media alá.
+# FusionOS — cserélhető kötet (USB-meghajtó, SD-kártya) csatolása bedugáskor a /run/media/fusion alá.
 # Az udev indítja (71-fusion-automount.rules); kihúzáskor a BindsTo miatt leáll és leválaszt.
 [Unit]
 Description=FusionOS: kötet csatolása (%I)

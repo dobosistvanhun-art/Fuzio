@@ -44,7 +44,7 @@ Rectangle {
             model: cal.cells()
             Rectangle {
                 width: 36; height: 24; radius: Theme.radius
-                property bool today: modelData === shell.clock.day && cal.month === shell.clock.month && cal.year === shell.clock.year
+                property bool today: !!shell && modelData === shell.clock.day && cal.month === shell.clock.month && cal.year === shell.clock.year
                 color: today ? Theme.accent : "transparent"
                 Text { anchors.centerIn: parent; text: modelData || ""; color: parent.today ? "white" : (index % 7 >= 5 ? "#c9a0a0" : Theme.text)
                        font.family: Theme.font; font.pixelSize: 12 }

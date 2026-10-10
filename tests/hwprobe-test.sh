@@ -28,7 +28,7 @@ mkpci() {
 check() {
     name=$1; sys=$2; want_p=$3; want_s=$4
     run="$TMP/run-$name"
-    FUSION_SYSFS="$sys" FUSION_RUN="$run" $RUNNER "$PROBE" -q
+    FUSION_CMDLINE="${CMDLINE_FILE:-/dev/null}" FUSION_SYSFS="$sys" FUSION_RUN="$run" $RUNNER "$PROBE" -q
     env="$run/hardware/display.env"
     got_p=$(sed -n "s/^FUSION_DISPLAY_PROFILE='\(.*\)'$/\1/p" "$env" 2>/dev/null)
     got_s=$(sed -n "s/^FUSION_DISPLAY_STATUS='\(.*\)'$/\1/p" "$env" 2>/dev/null)
@@ -103,6 +103,20 @@ else
     FAIL=$((FAIL + 1)); echo "  HIBA  display.env tartalma hiányos"
 fi
 
+# 10b. kézi profilválasztás (mérési boot-bejegyzések, 0.0.30): fusion.display.profile=<id>
+CMDLINE_FILE="$TMP/cmdline-ov"
+echo "quiet fusion.display.profile=intel-kms" > "$CMDLINE_FILE"
+check override-intel-hybrid "$TMP/zbook-hybrid" intel-kms manual
+slot=$(sed -n "s/^FUSION_DISPLAY_ADAPTER='\(.*\)'$/\1/p" "$TMP/run-override-intel-hybrid/hardware/display.env")
+if [ "$slot" = "0000:00:02.0" ]; then PASS=$((PASS + 1)); echo "  OK    override-intel-hybrid: az Intel adapter ($slot)"
+else FAIL=$((FAIL + 1)); echo "  HIBA  override-intel-hybrid: várt 0000:00:02.0, kapott $slot"; fi
+check override-intel-discrete "$TMP/zbook-discrete" nvidia-kepler-470 warning
+echo "quiet fusion.display.profile=nvidia-nouveau" > "$CMDLINE_FILE"
+check override-nouveau "$TMP/zbook-discrete" nvidia-nouveau manual
+CMDLINE_FILE=""
+# Nouveau-profil automatikusan nem nyer a 470 ellen
+check auto-nem-nouveau "$TMP/zbook-nodriver" nvidia-kepler-470 ok
+
 # 11-13. --apply: ál-modinfo/modprobe. FAKE_MODS = létező modulok, FAKE_BROKEN = betölthetetlenek
 FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
 cat > "$FAKEBIN/modinfo" <<'EOS'
@@ -174,6 +188,7 @@ conf_check() {
 X="$TMP/apply-zbook-m2/hardware"
 conf_check "xorg: NVIDIA driver"         "$X/xorg-display.conf" 'Driver "nvidia"'
 conf_check "xorg: BusID decimális"       "$X/xorg-display.conf" 'BusID "PCI:1@0:0:0"'
+conf_check "xorg: nincs automatikus második GPU-képernyő" "$X/xorg-display.conf" 'Option "AutoAddGPU" "false"'
 conf_check "xorg: NVIDIA modulútvonal"   "$X/xorg-display.conf" 'ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"'
 conf_check "xorg: root-jog a profilból (auto)" "$X/Xwrapper.config" 'needs_root_rights=auto'
 conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-hardware-options.conf" 'options nvidia_drm modeset=1'

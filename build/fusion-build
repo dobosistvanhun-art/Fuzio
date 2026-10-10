@@ -28,6 +28,9 @@
 #    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
 #    installer <eszköz> telepítő pendrive (T2): a Fusion Telepítő — új telepítés vagy újratelepítés a DATA
 #                       megőrzésével, Mint nélkül (root: sudo build/fusion-build installer /dev/sdX)
+#    cache-export [<mappa>]  a rögzített letöltések (build/cache: NVIDIA 470-server, kernel, Wine-forrás…)
+#                       mentése egy fájlba (alapértelmezett mappa: ~/Fusion) — ha az Ubuntu törli őket a tárolóból
+#    cache-import <fájl>  a mentés visszatöltése a build/cache-be
 #    clean              a build/out törlése (a letöltött cache marad)
 # =============================================================================
 set -euo pipefail
@@ -73,7 +76,7 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -97,6 +100,8 @@ case "$cmd" in
     bootentry) step_bootentry "$@" ;;
     installer-image) step_installer_image ;;
     installer) step_installer "$@" ;;
+    cache-export) step_cache_export "$@" ;;
+    cache-import) step_cache_import "$@" ;;
     clean)    step_clean ;;
     ""|-h|--help|help) usage ;;
     *)        usage; die "ismeretlen parancs: $cmd" ;;

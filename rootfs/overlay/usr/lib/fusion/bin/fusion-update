@@ -40,6 +40,21 @@ class UpdateError(Exception):
     pass
 
 
+def syncfs(path):
+    """csak az adott kötet ürítése (syncfs) — a teljes os.sync() egy közben író lassú pendrive-ot is kivárna"""
+    import ctypes
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        os.sync()
+        return
+    try:
+        if ctypes.CDLL(None, use_errno=True).syncfs(fd) != 0:
+            os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def say(msg):
     print(msg, flush=True)
 
@@ -146,7 +161,8 @@ class Esp:
         return ESP_MNT
 
     def __exit__(self, *exc):
-        os.sync()
+        if self.rw:
+            syncfs(ESP_MNT)
         run(["umount", ESP_MNT], check=False)
         self.lock.close()
 
@@ -183,6 +199,10 @@ def status():
                 d["entries"].append({"slot": e["slot"], "name": e["name"], "version": e["base"].split("-")[0],
                                      "state": "bad" if e["bad"] else "trial" if e["trial"] else "ok",
                                      "left": e["left"], "running": bool(pe and pe["key"] == e["key"])})
+            d["menu"] = sorted(os.path.basename(c)[:-5] for c in glob.glob(os.path.join(esp, "loader", "entries", "*.conf")))
+        v = run(["efibootmgr"], check=False).stdout if os.path.isdir("/sys/firmware/efi") else ""
+        d["firmware"] = [m.group(1).strip() for m in re.finditer(r"^Boot[0-9A-Fa-f]{4}\*?\s+([^\t]+)", v, re.M)
+                         if m.group(1).startswith(("FusionOS", FW_PREFIX))]
     return d
 
 
@@ -200,6 +220,10 @@ def cmd_status(as_json=False):
     for e in d["entries"]:
         st = {"bad": "HIBÁS (nem indult el)", "trial": f"próba ({e['left']} lehetőség)", "ok": "véglegesített"}[e["state"]]
         say(f"  {e['slot']}: {e['name']}  [{st}]{'  ← fut' if e['running'] else ''}")
+    if d.get("menu") is not None:
+        say("  boot menü (systemd-boot) további bejegyzései: " + (", ".join(d["menu"]) or "nincs"))
+    if d.get("firmware") is not None:
+        say("  UEFI-bejegyzések (F9 menü): " + (", ".join(d["firmware"]) or "nincs"))
     return 0
 
 
@@ -275,19 +299,31 @@ def write_slot(src, size, want, part):
     if size > psize:
         raise UpdateError(f"a rendszerkép ({size >> 20} MiB) nem fér a slotba ({psize >> 20} MiB)")
     say(f"rendszerkép írása: {part} ({size >> 20} MiB)…")
-    with src.open("rootfs.erofs") as s, open(part, "r+b", buffering=0) as dst:
-        done, last = 0, -10
-        while True:
-            b = s.read(4 << 20)
-            if not b:
-                break
-            dst.write(b)
-            done += len(b)
-            pct = done * 100 // size
-            if pct >= last + 10:
-                last = pct - pct % 10
-                say(f"  írás {last}%")
-        os.fsync(dst.fileno())
+    dev = os.path.basename(os.path.realpath(part))
+    disk = os.path.basename(os.path.dirname(os.path.realpath(f"/sys/class/block/{dev}")))
+    try:
+        with src.open("rootfs.erofs") as s, open(part, "r+b", buffering=0) as dst:
+            done, last = 0, -10
+            while True:
+                b = s.read(4 << 20)
+                if not b:
+                    break
+                dst.write(b)
+                done += len(b)
+                # 32 MiB-onként a lemezre: a haladás valós, és nem gyűlik fel több száz MB a gyorsítótárban (egy lassú
+                # pendrive-nál az a többi lemezműveletet is percekig visszatartaná); kihúzott lemez = azonnali hiba
+                if done % (32 << 20) == 0:
+                    os.fdatasync(dst.fileno())
+                    if not os.path.exists(f"/sys/class/block/{dev}"):
+                        raise OSError(5, "a lemez eltűnt")
+                pct = done * 100 // size
+                if pct >= last + 10:
+                    last = pct - pct % 10
+                    say(f"  írás {last}%")
+            os.fsync(dst.fileno())
+    except OSError as e:
+        raise UpdateError(f"írási hiba: {part} ({e.strerror or e}) — a lemez nem válaszol: kihúzták, kilazult, vagy "
+                          f"meghibásodott (a kernelnapló: „device offline” / „I/O error”). Másik USB-port vagy pendrive.")
     run(["blockdev", "--flushbufs", part], check=False)
     # visszaolvasás a lemezről (a gyorsítótár ürítése után), az ellenőrzőösszeg a manifestből
     with open("/proc/sys/vm/drop_caches", "w") as f:
@@ -343,7 +379,7 @@ def cmd_apply(path):
             if e["slot"] == target:
                 os.unlink(os.path.join(esp, "EFI", "Linux", e["name"]))
                 say(f"régi bejegyzés törölve: {e['name']}")
-        os.sync()
+        syncfs(esp)
         free = os.statvfs(esp)
         if free.f_bavail * free.f_frsize < files[uki][1] + (4 << 20):
             raise UpdateError("nincs elég hely az ESP-n")
@@ -365,6 +401,12 @@ def cmd_apply(path):
         os.rename(tmp, final)
         fsync_path(lin)
         say(f"új bejegyzés: {os.path.basename(final)} ({TRIES} indítási próba)")
+        # 4. az új verzió mérési / tartalék boot-bejegyzései közül a hiányzók (pl. 0.0.30: Intel, Nouveau) — a meglévők
+        #    maradnak; a véglegesítéskor a fix_entries a végleges UKI-ra állítja őket
+        if "esp-static.tar" in files:
+            added = add_missing_entries(src, esp, os.path.basename(final))
+            if added:
+                say("új boot-bejegyzés: " + ", ".join(added))
     say(f"KÉSZ: FusionOS {ver} a(z) {target} slotban. Újraindítás után próbaként indul; ha rendben elindul,")
     say(f"véglegessé válik — ha {TRIES}× nem, magától a mostani ({cur}) rendszer indul.")
     return 0
@@ -382,6 +424,172 @@ def desktop_expected():
     if "fusion.desktop=0" in cmd:
         return False
     return os.path.exists("/etc/systemd/system/getty@tty1.service.d/fusion-autologin.conf")
+
+
+MEASURE_FILE = "/usr/lib/fusion/boot/measure-entries"
+FW_PREFIX = "Fusion meres - "
+
+
+def measure_defs():
+    """a mérési / tartalék boot-bejegyzések: [(id, cím, kiegészítés, UEFI-név)]"""
+    out = []
+    try:
+        for ln in open(MEASURE_FILE, encoding="utf-8"):
+            ln = ln.rstrip("\n")
+            if not ln.strip() or ln.lstrip().startswith("#"):
+                continue
+            p = (ln.split("|") + ["", "", "", ""])[:4]
+            if re.match(r"^[A-Za-z0-9._-]+$", p[0]):
+                out.append(tuple(x.strip() for x in p))
+    except OSError:
+        pass
+    return out
+
+
+def uki_cmdline(path):
+    """a UKI beépített parancssora (a PE-fájl .cmdline szakasza)"""
+    import struct
+    with open(path, "rb") as f:
+        head = f.read(4096)
+        pe = struct.unpack_from("<I", head, 0x3C)[0]
+        f.seek(pe)
+        h = f.read(24)
+        if h[:4] != b"PE\0\0":
+            raise UpdateError(f"nem PE-fájl: {path}")
+        nsec, optsz = struct.unpack_from("<H", h, 6)[0], struct.unpack_from("<H", h, 20)[0]
+        f.seek(pe + 24 + optsz)
+        for _ in range(nsec):
+            sec = f.read(40)
+            if sec[:8].rstrip(b"\0") == b".cmdline":
+                vsize, _va, rsize, raw = struct.unpack_from("<IIII", sec, 8)
+                f.seek(raw)
+                return f.read(min(vsize, rsize) if vsize else rsize).rstrip(b"\0").decode("utf-8", "replace").strip()
+    raise UpdateError(f"a UKI-ban nincs .cmdline: {path}")
+
+
+def maintain_entries():
+    """normál indítás után: (1) a lemezen hiányzó mérési bejegyzések pótlása a rendszerkép listájából (egy régebbi
+    rendszer frissítője nem ismeri az újakat); (2) a UEFI-bejegyzések (F9 menü) a megjelölt mérési bejegyzésekhez —
+    csak akkor ír, ha valami változott; a boot-sorrend elejéhez nem nyúl"""
+    defs = measure_defs()
+    if not defs:
+        return
+    slot = current_slot()
+    with Esp() as esp:
+        mine = [e for e in ukis(esp) if e["slot"] == slot and not e["trial"]]
+        if not mine:
+            return
+        uki = mine[-1]["name"]
+        edir = os.path.join(esp, "loader", "entries")
+        missing = [d for d in defs if not os.path.exists(os.path.join(edir, d[0] + ".conf"))]
+        base = uki_cmdline(os.path.join(esp, "EFI", "Linux", uki)) if missing else ""
+    if missing:
+        with Esp(rw=True) as esp:
+            edir = os.path.join(esp, "loader", "entries")
+            os.makedirs(edir, exist_ok=True)
+            for i, t, x, _fw in missing:
+                dst = os.path.join(edir, i + ".conf")
+                with open(dst + ".tmp", "w", encoding="utf-8") as o:
+                    o.write(f"title {t}\nsort-key zz-{i}\nefi /EFI/Linux/{uki}\noptions {base} {x}\n")
+                    o.flush()
+                    os.fsync(o.fileno())
+                os.replace(dst + ".tmp", dst)
+            fsync_path(edir)
+        say("boot-bejegyzés pótolva: " + ", ".join(d[0] for d in missing))
+    want = []
+    with Esp() as esp:
+        for i, _t, _x, fw in defs:
+            if not fw:
+                continue
+            try:
+                txt = open(os.path.join(esp, "loader", "entries", i + ".conf"), encoding="utf-8").read()
+            except OSError:
+                continue
+            efi = re.search(r"(?m)^efi\s+(\S+)$", txt)
+            opt = re.search(r"(?m)^options\s+(.*)$", txt)
+            if efi and os.path.exists(os.path.join(esp, efi.group(1).lstrip("/"))):
+                want.append((fw, efi.group(1).replace("/", "\\"), opt.group(1).strip() if opt else ""))
+    firmware_entries(want)
+
+
+def firmware_entries(want):
+    """UEFI-bejegyzések „Fusion meres - …” néven: a systemd-boot nélkül, közvetlenül a UKI-t indítják a
+    kiegészített parancssorral (Secure Boot nélkül a systemd-stub a betöltési paramétereket használja)"""
+    if not os.path.isdir("/sys/firmware/efi") or subprocess.run(["sh", "-c", "command -v efibootmgr"],
+                                                                 capture_output=True).returncode:
+        return
+    disk = boot_disk()
+    dname = os.path.basename(disk)
+    try:
+        if open(f"/sys/block/{dname}/removable").read().strip() == "1" or \
+                run(["lsblk", "-dno", "TRAN", disk], check=False).stdout.strip() == "usb":
+            return          # pendrive-ról futva nem írunk a gép UEFI-listájába
+    except OSError:
+        pass
+    puuid = run(["lsblk", "-no", "PARTUUID", partition("FUSION_ESP")], check=False).stdout.strip().lower()
+    v = run(["efibootmgr", "-v"], check=False).stdout
+    order = re.search(r"^BootOrder:\s*(\S+)", v, re.M)
+    order = order.group(1).split(",") if order else []
+    have = {}
+    for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+(" + re.escape(FW_PREFIX) + r"[^\t]*?)\s*(?:\t(.*))?$", v, re.M):
+        have.setdefault(m.group(2).strip(), []).append((m.group(1), (m.group(3) or "").lower()))
+    changed = []
+    wanted = {w[0] for w in want}
+    for label, lst in have.items():          # már nem kért bejegyzések
+        if label not in wanted:
+            for num, _ in lst:
+                run(["efibootmgr", "-q", "-b", num, "-B"], check=False)
+                order = [o for o in order if o.upper() != num.upper()]
+                changed.append(f"törölve: {label}")
+    for label, path, opts in want:
+        cur = have.get(label, [])
+        if len(cur) == 1 and path.lower() in cur[0][1] and (not puuid or puuid in cur[0][1]):
+            continue
+        for num, _ in cur:
+            run(["efibootmgr", "-q", "-b", num, "-B"], check=False)
+            order = [o for o in order if o.upper() != num.upper()]
+        r = run(["efibootmgr", "-q", "-c", "-d", disk, "-p", "1", "-L", label, "-l", path, "-u", opts], check=False)
+        if r.returncode != 0:
+            say(f"figyelmeztetés: a UEFI-bejegyzés nem hozható létre ({label}): {(r.stderr or r.stdout).strip()[:200]}")
+            continue
+        changed.append(label)
+    if not changed:
+        return
+    # a boot-sorrend: a korábbi változatlanul elöl, az új bejegyzések a végén (az F9 menüben választhatók)
+    v2 = run(["efibootmgr"], check=False).stdout
+    nums = [m.group(1) for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+" + re.escape(FW_PREFIX), v2, re.M)]
+    new_order = [o for o in order if o.upper() not in {n.upper() for n in nums}] + nums
+    run(["efibootmgr", "-q", "-o", ",".join(new_order)], check=False)
+    say("UEFI-bejegyzés (F9 menü): " + ", ".join(changed))
+
+
+def add_missing_entries(src, esp, uki_name):
+    """a csomag esp-static.tar-jából a loader/entries/*.conf-ok közül a lemezen még nem létezők"""
+    added = []
+    try:
+        with src.open("esp-static.tar") as f, tarfile.open(fileobj=f, mode="r|") as t:
+            for m in t:
+                name = m.name[2:] if m.name.startswith("./") else m.name
+                mm = re.match(r"^loader/entries/([A-Za-z0-9._-]+\.conf)$", name)
+                if not (m.isfile() and mm):
+                    continue
+                dst = os.path.join(esp, "loader", "entries", mm.group(1))
+                if os.path.exists(dst):
+                    continue
+                txt = t.extractfile(m).read().decode("utf-8", "replace")
+                txt = re.sub(r"(?m)^efi\s+/EFI/Linux/fusionos-[^\s]+\.efi$", f"efi /EFI/Linux/{uki_name}", txt)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst + ".tmp", "w", encoding="utf-8") as o:
+                    o.write(txt)
+                    o.flush()
+                    os.fsync(o.fileno())
+                os.replace(dst + ".tmp", dst)
+                added.append(mm.group(1)[:-5])
+        if added:
+            fsync_path(os.path.join(esp, "loader", "entries"))
+    except (tarfile.TarError, OSError, UpdateError) as e:
+        say(f"figyelmeztetés: a boot-bejegyzések bővítése nem sikerült: {e}")
+    return added
 
 
 def fix_entries(esp, blessed, slot):
@@ -452,6 +660,13 @@ def set_state(s):
     say(s)
 
 
+def safe_maintain():
+    try:
+        maintain_entries()
+    except (UpdateError, OSError, ValueError) as e:
+        say(f"figyelmeztetés: a boot-bejegyzések karbantartása nem sikerült: {e}")
+
+
 def cmd_boot_check():
     entry = efivar("LoaderEntrySelected")
     te = trial_entry()
@@ -459,6 +674,7 @@ def cmd_boot_check():
     slot = current_slot()
     if not pe:
         set_state(f"ok: nem FusionOS-bejegyzés ({entry or 'ismeretlen'}), slot {slot}")
+        safe_maintain()
         return 0
     if not pe["trial"]:
         # normál indítás: a tartalék bejegyzések javítása, ha egy frissítés után elavultak
@@ -483,6 +699,7 @@ def cmd_boot_check():
         except (UpdateError, OSError) as e:
             say(f"figyelmeztetés: a boot-bejegyzések ellenőrzése nem sikerült: {e}")
         set_state(f"ok: véglegesített rendszer ({pe['name']}), slot {slot}")
+        safe_maintain()
         return 0
     entry = pe["name"]
     say(f"próba-indítás: {entry} (slot {slot}) — ellenőrzés…")
@@ -510,6 +727,7 @@ def cmd_boot_check():
     set_state(f"VÉGLEGESÍTVE: {pe['id']} (slot {slot}) — {why}" + (f"; {n} tartalék bejegyzés frissítve" if n else ""))
     notice("Rendszerfrissítés kész", f"A FusionOS {pe['base'].split('-')[0]} rendben elindult, és véglegessé vált "
            f"(slot {slot}). A korábbi rendszer tartaléknak megmaradt.")
+    safe_maintain()
     # egyirányú DATA-átalakítások csak ezután (a visszaállított régi rendszer is értse a DATA-t)
     for h in sorted(glob.glob(os.path.join(HOOKS, "*"))):
         if os.access(h, os.X_OK):

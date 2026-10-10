@@ -20,10 +20,13 @@ import sys
 import time
 
 try:
-    from Xlib import X, Xatom, display, protocol
+    from Xlib import X, display, protocol
     from Xlib.error import XError
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    from fusion.x11 import X11 as BaseX11
 except ImportError:      # Xlib nélkül csak a folyamatlista működik
     display = None
+    BaseX11 = object
 
 UID = os.getuid()
 CLK = os.sysconf("SC_CLK_TCK")
@@ -54,6 +57,19 @@ def _stat(pid):
     rest = s[s.rindex(")") + 2:].split()
     return {"name": name, "state": rest[0], "ppid": int(rest[1]), "pgrp": int(rest[2]),
             "ticks": int(rest[11]) + int(rest[12]), "rss": int(rest[21]) * PAGE}
+
+
+def _pss(pid, fallback):
+    """PSS (arányos memória): a megosztott lapok (Qt-, Python-könyvtárak) a használók között elosztva — az RSS
+    ezeket minden folyamatnál teljes egészében számolja, ezért túlbecsül. Csak a saját folyamatoknál olvasható."""
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith("Pss:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return fallback
 
 
 def _uid(pid):
@@ -151,28 +167,16 @@ def _program_of(pid):
 # ---------------------------------------------------------------------------
 # ablakok (X11)
 # ---------------------------------------------------------------------------
-class X11:
+class TaskX11(BaseX11):
+    """a közös fusion.x11 alap + a Feladatkezelő része: ping („nem válaszol”), udvarias bezárás, kill"""
     def __init__(self):
-        self.d = display.Display()
-        self.root = self.d.screen().root
-        self.a = {n: self.d.intern_atom(n) for n in (
-            "_NET_CLIENT_LIST", "_NET_WM_PID", "_NET_WM_NAME", "UTF8_STRING", "WM_PROTOCOLS", "_NET_WM_PING",
-            "WM_DELETE_WINDOW", "_NET_WM_WINDOW_TYPE", "_NET_ACTIVE_WINDOW", "_NET_WM_STATE",
-            "_NET_WM_STATE_SKIP_TASKBAR")}
-        self.root.change_attributes(event_mask=X.SubstructureNotifyMask)
-
-    def _prop(self, w, name, typ=X.AnyPropertyType):
-        try:
-            p = w.get_full_property(self.a[name] if isinstance(name, str) else name, typ)
-            return p.value if p else None
-        except XError:
-            return None
+        super().__init__(events=True)
 
     def windows(self):
         ids = self._prop(self.root, "_NET_CLIENT_LIST") or []
         out = []
         for wid in ids:
-            w = self.d.create_resource_object("window", wid)
+            w = self.d.create_resource_object("window", int(wid))
             try:
                 cls = w.get_wm_class() or ("", "")
                 protos = [p for p in (w.get_wm_protocols() or [])]
@@ -181,16 +185,8 @@ class X11:
             types = [self.d.get_atom_name(t) for t in (self._prop(w, "_NET_WM_WINDOW_TYPE") or [])]
             if set(types) & SKIP_TYPES or (cls[0] in SKIP_CLASSES or cls[1] in SKIP_CLASSES):
                 continue
-            title = self._prop(w, "_NET_WM_NAME", self.a["UTF8_STRING"])
-            if title is None:
-                try:
-                    title = w.get_wm_name()
-                except XError:
-                    title = ""
-            if isinstance(title, bytes):
-                title = title.decode(errors="replace")
             pid = self._prop(w, "_NET_WM_PID")
-            out.append({"wid": int(wid), "title": title or "", "pid": int(pid[0]) if pid else 0,
+            out.append({"wid": int(wid), "title": self._title(w), "pid": int(pid[0]) if pid else 0,
                         "cls": cls[1] or cls[0], "ping": self.a["_NET_WM_PING"] in protos,
                         "delete": self.a["WM_DELETE_WINDOW"] in protos})
         return out
@@ -262,7 +258,7 @@ class X11:
 class Tasks:
     def __init__(self):
         self.sampler = Sampler()
-        self.x = X11() if display is not None and os.environ.get("DISPLAY") else None
+        self.x = TaskX11() if display is not None and os.environ.get("DISPLAY") else None
         self.procs = self.sampler.sample()
         self.alive = {}       # wid → utolsó ping-eredmény
 
@@ -294,7 +290,7 @@ class Tasks:
             alive = [w["alive"] for w in g["windows"]]
             g["status"] = "hung" if False in alive else ("ok" if True in alive else "unknown")
             g["cpu"] = round(sum(procs[p]["cpu"] for p in allp if p in procs), 1)
-            g["mem"] = sum(procs[p]["rss"] for p in allp if p in procs)
+            g["mem"] = sum(_pss(p, procs[p]["rss"]) for p in allp if p in procs)
             g["memText"] = f"{g['mem'] / 1048576:.0f} MB"
             g["pids"] = sorted(allp)
             g["mine"] = all(procs.get(p, {}).get("uid") == UID for p in g["pids"]) if g["pids"] else True
@@ -309,8 +305,9 @@ class Tasks:
             if s["uid"] != UID or s["state"] == "Z":
                 continue
             cmd = _cmdline(pid)
+            pss = _pss(pid, s["rss"])
             out.append({"pid": pid, "name": s["name"], "cmd": " ".join(cmd)[:140], "cpu": s["cpu"],
-                        "mem": s["rss"], "memText": f"{s['rss'] / 1048576:.0f} MB"})
+                        "mem": pss, "rss": s["rss"], "memText": f"{pss / 1048576:.0f} MB"})
         out.sort(key=lambda p: (-p["cpu"], -p["mem"]))
         return out[:limit]
 
@@ -330,8 +327,11 @@ class Tasks:
             load = "?"
         ncpu = os.cpu_count() or 1
         cpu = sum(s["cpu"] for s in self.procs.values()) / ncpu
+        mb = lambda k: f"{mem.get(k, 0) / 1048576:.0f} MB"  # noqa: E731
         return {"cpu": round(min(cpu, 100.0), 0), "load": load, "memUsed": used, "memTotal": tot,
-                "memText": f"{used / 1073741824:.1f} / {tot / 1073741824:.1f} GB"}
+                "memText": f"{used / 1073741824:.1f} / {tot / 1073741824:.1f} GB",
+                # a „foglalt” részletei: a megosztott memória (tmpfs, pl. /run, /tmp) és a kernel saját része
+                "memDetail": f"megosztott (tmpfs) {mb('Shmem')}  ·  kernel {mb('Slab')}  ·  gyorsítótár {mb('Cached')}"}
 
     # --- műveletek ---
     def close(self, group):

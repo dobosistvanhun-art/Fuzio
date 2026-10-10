@@ -51,6 +51,22 @@ SettingsPage {
         }
     }
     Text { id: err; visible: text !== ""; color: Theme.danger; font.family: Theme.font }
+    property var render: settings.renderState()
+    Section {
+        title: "FELÜLET RAJZOLÁSA"
+        InfoRow { icon: "chip"; label: "Most"; value: p.render.mode === "software" ? "szoftveres (processzor)" : "grafikus kártya (OpenGL)" }
+        Row {
+            x: 12; spacing: 8; topPadding: 6; bottomPadding: 6
+            FButton { text: "Grafikus kártya"; checked: p.render.mode === "gpu"; enabled: !p.render.forced
+                      onClicked: if (!checked) { rerr.text = settings.renderSet("gpu"); p.render = settings.renderState() } }
+            FButton { text: "Szoftveres"; checked: p.render.mode === "software"; enabled: !p.render.forced
+                      onClicked: if (!checked) { rerr.text = settings.renderSet("software"); p.render = settings.renderState() } }
+        }
+        InfoRow { label: "Mire jó"; value: "Szoftveres módban a Fusion Shell és a Fusion-programok OpenGL nélkül rajzolnak: kb. 90–100 MB-tal kevesebb memória, valamivel több processzorhasználat. A ZBookon (2026-10-08) nem volt érezhető lassulás. A LightBurnt, a Firefoxot és a többi programot nem érinti." }
+        InfoRow { label: "Érvényes"; value: "A panel és az asztal azonnal újraindul az új móddal; a többi Fusion-program (pl. ez az ablak) a következő megnyitáskor." }
+        InfoRow { visible: p.render.forced; label: "Most nem állítható"; value: "a boot menü mérési bejegyzése (fusion.ui.render) határozza meg"; valueColor: Theme.warn }
+        Text { id: rerr; visible: text !== ""; x: 12; color: Theme.danger; font.family: Theme.font }
+    }
     Section {
         title: "GRAFIKA (Fusion Hardware Layer)"
         InfoRow { icon: "chip"; label: "Meghajtó"; value: p.summary || "—"; mono: true }

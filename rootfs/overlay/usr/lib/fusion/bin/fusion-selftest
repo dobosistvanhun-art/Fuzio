@@ -12,22 +12,53 @@ if [ -e /data/.fusion-test-ab ]; then
     upd=$(blkid -t LABEL=FUSIONUPD -o device 2>/dev/null | head -n 1)
     # a frissítőlemez a /data/import alá: onnan a felhasználó is telepíthet (fusion-admin update-apply)
     mkdir -p /data/import/upd; [ -n "$upd" ] && mount -o ro "$upd" /data/import/upd
+    # 0.0.30: a frissítés a hiányzó boot-bejegyzéseket pótolja (a meglévőket nem bántja)
+    espdev=$(blkid -t PARTLABEL=FUSION_ESP -o device 2>/dev/null | head -n 1)
+    if [ -n "$espdev" ]; then
+        mkdir -p /run/fusion-esp-t; mount -t vfat "$espdev" /run/fusion-esp-t
+        if [ "$abstep" = good ]; then
+            rm -f /run/fusion-esp-t/loader/entries/fusion-meres-nouveau.conf
+        elif [ "$abstep" = bad ]; then
+            echo "FUSION-AB: ENTRY nouveau=$(sed -n 's/^efi //p' /run/fusion-esp-t/loader/entries/fusion-meres-nouveau.conf 2>/dev/null || echo nincs) slot=$(grep -o 'fusion.slot=[AB]' /run/fusion-esp-t/loader/entries/fusion-meres-nouveau.conf 2>/dev/null)"
+            # a következő normál indítás (boot-check) a rendszerkép listájából pótolja
+            rm -f /run/fusion-esp-t/loader/entries/fusion-meres-intel.conf
+        elif [ "$abstep" = final ]; then
+            echo "FUSION-AB: ENTRY-POTOLVA intel=$(sed -n 's/^efi //p' /run/fusion-esp-t/loader/entries/fusion-meres-intel.conf 2>/dev/null || echo nincs) opts=$(grep -c 'fusion.slot=B.*fusion.display.profile=intel-kms' /run/fusion-esp-t/loader/entries/fusion-meres-intel.conf 2>/dev/null)"
+        fi
+        umount /run/fusion-esp-t
+    fi
     case "$abstep" in
         good|bad)
             if [ "$abstep" = good ]; then
                 # mint a Beállítások → Rendszerfrissítés: a felhasználó, sudo-val a szűk segéden át, .fupd fájlból
                 echo "FUSION-AB: GUARD $(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin update-apply /etc/passwd.fupd 2>&1 | head -n 1)"
-                runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin update-apply /data/import/upd/good.fupd > /run/fusion-ab.out 2>&1; arc=$?
+                runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin update-apply /data/import/upd/good.fupd > /run/fusion/test-ab.out 2>&1; arc=$?
             else
-                fusion-update apply /data/import/upd/bad.fupd > /run/fusion-ab.out 2>&1; arc=$?
+                fusion-update apply /data/import/upd/bad.fupd > /run/fusion/test-ab.out 2>&1; arc=$?
             fi
-            sed 's/^/FUSION-AB:   /' /run/fusion-ab.out
+            sed 's/^/FUSION-AB:   /' /run/fusion/test-ab.out
             echo "FUSION-AB: APPLY $abstep rc=$arc"
             [ "$abstep" = good ] && echo bad > /data/.fusion-test-ab || echo final > /data/.fusion-test-ab
             sync; umount /data/import/upd 2>/dev/null
             echo "FUSION-AB: REBOOT"
             systemctl reboot --no-block ;;
+        final)
+            # UEFI-bejegyzések (F9 menü) a mérési bejegyzésekhez; indítás az egyikről, a systemd-boot nélkül
+            i=0; while [ $i -lt 60 ] && [ "$(efibootmgr 2>/dev/null | grep -c 'Fusion meres - ')" -lt 3 ]; do sleep 1; i=$((i + 1)); done
+            efibootmgr -v 2>/dev/null | grep 'Fusion meres - \|^BootOrder' | cut -c1-200 | sed 's/^/FUSION-AB:   /'
+            fo=$(efibootmgr | sed -n 's/^BootOrder: \([0-9A-Fa-f]*\).*/\1/p')
+            if efibootmgr | grep -q "^Boot$fo\*\{0,1\} Fusion meres"; then fk=meres; else fk=eredeti; fi
+            echo "FUSION-AB: FW count=$(efibootmgr | grep -c 'Fusion meres - ') first=$fk"
+            bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Fusion meres - szoftveres felulet.*/\1/p' | head -n 1)
+            if [ -n "$bn" ] && efibootmgr -q -n "$bn"; then
+                echo fw > /data/.fusion-test-ab; sync
+                echo "FUSION-AB: REBOOT"
+                systemctl reboot --no-block
+            else
+                echo "FUSION-AB: FW BOOTNEXT nincs"; echo "FUSION-AB: DONE"; systemctl poweroff --no-block
+            fi ;;
         *)
+            echo "FUSION-AB: FWBOOT entry=$(cat /run/fusion/boot-entry 2>/dev/null)-$(efivar_sel=$(ls /sys/firmware/efi/efivars/LoaderEntrySelected-* 2>/dev/null); [ -n "$efivar_sel" ] && echo sdboot || echo kozvetlen) render=$(grep -o 'fusion.ui.render=[a-z]*' /proc/cmdline) $(grep -o 'fusion.slot=[AB]' /proc/cmdline)"
             echo "FUSION-AB: DONE"
             systemctl poweroff --no-block ;;
     esac
@@ -55,8 +86,8 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
     echo "FUSION-INST: TARGET ${k:-nincs} boot=$bd"
     # T3: ha a teszt mentőlemezén már van mentés, ez a 3. indítás — a FusionOS-ben készített telepítő pendrive-ról:
     # új telepítés a mentésből (+ Wi-Fi átvétele), majd indítás a céllemezről
-    j=0; while [ $j -lt 40 ] && [ -n "$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP"')" ] && ! ls /run/media/*/FusionOS-mentes/*.info.json >/dev/null 2>&1; do sleep 1; j=$((j + 1)); done
-    bk=$(ls /run/media/*/FusionOS-mentes/*.tar.zst /run/media/*/FusionOS-mentes/*.tar.zst.000 2>/dev/null | head -n 1 | sed 's/\.000$//')
+    j=0; while [ $j -lt 40 ] && [ -n "$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP"')" ] && ! ls /run/media/fusion/*/FusionOS-mentes/*.info.json >/dev/null 2>&1; do sleep 1; j=$((j + 1)); done
+    bk=$(ls /run/media/fusion/*/FusionOS-mentes/*.tar.zst /run/media/fusion/*/FusionOS-mentes/*.tar.zst.000 2>/dev/null | head -n 1 | sed 's/\.000$//')
     if [ -n "$k" ] && [ -n "$bk" ]; then
         echo "FUSION-T3: MEDIA-BOOT $(lsblk -dno SERIAL "/dev/$bd") backup=$(basename "$bk")"
         install -d -m 0700 /var/lib/iwd; printf '[Security]\nPassphrase=tesztjelszo\n' > /var/lib/iwd/T3Teszt.psk; chmod 0600 /var/lib/iwd/T3Teszt.psk
@@ -214,6 +245,11 @@ if modprobe mac80211_hwsim radios=2 2>/dev/null; then
     runuser -u fusion -- fusion-wifi known 2>/dev/null | grep -q FusionTeszt && echo "FUSION-WIFI: KNOWN FusionTeszt"
     # a Beállítások Wi-Fi oldalának háttere (iwd a D-Buson, a fusion felhasználóként)
     runuser -u fusion -- env HOME=/home/fusion fusion-settings --selftest 2>&1 | grep 'WIFI' | sed 's/^/FUSION-WIFI: /'
+    # a hibajelentés Wi-Fi része (0.0.36): energiatakarékosság, kapcsolat, kernel- és iwd-napló
+    runuser -u fusion -- python3 -c "import runpy; g = runpy.run_path('/usr/lib/fusion/bin/fusion-report', run_name='r'); print(chr(10).join(g['wifi_section']()))" 2>&1 \
+        > /tmp/fusion-wifi-section.txt
+    echo "FUSION-WIFI: REPORT ps=$(grep -c 'energiatakarékosság: \(on\|off\)' /tmp/fusion-wifi-section.txt) assoc=$(sed -n 's/.*kapcsolódás \([0-9]*\)×.*/\1/p' /tmp/fusion-wifi-section.txt) iwd=$(grep -c 'iwd napló' /tmp/fusion-wifi-section.txt) link=$(grep -c 'SSID' /tmp/fusion-wifi-section.txt)"
+    sed 's/^/FUSION-WIFI:   | /' /tmp/fusion-wifi-section.txt | head -n 40
     iwctl ap "$ap" stop >/dev/null 2>&1; modprobe -r mac80211_hwsim 2>/dev/null
 else
     echo "FUSION-WIFI: HWSIM none"
@@ -260,6 +296,19 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     i=0; while [ $rrc -eq 0 ] && [ $i -lt 120 ] && [ ! -s "$args" ]; do sleep 1; i=$((i + 1)); done
     j=0; while [ $j -lt 15 ] && [ "$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"')" = 0 ]; do sleep 1; j=$((j + 1)); done
     printf 'FUSION-PROG: RUN rc=%s wait=%ss window=%s args=%s\n' "$rrc" "$i" "$(prun xwininfo -root -tree 2>/dev/null | grep -c '"FusionTeszt"')" "$(tr -d '\r\n' < "$args" 2>/dev/null)"
+    # a Fusion helyei a fájlválasztóban (0.0.36): D: Adatok (a DATA felhasználói mappái), E: pendrive,
+    # Asztal-hivatkozások, Dokumentumok → Projektek; a „/”, a Lomtár és a Vezérlőpult nem látszik
+    FP=$P/fusionteszt/win64; dd=$FP/dosdevices; fu=$FP/drive_c/users/fusion
+    echo "FUSION-PLACES: D=$(cat "$dd/d:/.windows-label" 2>/dev/null) import=$([ -d "$dd/d:/import" ] && echo van || echo nincs) overlay=$([ -e "$dd/d:/overlay" ] && echo van || echo nincs) programs=$([ -e "$dd/d:/programs" ] && echo van || echo nincs) E=$(readlink "$dd/e:") Z=$([ -e "$dd/z:" ] && echo van || echo nincs) C=$(cat "$FP/drive_c/.windows-label" 2>/dev/null)"
+    echo "FUSION-PLACES: DESKTOP $(ls "$fu/Desktop" 2>/dev/null | sort | tr '\n' ',') docs=$(readlink "$fu/Documents") dl=$(readlink "$fu/Downloads")"
+    echo "FUSION-PLACES: HIDDEN root=$(grep -c 'Desktop\\\\Namespace\\\\{9D20AAE8' $FP/system.reg) trash=$(grep -c 'Desktop\\\\Namespace\\\\{645FF040' $FP/system.reg) control=$(grep -c 'MyComputer\\\\Namespace\\\\{21EC2020' $FP/system.reg)"
+    # indítás egy DATA-n lévő fájllal: a program D:\… utat kap
+    prun sh -c 'echo teszt > "/data/import/proba adat.lbrn"'
+    rm -f "$args"
+    prun fusion-run fusionteszt "/data/import/proba adat.lbrn"; rrc=$?
+    i=0; while [ $rrc -eq 0 ] && [ $i -lt 120 ] && [ ! -s "$args" ]; do sleep 1; i=$((i + 1)); done
+    printf 'FUSION-PLACES: RUN-DATA rc=%s args=%s\n' "$rrc" "$(tr -d '\r\n' < "$args" 2>/dev/null)"
+    rm -f "/data/import/proba adat.lbrn"
     # 3) Linux-program archívumban (.desktop + X-Fusion-Open társítás)
     t=$(mktemp -d); mkdir -p "$t/fprobaprog"
     printf '#!/bin/sh\necho "$@" > /tmp/fusion-prog-native.txt\n' > "$t/fprobaprog/fprobaprog"; chmod 755 "$t/fprobaprog/fprobaprog"
@@ -437,11 +486,32 @@ PY
     cat /tmp/fusion-files.log /tmp/fusion-settings.log /home/fusion/.local/share/fusion/shell.log 2>/dev/null | grep -v '^$' | tail -n 20 | sed 's/^/FUSION-M6:   log: /'
 fi
 # automatikus csatolás (cserélhető kötetek) — a teszt USB-meghajtója: FUSIONUSB (vfat), FUSIONEXF (exfat), FUSIONNTFS (ntfs)
-i=0; while [ $i -lt 20 ] && ! ls /run/media/FUSION* >/dev/null 2>&1 && ls /dev/disk/by-label/FUSIONUSB >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
-for m in $(ls -d /run/media/* 2>/dev/null); do
+i=0; while [ $i -lt 20 ] && ! ls /run/media/fusion/FUSION* >/dev/null 2>&1 && ls /dev/disk/by-label/FUSIONUSB >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
+for m in $(ls -d /run/media/fusion/* 2>/dev/null); do
     echo "FUSION-M6: MEDIA $(basename "$m") fs=$(findmnt -no FSTYPE "$m") uid=$(stat -c %u "$m") file=$(cat "$m/fusion-usb.txt" 2>/dev/null || echo -) write=$(runuser -u fusion -- sh -c "echo ok > '$m/fusion-write.txt' && cat '$m/fusion-write.txt'" 2>/dev/null || echo no)"
 done
-ls -d /run/media/* >/dev/null 2>&1 || echo "FUSION-M6: MEDIA none"
+ls -d /run/media/fusion/* >/dev/null 2>&1 || echo "FUSION-M6: MEDIA none"
+# a GTK / GIO fájlválasztói (a Flatpak-programokban is, pl. PrusaSlicer) a felhasználó nevében eszközként mutatják-e
+# (a GLib csak a /media és a /run/media/<felhasználó> alatti köteteket mutatja — ZBook, 0.0.34: a PrusaSlicer nem látta)
+cat > /tmp/fusion-gioshow.py <<'PY'
+import ctypes
+gio = ctypes.CDLL("libgio-2.0.so.0")
+gio.g_unix_mounts_get.restype = ctypes.c_void_p; gio.g_unix_mounts_get.argtypes = [ctypes.c_void_p]
+gio.g_unix_mount_get_mount_path.restype = ctypes.c_char_p; gio.g_unix_mount_get_mount_path.argtypes = [ctypes.c_void_p]
+gio.g_unix_mount_guess_should_display.argtypes = [ctypes.c_void_p]
+class L(ctypes.Structure):
+    pass
+L._fields_ = [("data", ctypes.c_void_p), ("next", ctypes.POINTER(L)), ("prev", ctypes.POINTER(L))]
+p = ctypes.cast(gio.g_unix_mounts_get(None), ctypes.POINTER(L)); out = []
+while p:
+    mp = gio.g_unix_mount_get_mount_path(p.contents.data).decode()
+    if gio.g_unix_mount_guess_should_display(p.contents.data) and "/media/" in mp:
+        out.append(mp.rsplit("/", 1)[-1])
+    p = p.contents.next
+print(",".join(sorted(out)) or "-")
+PY
+chmod 644 /tmp/fusion-gioshow.py
+echo "FUSION-M6: GIO-SHOWN $(runuser -u fusion -- python3 /tmp/fusion-gioshow.py 2>&1 | tail -n 1)"
 # a rendszer saját kötetei nem csatolhatók / adhatók ki a segéddel (a sudo szabály a fusion felhasználóé)
 dpart=$(blkid -t PARTLABEL=FUSION_DATA -o device 2>/dev/null | head -n 1)
 g=$(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin mount "$dpart" 2>&1); grc=$?
@@ -449,7 +519,7 @@ echo "FUSION-M6: GUARD rc=$grc $(printf '%s' "$g" | head -n 1)"
 usbdev=$(blkid -t LABEL=FUSIONUSB -o device 2>/dev/null | head -n 1)
 if [ -n "$usbdev" ]; then
     e=$(runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin eject "$usbdev" 2>&1); erc=$?
-    echo "FUSION-M6: EJECT rc=$erc left=$(ls /run/media 2>/dev/null | tr '\n' ' ')$(printf '%s' "$e" | tail -n 1)"
+    echo "FUSION-M6: EJECT rc=$erc left=$(ls /run/media/fusion 2>/dev/null | tr '\n' ' ')$(printf '%s' "$e" | tail -n 1)"
     sleep 3
     echo "FUSION-M6: SHELL-MEDIA $(sed -n 's/.*"media": \[\(.*\)\].*/\1/p' /run/user/1000/fusion-shell.state 2>/dev/null | tr -d ' \n')"
 fi
@@ -471,7 +541,7 @@ if [ -n "$scr" ]; then
     adm disk label "${k}1" "Új név" >/dev/null 2>&1; rc=$?
     sleep 1; echo "FUSION-DISK: LABEL rc=$rc label=$(blkid -p -o value -s LABEL "/dev/${k}1") mounted=$(mp_of "/dev/${k}1") file=$(cat "$(mp_of "/dev/${k}1")/proba.txt" 2>/dev/null)"
     adm disk delete "${k}1" "$k" >/dev/null 2>&1; rc=$?
-    echo "FUSION-DISK: DELETE rc=$rc parts=$(dj 'print(len(d["partitions"]))') free=$(dj 'print(len(d["free"]))') media=$(ls /run/media | tr '\n' ' ')"
+    echo "FUSION-DISK: DELETE rc=$rc parts=$(dj 'print(len(d["partitions"]))') free=$(dj 'print(len(d["free"]))') media=$(ls /run/media/fusion 2>/dev/null | tr '\n' ' ')"
     adm disk create "$k" 1 32 ext4 "linux" "$k" >/dev/null 2>&1; r1=$?
     adm disk create "$k" 40 40 exfat "Közös" "$k" >/dev/null 2>&1; r2=$?
     sleep 2
@@ -480,7 +550,7 @@ if [ -n "$scr" ]; then
     adm disk format "${k}2" ntfs "Windows" "$k" >/dev/null 2>&1; rc=$?
     echo "FUSION-DISK: REFORMAT rc=$rc fs=$(blkid -p -o value -s TYPE "/dev/${k}2") type=$(dj 'print([p["parttype"] for p in d["partitions"] if p["number"]==2][0])')"
     adm disk format-disk "$k" gpt none "" "$k" >/dev/null 2>&1; rc=$?
-    echo "FUSION-DISK: WIPE rc=$rc table=$(dj 'print(d["table"])') parts=$(dj 'print(len(d["partitions"]))') media=$(ls /run/media | tr '\n' ' ')"
+    echo "FUSION-DISK: WIPE rc=$rc table=$(dj 'print(d["table"])') parts=$(dj 'print(len(d["partitions"]))') media=$(ls /run/media/fusion 2>/dev/null | tr '\n' ' ')"
     bd=$(cat /run/fusion/boot-disk)
     g1=$(adm disk format-disk "$bd" gpt vfat x "$bd" 2>&1 | tail -n 1); g2=$(adm disk delete "${bd}4" "$bd" 2>&1 | tail -n 1)
     echo "FUSION-DISK: GUARD $g1 | $g2"
@@ -493,22 +563,76 @@ rout=$(urun fusion-report -d "Teszt: a lézer nem látszik. jelszó=Titok123 kap
 rf=$(ls /tmp/fusion-report/fusion-hibajelentes-*.txt 2>/dev/null | head -n 1)
 echo "FUSION-REPORT: RUN rc=$rrc secs=$(( $(date +%s) - t0 )) size=$(stat -c %s "$rf" 2>/dev/null || echo 0) $(printf '%s' "$rout" | tail -n 1)"
 if [ -n "$rf" ]; then
-    echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
+    echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM' 'WI-FI'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
     echo "FUSION-REPORT: MASK secret=$(grep -c 'Titok123' "$rf") email=$(grep -c 'teszt.elek@pelda.hu' "$rf") ssid=$(grep -c 'FusionTeszt' "$rf") alias=$(grep -c 'EMAIL-1' "$rf")"
     echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
     grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'
 fi
+# --- memória (0.0.30): a Fusion-folyamatok PSS-e (arányos memória) és a megosztott (tmpfs) rész — tájékoztató ---
+memline=""
+for pid in $(pgrep -u fusion -f 'fusion_(shell|tasks_app|settings_app)\.py|fusion-(tasks|shell)' 2>/dev/null); do
+    n=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -o 'fusion[_-][a-z_]*' | head -n 1)
+    k=$(awk '/^Pss:/ {print $2}' /proc/$pid/smaps_rollup 2>/dev/null)
+    [ -n "$k" ] && memline="$memline $n=$((k / 1024))MB"
+done
+echo "FUSION-MEM: PSS${memline:- nincs} SHMEM $(awk '/^Shmem:/ {print int($2/1024) "MB"}' /proc/meminfo) USED $(awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {print int((t-a)/1024) "MB"}' /proc/meminfo)"
+# M8a: a Fusion API (`fusion` csomag) — felhasználóként és rootként is, a rendszer valódi állapotán
+api=$(urun python3 -c "import fusion; from fusion import hardware, devices; d = hardware.display(); r = devices.roles(); print('version=%d profile=%s roles=%s present=%s' % (fusion.API_VERSION, d['profile'], ','.join(x['role'] for x in r), ','.join(x['role'] for x in devices.present() if x['present']) or '-'))" 2>&1 | tail -n 1)
+apir=$(python3 -c "import fusion.hardware as h; print(h.summary())" 2>&1 | tail -n 1)
+echo "FUSION-API: USER $api ROOT $apir"
+echo "FUSION-API: NOTIFY $(urun fusion-notify -u low -i settings "Fusion API" "értesítés a fusion.notify-on át" && echo ok || echo HIBA)"
+# M8b: a `fusion` parancssor — minden lekérdezés JSON-kimenete a leírás (docs/api/cli.md) szerinti kulcsokkal
+urun sh -c 'for c in "api-version" "system" "hardware" "devices" "volumes" "jobs" "schema" "programs list"; do
+    printf "%s\t" "$c"; fusion $c --json 2>&1 | tr -d "\n"; echo; done' > /tmp/fusion-cli.txt
+python3 - /tmp/fusion-cli.txt <<'PYEOF'
+import json, sys
+need = {"api-version": {"api"}, "system": {"api", "version", "milestone", "base", "kernel", "slot", "bootState", "display", "render"},
+        "hardware": {"profile", "status", "driverState", "adapterCount"}, "devices": {"role", "name", "present", "dev", "key", "programs", "com"},
+        "volumes": {"kind", "name", "path", "fstype", "size", "free"}, "jobs": {"name", "title", "running", "rc", "step", "progress", "lines"},
+        "schema": {"version", "program", "role"}, "programs list": {"id", "name", "type"}}
+res = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    c, _, out = line.rstrip("\n").partition("\t")
+    try:
+        j = json.loads(out)
+        items = j if isinstance(j, list) else [j]
+        bad = [sorted(need[c] - set(x)) for x in items if need[c] - set(x)]
+        res.append(f"{c}={'ok' if not bad else 'hiányzik:' + str(bad[0])}")
+    except ValueError:
+        res.append(f"{c}=nem-JSON:{out[:60]}")
+print("FUSION-CLI: JSON " + " ".join(res))
+PYEOF
+echo "FUSION-CLI: VERSION $(urun fusion system --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["version"], j["api"], j["display"]["profile"])')"
+echo "FUSION-CLI: VALIDATE $(urun fusion validate /usr/lib/fusion/fwr/profiles/*.fwr /usr/lib/fusion/devices/roles/*.role >/dev/null 2>&1 && echo ok || echo HIBA) rc-hibas=$(printf 'id = Rossz\n' > /tmp/rossz.fusion; urun fusion validate /tmp/rossz.fusion >/dev/null 2>&1; echo $?)"
+# feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át; az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt
+jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/settings'); sys.path.insert(0, '/usr/lib/fusion/desktop/lib')
+import fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok')" 2>&1 | tail -n 1)
+i=0; while [ $i -lt 300 ] && urun fusion jobs show report --json 2>/dev/null | grep -q '"running": true'; do sleep 2; i=$((i + 2)); done
+echo "FUSION-CLI: JOB start=$jr $(urun fusion jobs show report --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("running=%s rc=%s title=%s" % (j["running"], j["rc"], j["title"]))') file=$([ -f /run/user/1000/fusion/jobs/report.json ] && echo van || echo nincs)"
+# 0.0.32: a felület rajzolása a Beállításokból (szoftveres ↔ grafikus kártya), a Shell újraindításával
+shpss() { p=$(pgrep -u fusion -f 'desktop/shell/fusion_shell\.py' | head -n 1); [ -n "$p" ] && awk '/^Pss:/ {print int($2/1024)}' /proc/$p/smaps_rollup 2>/dev/null; }
+rset() {
+    urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/settings'); sys.path.insert(0, '/usr/lib/fusion/desktop/lib')
+import fusion_settings_backend as b; print(b.Settings().renderSet('$1') or 'ok')" 2>&1 | tail -n 1
+}
+r1=$(rset software)
+i=0; while [ $i -lt 90 ]; do sleep 2; i=$((i + 2)); [ -e /run/user/1000/fusion-shell.ready ] && [ -n "$(shpss)" ] && break; done; sleep 8
+m1=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/lib'); import fusion_ui; print(fusion_ui.render_mode())")
+p1=$(shpss)
+r2=$(rset gpu)
+echo "FUSION-J3: RENDER set=$r1 mode=$m1 pss=${p1:-?}MB back=$r2 file=$(cat /home/fusion/.config/fusion/render 2>/dev/null)"
+echo "FUSION-J3: PAM lastlog=$(journalctl -b --no-pager -o cat 2>/dev/null | grep -c pam_lastlog) login=$(grep -c pam_lastlog /etc/pam.d/login)"
 # --- T3: DATA mentése és telepítő pendrive készítése a futó FusionOS-ből (a telepítő-teszt 2. indítása) ---
 t3b=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP" {print $1; exit}')
 t3m=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONMEDIA" {print $1; exit}')
 if [ -n "$t3b" ] && [ -n "$t3m" ] && [ ! -e /data/.fusion-test-restored ]; then
     adm() { runuser -u fusion -- sudo -n /usr/lib/fusion/bin/fusion-admin "$@"; }
     adm disk format-disk "$t3b" gpt exfat MENTES "$t3b" > /tmp/t3fd.out 2>&1; echo "FUSION-T3: FORMAT rc=$? $(tail -n 1 /tmp/t3fd.out)"
-    i=0; while [ $i -lt 20 ] && [ ! -d /run/media/MENTES ]; do sleep 1; i=$((i + 1)); done
+    i=0; while [ $i -lt 20 ] && [ ! -d /run/media/fusion/MENTES ]; do sleep 1; i=$((i + 1)); done
     echo mentett > /data/.fusion-test-marker; sync
-    t0=$(date +%s); adm backup create /run/media/MENTES > /tmp/t3b.out 2>&1; rc=$?
+    t0=$(date +%s); adm backup create /run/media/fusion/MENTES > /tmp/t3b.out 2>&1; rc=$?
     grep -v '^PROGRESS' /tmp/t3b.out | sed 's/^/FUSION-T3:   /'
-    echo "FUSION-T3: BACKUP rc=$rc secs=$(( $(date +%s) - t0 )) complete=$(python3 -c 'import json,glob; print(json.load(open(sorted(glob.glob("/run/media/MENTES/FusionOS-mentes/*.info.json"))[-1]))["complete"])' 2>/dev/null)"
+    echo "FUSION-T3: BACKUP rc=$rc secs=$(( $(date +%s) - t0 )) complete=$(python3 -c 'import json,glob; print(json.load(open(sorted(glob.glob("/run/media/fusion/MENTES/FusionOS-mentes/*.info.json"))[-1]))["complete"])' 2>/dev/null)"
     adm backup list | python3 -c 'import json,sys; d=json.load(sys.stdin); print("FUSION-T3: LIST targets=%d backups=%d" % (len(d["targets"]), len(d["backups"])))'
     # a .fupd a telepítő pendrive-ról (FUSION_IPAY) — mintha a felhasználó a Letöltésekbe másolta volna
     ip=$(blkid -t PARTLABEL=FUSION_IPAY -o device | head -n 1); mkdir -p /data/import/inst; mount -o ro "$ip" /data/import/inst

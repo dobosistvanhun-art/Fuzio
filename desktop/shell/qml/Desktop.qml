@@ -48,6 +48,7 @@ Rectangle {
            font.family: Theme.font; font.pixelSize: 13 }
 
     Flow {
+        id: dflow
         x: 40; y: 130; width: parent.width - 80; spacing: 16
 
         // --- lézer ---
@@ -130,22 +131,70 @@ Rectangle {
                     FButton { text: "Megnyitás"; implicitHeight: 26; flat: true; onClicked: shell.run("fusion-files " + modelData.path) } } }
         }
 
-        // --- gyorsindítás ---
+        // --- programok: nagyobb csempék, csoportok (a Start menü csoportjai), görgethető ---
         Card {
+            id: pg
             title: "Programok"; icon: "app"
+            width: Math.min(desk.width - 80, 780)
+            property string group: ""          // "" = összes, csoportosítva
+            readonly property var apps: shell.apps.filter(a => !a.search_only && a.installed)
+            readonly property var groupsUsed: shell.allGroups.filter(g => pg.apps.some(a => a.group === g.id))
+            readonly property var sections: pg.group === "" ? pg.groupsUsed : pg.groupsUsed.filter(g => g.id === pg.group)
             Flow {
                 width: parent.width; spacing: 6
+                visible: pg.groupsUsed.length > 1
                 Repeater {
-                    model: shell.apps.filter(a => !a.search_only && a.installed)
+                    model: [{ id: "", name: "Összes" }].concat(pg.groupsUsed)
                     Rectangle {
-                        width: 104; height: 70; radius: Theme.radius
-                        color: gma.containsMouse ? Theme.hover : "transparent"
-                        Column { anchors.centerIn: parent; spacing: 5
-                            FIcon { anchors.horizontalCenter: parent.horizontalCenter; name: modelData.iconFile || ("app-" + modelData.icon); size: 30 }
-                            Text { width: 96; horizontalAlignment: Text.AlignHCenter; text: modelData.name; color: Theme.text; elide: Text.ElideRight
-                                   font.family: Theme.font; font.pixelSize: 11 } }
-                        MouseArea { id: gma; anchors.fill: parent; hoverEnabled: true; onClicked: shell.launch(modelData.id) }
+                        height: 26; width: ct.implicitWidth + 22; radius: 13
+                        color: pg.group === modelData.id ? Theme.accent : (cma.containsMouse ? Theme.hover : "#1c2530")
+                        Text { id: ct; anchors.centerIn: parent; text: modelData.name; font.family: Theme.font; font.pixelSize: 12
+                               color: pg.group === modelData.id ? "#0b0f14" : Theme.text }
+                        MouseArea { id: cma; anchors.fill: parent; hoverEnabled: true; onClicked: pg.group = modelData.id }
                     }
+                }
+            }
+            Flickable {
+                id: pfl
+                width: parent.width
+                // a kártya alja a képernyő (a tálca feletti rész) aljáig érhet: a kártya helye a Flow-ban + fejléc + csoportfülek
+                height: Math.min(pcol.implicitHeight, Math.max(150, desk.height - (dflow.y + pg.y) - 42 - pfl.y - 12 - 16))
+                contentHeight: pcol.implicitHeight; clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+                Column {
+                    id: pcol; width: pfl.width - (pfl.interactive ? 12 : 0); spacing: 8
+                    Repeater {
+                        model: pg.sections
+                        Column {
+                            width: pcol.width; spacing: 4
+                            readonly property var items: pg.apps.filter(a => a.group === modelData.id)
+                            Text { visible: pg.group === "" && pg.sections.length > 1; text: modelData.name.toUpperCase() + "  ·  " + parent.items.length
+                                   color: Theme.dim; font.family: Theme.font; font.pixelSize: 11; font.bold: true; topPadding: 2 }
+                            Flow {
+                                width: parent.width; spacing: 6
+                                Repeater {
+                                    model: parent.parent.items
+                                    Rectangle {
+                                        width: 128; height: 96; radius: Theme.radius
+                                        color: gma.containsMouse ? Theme.hover : "transparent"
+                                        Column { anchors.horizontalCenter: parent.horizontalCenter; y: 12; spacing: 6
+                                            FIcon { anchors.horizontalCenter: parent.horizontalCenter; name: modelData.iconFile || ("app-" + modelData.icon); size: 42 }
+                                            Text { width: 120; horizontalAlignment: Text.AlignHCenter; text: modelData.name; color: Theme.text
+                                                   wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
+                                                   font.family: Theme.font; font.pixelSize: 12 } }
+                                        MouseArea { id: gma; anchors.fill: parent; hoverEnabled: true; onClicked: shell.launch(modelData.id) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Rectangle {   // görgetősáv
+                    visible: pfl.interactive
+                    x: pfl.width - 6; y: pfl.contentY + pfl.visibleArea.yPosition * pfl.height
+                    width: 6; radius: 3; color: "#3a4756"
+                    height: pfl.visibleArea.heightRatio * pfl.height
                 }
             }
         }

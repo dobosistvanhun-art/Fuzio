@@ -8,7 +8,7 @@
 #  ellenőrzött paraméterű parancsokat ismeri — tetszőleges parancsot nem futtat.
 #
 #    power poweroff|reboot            leállítás / újraindítás
-#    mount <eszköz>                   kötet csatolása a /run/media/<név> alá
+#    mount <eszköz>                   kötet csatolása a /run/media/fusion/<név> alá
 #    unmount <eszköz|csatolási pont>  leválasztás (csak a /run/media alól)
 #    eject <lemez>                    a lemez összes kötetének leválasztása (biztonságos eltávolítás)
 #    automount <kernelnév>            (udev/systemd) cserélhető kötet csatolása bedugáskor
@@ -37,7 +37,8 @@
 #  a belső lemezek (pl. a Mint lemeze) csak kérésre (Fájlkezelő → Ez a gép).
 # =============================================================================
 set -u
-MEDIA=/run/media
+MEDIA_USER=fusion     # a FusionOS felhasználója (customize.sh hozza létre)
+MEDIA=/run/media/$MEDIA_USER   # szabványos hely: a GTK / Qt fájlválasztók eszközként mutatják
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 ERR=$(mktemp) || exit 1
@@ -123,6 +124,7 @@ do_mount() {
     esac
     modprobe -q "$t" 2>/dev/null || true      # exfat / ntfs3: modulként
     mkdir -p "$MEDIA"
+    chown "root:$gid" "$MEDIA" 2>/dev/null; chmod 0750 "$MEDIA"
     name=$(mount_name "$d"); mp="$MEDIA/$name"
     mkdir -p "$mp"
     o="nosuid,nodev${o:+,$o}"

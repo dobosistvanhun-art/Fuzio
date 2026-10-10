@@ -162,12 +162,17 @@ done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
-    "$DK/settings/fusion_settings.py" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
+    "$DK/settings/fusion_settings.py" "$DK/bin/fusion" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
     "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/installer/fusion_installer_app.py"
 chown -R root:root "$DK"
+# Fusion API (M8): a `fusion` Python-csomag minden Python-programnak (Fusion-programok, szkriptek, root-segédek)
+ln -sfn /usr/lib/fusion/desktop/lib/fusion "$R/usr/lib/python3/dist-packages/fusion"
+in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, fusion.notify, fusion.permissions, fusion.schema, fusion.jobs, fusion.cli; assert fusion.API_VERSION == 1" \
+    || { echo "  [customize] HIBA: a Fusion API (python3 -c 'import fusion') nem tölthető be"; exit 1; }
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
 ln -sf /usr/lib/fusion/desktop/settings/fusion_settings.py "$R/usr/bin/fusion-settings"
+ln -sf /usr/lib/fusion/desktop/bin/fusion "$R/usr/bin/fusion"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-sound "$R/usr/bin/fusion-sound"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-drive "$R/usr/bin/fusion-drive"
@@ -207,7 +212,7 @@ sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
 sys.path.insert(0, "/usr/lib/fusion/desktop/disks")
 sys.path.insert(0, "/usr/lib/fusion/desktop/installer")
 import fusion_disks_app, fusion_installer_app
-import fusion_ui, fusion_x11, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
+import fusion_ui, fusion.x11, fusion.devices, fusion.notify, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
 import fusion_programs, fusion_store, fusion_sound, fusion_drive, fusion_tasks
 assert fusion_apps.fp is fusion_programs, "a Programkezelő modulja nem töltődött be"
 from PyQt6.QtDBus import QDBusConnection
@@ -290,6 +295,13 @@ in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.serv
 in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.service >/dev/null 2>&1
 # NVIDIA: a persistenced (CUDA-szerverekhez) nem kell; az udev-szabály enélkül hiányzó egységet kérne
 in_root systemctl mask nvidia-persistenced.service >/dev/null 2>&1
+# a noble login-PAM-ja a pam_lastlog-ot kéri, de a modul nincs a csomagban → minden belépéskor hibaüzenet a naplóban
+sed -i '/pam_lastlog\.so/d' "$R/etc/pam.d/login"
+# NVIDIA-csomag: „alias nouveau off” — ez a Nouveau kifejezett betöltését is tiltaná (mérési bejegyzés, 0.0.30).
+# Az automatikus betöltést a Fusion Hardware Layer saját tiltólistája (fusion-display.conf) amúgy is tiltja.
+rm -f "$R/usr/lib/modprobe.d/nvidia-graphics-drivers.conf" "$R/lib/modprobe.d/nvidia-graphics-drivers.conf"
+in_root grep -rqs '^alias nouveau off' /etc/modprobe.d /usr/lib/modprobe.d && { echo "  [customize] HIBA: a nouveau tiltása (alias off) maradt"; exit 1; }
+grep -qx 'blacklist nouveau' "$R/etc/modprobe.d/fusion-display.conf" || { echo "  [customize] HIBA: fusion-display.conf: nincs blacklist nouveau"; exit 1; }
 # Ctrl+Alt+Del: a Fusion Desktopban a Feladatkezelő; a szöveges konzolon se indítsa újra a gépet
 in_root systemctl mask ctrl-alt-del.target >/dev/null 2>&1
 # Lemezkezelő: a SMART-állapotot kérésre olvassa (smartctl); a háttérfigyelő (smartd, levélküldés) nem kell

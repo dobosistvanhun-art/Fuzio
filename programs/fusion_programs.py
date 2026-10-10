@@ -16,6 +16,13 @@ flatpak: appid.  appimage / native: exec (a program mappájához képest).
 
 Minden művelet a fusion felhasználóként, root nélkül fut (spec 17.).
 """
+try:
+    from fusion import kv as _fkv, schema as _fschema
+except ImportError:      # fejlesztői fa: <repo>/desktop/lib
+    import sys as _sys
+    import os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.realpath(__file__))), "desktop", "lib"))
+    from fusion import kv as _fkv, schema as _fschema
 import configparser
 import fnmatch
 import glob
@@ -49,6 +56,26 @@ class ProgramError(Exception):
     pass
 
 
+def _rmtree(path):
+    """mappa törlése hibatűrően: a csak olvasható almappák (pl. az fwr „Adatok” nézete) is törlődnek; hivatkozást
+    nem követ (a Windows-környezet Asztal-hivatkozásai a saját mappára mutatnak — azokat csak eltávolítja)"""
+    def onerror(func, p, _exc):
+        try:
+            parent = os.path.dirname(p)
+            os.chmod(parent, os.stat(parent).st_mode | 0o700)
+            if func in (os.unlink, os.remove, os.rmdir):
+                func(p)
+        except OSError:
+            pass
+    if os.path.islink(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        return
+    shutil.rmtree(path, onerror=onerror)
+
+
 def _log(log, msg):
     if log:
         log(msg)
@@ -58,17 +85,8 @@ def _log(log, msg):
 # leírás (manifest)
 # ---------------------------------------------------------------------------
 def read_kv(path):
-    d = {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    d[k.strip()] = v.strip()
-    except OSError:
-        pass
-    return d
+    """a leírók (program.fusion, *.fwr) olvasása — a Fusion API egyetlen kulcs=érték olvasójával"""
+    return _fkv.read(path)
 
 
 def write_manifest(m):
@@ -370,21 +388,64 @@ def win_to_unix(prefix, winpath):
     return p
 
 
-def unix_to_win(m, path):
-    """fájl → Windows-út a program látókörében (C: = a környezet, drive.X = megosztott mappák)"""
-    path = os.path.realpath(path)
+def _visible_roots(m):
+    """(Linux-mappa, Windows-út) párok a program látókörében — a környezet tényleges hivatkozásaiból
+    (dosdevices meghajtók, a meghajtók gyökerében lévő mappahivatkozások, pl. a D: Adatok nézet, és az
+    Asztal hivatkozásai), valamint a leírás drive.X kulcsaiból (még elő nem készített környezethez)"""
     prefix = m.get("prefix") or os.path.join(FWR_DATA, m["id"])
+    roots = []
+
+    def add(target, win):
+        try:
+            if os.path.isdir(target):
+                roots.append((os.path.realpath(target), win))
+        except OSError:
+            pass
+
+    dd = os.path.join(prefix, "dosdevices")
+    try:
+        letters = sorted(e for e in os.listdir(dd) if re.match(r"^[a-y]:$", e) and os.path.islink(os.path.join(dd, e)))
+    except OSError:
+        letters = []
+    for e in letters:
+        win = e[0].upper() + ":\\"
+        root = os.path.join(dd, e)
+        add(root, win)
+        if e == "c:":
+            continue
+        try:
+            for n in os.listdir(root):
+                if os.path.islink(os.path.join(root, n)):
+                    add(os.path.join(root, n), win + n)
+        except OSError:
+            pass
+    for desk in glob.glob(os.path.join(prefix, "drive_c", "users", "*", "Desktop")):
+        user = os.path.basename(os.path.dirname(desk))
+        try:
+            for n in os.listdir(desk):
+                if os.path.islink(os.path.join(desk, n)):
+                    add(os.path.join(desk, n), "C:\\users\\" + user + "\\Desktop\\" + n)
+        except OSError:
+            pass
     for k, v in m.items():
         if k.startswith("drive."):
-            target = v if v.startswith("/") else os.path.join(HOME, v)
-            target = os.path.realpath(target)
-            if path == target:
-                return k[6:].upper() + ":\\"
-            if path.startswith(target + "/"):
-                return k[6:].upper() + ":\\" + os.path.relpath(path, target).replace("/", "\\")
-    c = os.path.realpath(os.path.join(prefix, "drive_c"))
-    if path.startswith(c + "/"):
-        return "C:\\" + os.path.relpath(path, c).replace("/", "\\")
+            add(v if v.startswith("/") else os.path.join(HOME, v), k[6:].upper() + ":\\")
+    add(os.path.join(prefix, "drive_c"), "C:\\")
+    # a leghosszabb (legpontosabb) Linux-mappa nyer; azonos mappánál a rövidebb Windows-út (meghajtóbetű)
+    roots.sort(key=lambda r: (-len(r[0]), len(r[1])))
+    return roots
+
+
+def unix_to_win(m, path):
+    """fájl → Windows-út a program látókörében (C: = a környezet, drive.X = megosztott mappák,
+    a Fusion helyei: D: Adatok, E: pendrive, az Asztal hivatkozásai — lásd fwr places)"""
+    path = os.path.realpath(path)
+    for target, win in _visible_roots(m):
+        if path == target:
+            return win
+        if path.startswith(target.rstrip("/") + "/"):
+            rel = os.path.relpath(path, target).replace("/", "\\")
+            return win + rel if win.endswith("\\") else win + "\\" + rel
     return ""
 
 
@@ -470,8 +531,7 @@ def install_windows(installer, log=None, name=None, portable=False):
     recipe = _match_recipe(installer)
     if recipe:
         pid = recipe["id"]
-        m = manifest(pid) or {}
-        m.update({k: v for k, v in recipe.items() if k not in ("recipe_file", "match")})
+        m = _fschema.apply_recipe(recipe, manifest(pid) or {})
         m["recipe"] = os.path.basename(recipe["recipe_file"])
         # a már meglévő (régi helyű) környezet marad — a telepített program és beállításai megmaradnak
         if not m.get("prefix"):
@@ -498,7 +558,7 @@ def install_windows(installer, log=None, name=None, portable=False):
         return _install_windows_run(installer, m, pid, recipe, name, portable, old_exe, exe_known, log)
     except ProgramError:
         if not existed:      # sikertelen új telepítés: ne maradjon félkész bejegyzés
-            shutil.rmtree(os.path.join(PROGRAMS, pid), ignore_errors=True)
+            _rmtree(os.path.join(PROGRAMS, pid))
         raise
 
 
@@ -660,7 +720,7 @@ def flatpak_search(term, log=None):
 def _swap_app(pid):
     """az új változat (app.new) a régi (app) helyére — a felhasználói adatok nem itt vannak"""
     base = os.path.join(PROGRAMS, pid)
-    shutil.rmtree(os.path.join(base, "app"), ignore_errors=True)
+    _rmtree(os.path.join(base, "app"))
     os.rename(os.path.join(base, "app.new"), os.path.join(base, "app"))
     return os.path.join(base, "app")
 
@@ -668,7 +728,7 @@ def _swap_app(pid):
 def install_appimage(path, log=None, name=None):
     pid, old = target_id(name or re.sub(r"(?i)[-_.](x86_64|amd64|linux).*$", "", os.path.splitext(os.path.basename(path))[0]), "appimage")
     d = os.path.join(PROGRAMS, pid, "app.new")
-    shutil.rmtree(d, ignore_errors=True)
+    _rmtree(d)
     os.makedirs(d)
     tmp = os.path.join(d, "telepito.AppImage")
     shutil.copy2(path, tmp)
@@ -676,7 +736,7 @@ def install_appimage(path, log=None, name=None):
     rc, out = _run([tmp, "--appimage-extract"], log, 600, cwd=d)
     os.unlink(tmp)
     if rc != 0 or not os.path.isfile(os.path.join(d, "squashfs-root", "AppRun")):
-        shutil.rmtree(d if old else os.path.join(PROGRAMS, pid), ignore_errors=True)
+        _rmtree(d if old else os.path.join(PROGRAMS, pid))
         raise ProgramError("az AppImage nem bontható ki")
     d = _swap_app(pid)
     root = os.path.join(d, "squashfs-root")
@@ -704,7 +764,7 @@ def install_native(path, log=None, name=None, exec_rel=None):
     base = re.sub(r"(?i)(\.tar)?\.(gz|xz|bz2|zst|zip|tgz|txz)$", "", os.path.basename(path))
     pid, old = target_id(name or re.sub(r"[-_.]v?\d.*$", "", base) or base, "native")
     d = os.path.join(PROGRAMS, pid, "app.new")
-    shutil.rmtree(d, ignore_errors=True)
+    _rmtree(d)
     os.makedirs(d)
     try:
         if detect(path) == "elf":
@@ -727,7 +787,7 @@ def install_native(path, log=None, name=None, exec_rel=None):
         else:
             raise ProgramError("nem ismert formátum")
     except (tarfile.TarError, OSError, zipfile.BadZipFile, ProgramError) as e:
-        shutil.rmtree(d if old else os.path.join(PROGRAMS, pid), ignore_errors=True)
+        _rmtree(d if old else os.path.join(PROGRAMS, pid))
         raise ProgramError(f"a kicsomagolás nem sikerült: {e}")
     d = _swap_app(pid)
     dd, desk = {}, ""
@@ -750,7 +810,7 @@ def install_native(path, log=None, name=None, exec_rel=None):
         exec_rel = os.path.join("app", exec_rel) if os.path.exists(os.path.join(d, exec_rel)) else exec_rel
     if not exec_rel:
         if not old:
-            shutil.rmtree(os.path.join(PROGRAMS, pid), ignore_errors=True)
+            _rmtree(os.path.join(PROGRAMS, pid))
         raise ProgramError("nem található a program indítófájlja (adja meg: --exec <út az archívumon belül>)")
     nm = name or _desktop_name(dd) or (os.path.basename(exec_rel).capitalize())
     m = {"id": pid, "name": nm, "type": "native", "exec": exec_rel, "mime": dd.get("MimeType", "").strip(";"),
@@ -815,12 +875,12 @@ def remove(pid, data=False, log=None):
         shared = [p for p in programs() if p["id"] != pid and p.get("prefix") == prefix]
         if prefix and not shared:
             subprocess.run(["fwr", "stop", pid], capture_output=True, timeout=30)
-            shutil.rmtree(prefix, ignore_errors=True)
+            _rmtree(prefix)
             _log(log, "a Windows-környezet törölve: " + prefix)
-    shutil.rmtree(m["dir"], ignore_errors=True)
+    _rmtree(m["dir"])
     if data and t in ("native", "appimage"):
         for p in glob.glob(os.path.join(HOME, ".config", pid)) + glob.glob(os.path.join(HOME, ".local/share", pid)):
-            shutil.rmtree(p, ignore_errors=True)
+            _rmtree(p)
     sync_desktop()
     _log(log, f"Eltávolítva: {m.get('name', pid)}")
 
@@ -861,7 +921,7 @@ def sync(log=None):
         # kívülről eltávolított Flatpak: a leírása is megy (az adatai a Flatpaké, azokhoz nem nyúlunk)
         for appid, p in known.items():
             if appid and appid not in have:
-                shutil.rmtree(p["dir"], ignore_errors=True)
+                _rmtree(p["dir"])
                 _log(log, f"Kivéve (már nincs telepítve): {p.get('name', appid)}")
     # régi helyű (fwr) Windows-programok: leírás a meglévő környezetre — újratelepítés nélkül
     for r in recipes():
@@ -871,7 +931,7 @@ def sync(log=None):
         prefix = os.path.join(FWR_DATA, pid)
         exe = win_to_unix(prefix, r.get("exe", "")) if r.get("exe") else ""
         if exe and os.path.isfile(exe):
-            m = {k: v for k, v in r.items() if k not in ("recipe_file", "match")}
+            m = _fschema.apply_recipe(r)
             m.update({"type": "win64", "prefix": prefix, "recipe": os.path.basename(r["recipe_file"]),
                       "source": "átköltöztetve (fwr)", "installed": time.strftime("%Y-%m-%d")})
             write_manifest(m)
@@ -1044,6 +1104,12 @@ def command(pid, files=()):
     t = m.get("type")
     if t == "win64":
         args = []
+        if any(not is_url(f) for f in files):
+            # a Fusion helyei (D: Adatok, E: pendrive) frissek legyenek a fájl Windows-útjához
+            try:
+                subprocess.run(["fwr", "places", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                pass
         for f in files:
             if is_url(f):
                 args.append(f)

@@ -15,6 +15,8 @@ linux-modules-@KERNEL_ABI@
 # hálózat: vezetékes és Wi-Fi DHCP (systemd-networkd); Wi-Fi: iwd (jelenlegi megoldás,
 # a NetworkManager/iwd végleges döntése a Fusion Desktop felületével együtt)
 iwd
+# a Wi-Fi állapota a hibajelentésben (energiatakarékosság, kapcsolat) — 0.0.36
+iw
 wireless-regdb
 iproute2
 netbase

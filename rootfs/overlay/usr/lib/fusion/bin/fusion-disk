@@ -31,7 +31,7 @@ import time
 import unicodedata
 
 BOOT_DISK_FILE = "/run/fusion/boot-disk"
-MEDIA = "/run/media"
+MEDIA = "/run/media/fusion"   # = fusion.MEDIA (a fusion-admin csatolási helye)
 ADMIN = "/usr/lib/fusion/bin/fusion-admin"
 LOCK = "/run/fusion/disk.lock"
 BUSY_DIR = "/run/fusion/disk-busy"

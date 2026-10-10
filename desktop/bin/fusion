@@ -1,0 +1,17 @@
+#!/usr/bin/python3
+"""FusionOS — a Fusion API parancssora: fusion <terület> <művelet> [--json]  (részletek: fusion help)"""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+import fusion  # noqa: E402
+fusion.add_paths()                 # a felület modulja (fusion_ui: rajzolási mód)
+from fusion import cli  # noqa: E402
+
+try:
+    rc = cli.main()
+    sys.stdout.flush()
+except BrokenPipeError:            # pl. fusion … | head
+    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    rc = 0
+sys.exit(rc)

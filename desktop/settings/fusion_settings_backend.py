@@ -10,7 +10,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import threading
 import time
 import urllib.request
@@ -24,29 +23,15 @@ import fusion_drive
 import fusion_programs as fp
 import fusion_store as store
 import fusion_ui as ui
+import fusion
+from fusion import devices as fdev
+from fusion import jobs as fjobs
 
-ROLES_DIR = os.environ.get("FUSION_DEVICES_ROLES", "/usr/lib/fusion/devices/roles")
-DEVICES_DB = "/etc/fusion/devices.conf"
 MOONRAKER = "http://127.0.0.1:7125"
 BG_FILE = os.path.join(ui.CONFIG, "background")
 DISPLAY_FILE = os.path.join(ui.CONFIG, "display.sh")
 BG_DEFAULT = "#16202b"
 SAFE = re.compile(r"^[A-Za-z0-9_.:+-]+$")
-JOB_DIR = os.path.expanduser("~/.local/share/fusion")
-
-
-def _kv(path):
-    d = {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    d[k.strip()] = v.strip()
-    except OSError:
-        pass
-    return d
 
 
 def _read(path, default=""):
@@ -95,23 +80,7 @@ def serial_props(dev):
 
 
 def devices():
-    db = {}
-    for line in _read(DEVICES_DB).splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and not line.startswith("#"):
-            db[parts[0]] = parts[1]
-    roles = []
-    bound = set()
-    for rf in sorted(glob.glob(os.path.join(ROLES_DIR, "*.role"))):
-        r = _kv(rf)
-        role = r.get("role", "")
-        link = f"/dev/fusion/{role}"
-        present = os.path.exists(link)
-        tgt = os.path.basename(os.path.realpath(link)) if present else ""
-        if present:
-            bound.add(os.path.realpath(link))
-        roles.append({"role": role, "name": r.get("name", role), "present": present, "dev": tgt,
-                      "key": db.get(role, ""), "com": r.get("windows.com", ""), "match": r.get("match.usb", "")})
+    roles = fdev.roles()        # Fusion API: szerepek, állapot, rögzített azonosító, mely programok érik el (COM)
     serial = []
     for d in sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")):
         p = serial_props(d)
@@ -153,6 +122,15 @@ def printer():
             "printerPresent": os.path.exists("/dev/fusion/printer")}
 
 
+def _timing(what, secs):
+    """mérés: mennyi ideig tartott egy lista (a hibajelentés és a selftest is látja)"""
+    try:
+        with open(os.path.join(ui.RUNTIME, "fusion-timing.log"), "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {what} {secs:.1f}s\n")
+    except OSError:
+        pass
+
+
 # --- Programkezelő: telepítők a szokásos helyeken ---
 INSTALLER_EXT = (".exe", ".msi", ".appimage", ".flatpakref", ".flatpak")
 
@@ -161,16 +139,19 @@ def installers():
     """telepítő a szokásos helyeken (saját mappa, Letöltések, /data/import, USB-meghajtók):
     Windows (.exe, .msi), AppImage, Flatpak (.flatpakref, .flatpak)"""
     home = os.path.expanduser("~")
-    roots = [home, os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), "/data/import"] + sorted(glob.glob("/run/media/*"))
+    roots = [home, os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), "/data/import"] + sorted(glob.glob(fusion.MEDIA + "/*"))
     seen, out = set(), []
+    t_end = time.monotonic() + 5          # legfeljebb ennyi idő (egy lassú kötet ne tartsa fel a listát)
     for r in roots:
-        if not os.path.isdir(r):
+        if not os.path.isdir(r) or time.monotonic() > t_end:
             continue
         base_depth = r.rstrip("/").count("/")
         for dirpath, dirs, files in os.walk(r):
-            if dirpath.count("/") - base_depth >= 2:
+            if dirpath.count("/") - base_depth >= 2 or time.monotonic() > t_end:
                 dirs[:] = []
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c",)]
+            # más fájlrendszerre (pl. a Google Drive hálózati csatolása, FUSE) nem lépünk át: a bejárása percekig tartana
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive")
+                       and not os.path.ismount(os.path.join(dirpath, d))]
             for f in files:
                 if f.lower().endswith(INSTALLER_EXT):
                     p = os.path.join(dirpath, f)
@@ -209,7 +190,7 @@ def fupd_info(path):
 
 def update_files():
     home = os.path.expanduser("~")
-    roots = [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + sorted(glob.glob("/run/media/*"))
+    roots = [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + sorted(glob.glob(fusion.MEDIA + "/*"))
     seen, out = set(), []
     for r in roots:
         if not os.path.isdir(r):
@@ -218,7 +199,8 @@ def update_files():
         for dirpath, dirs, files in os.walk(r):
             if dirpath.count("/") - base >= 2:
                 dirs[:] = []
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive")]
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive")
+                       and not os.path.ismount(os.path.join(dirpath, d))]
             for f in files:
                 if not f.lower().endswith(".fupd"):
                     continue
@@ -432,6 +414,27 @@ class Settings(QObject):
             with open(DISPLAY_FILE, "w") as f:
                 f.write(f"# FusionOS — Beállítások → Kijelző\nxrandr --output {shlex.quote(output)} --mode {shlex.quote(mode)}\n")
 
+    # --- Felület rajzolása (0.0.32): grafikus kártya (OpenGL) vagy szoftveres ---
+    @pyqtSlot(result="QVariant")
+    def renderState(self):
+        return {"mode": ui.render_mode(), "forced": ui.render_forced()}
+
+    @pyqtSlot(str, result=str)
+    def renderSet(self, mode):
+        if mode not in ("gpu", "software"):
+            return "érvénytelen mód"
+        try:
+            os.makedirs(ui.CONFIG, exist_ok=True)
+            with open(ui.RENDER_FILE + ".tmp", "w") as f:
+                f.write(mode + "\n")
+            os.replace(ui.RENDER_FILE + ".tmp", ui.RENDER_FILE)
+        except OSError as e:
+            return f"nem menthető: {e}"
+        # a Fusion Shell (panel, Start menü, asztal) azonnal az új móddal indul újra; a többi Fusion-program a
+        # következő megnyitáskor
+        ui.spawn(["fusion-shell", "restart"])
+        return ""
+
     # --- Eszközök ---
     @pyqtSlot()
     def devicesRefresh(self):
@@ -439,11 +442,11 @@ class Settings(QObject):
 
     @pyqtSlot(str, str)
     def deviceAssign(self, role, dev):
-        self._async("devices-action", lambda: dict(zip(("rc", "msg"), ui.admin("devices-assign", role, dev))))
+        self._async("devices-action", lambda: dict(zip(("rc", "msg"), fdev.assign(role, dev))))
 
     @pyqtSlot(str)
     def deviceForget(self, role):
-        self._async("devices-action", lambda: dict(zip(("rc", "msg"), ui.admin("devices-forget", role))))
+        self._async("devices-action", lambda: dict(zip(("rc", "msg"), fdev.forget(role))))
 
     # --- Nyomtató ---
     @pyqtSlot()
@@ -461,22 +464,38 @@ class Settings(QObject):
     # --- Programkezelő ---
     @pyqtSlot()
     def programsRefresh(self):
-        def f():
-            try:
-                fp.sync()      # a parancssorból telepített / eltávolított Flatpakok is látszódjanak
-            except Exception:
-                pass
-            roles = []
-            for rf in sorted(glob.glob(os.path.join(ROLES_DIR, "*.role"))):
-                r = _kv(rf)
-                if r.get("role"):
-                    roles.append({"role": r["role"], "name": r.get("name", r["role"]), "com": r.get("windows.com", "")})
+        """két lépésben: azonnal a leírásokból (gyors), majd a Flatpak-összehangolás és a telepítők keresése után
+        újra — a lista így nem vár a lassú részekre (a ZBookon ez korábban 1–2 perc volt)"""
+        if "programs" in self._busy:
+            return
+        self._busy.add("programs")
+
+        def snapshot(with_installers):
+            roles = [{"role": r["role"], "name": r["name"], "com": r["com"]} for r in fdev.definitions()]
             have = {p["id"] for p in fp.programs()}
-            return {"programs": [fp.info(m) for m in fp.programs()], "roles": roles,
-                    "recipes": [{"id": r["id"], "name": r.get("name", r["id"]), "match": r.get("match", "")}
-                                for r in fp.recipes() if r["id"] not in have],
-                    "installers": installers(), "job": self._job_state()}
-        self._async("programs", f)
+            d = {"programs": [fp.info(m) for m in fp.programs()], "roles": roles,
+                 "recipes": [{"id": r["id"], "name": r.get("name", r["id"]), "match": r.get("match", "")}
+                             for r in fp.recipes() if r["id"] not in have],
+                 "job": self._job_state()}
+            if with_installers:
+                d["installers"] = installers()
+            return d
+
+        def work():
+            try:
+                t0 = time.monotonic()
+                self.result.emit("programs", snapshot(False))
+                try:
+                    fp.sync()      # a parancssorból telepített / eltávolított Flatpakok is látszódjanak
+                except Exception:
+                    pass
+                self.result.emit("programs", snapshot(True))
+                _timing("programs", time.monotonic() - t0)
+            except Exception as e:
+                self.result.emit("programs", {"error": str(e)})
+            finally:
+                self._busy.discard("programs")
+        threading.Thread(target=work, daemon=True).start()
 
     @pyqtSlot()
     def programSizes(self):
@@ -493,52 +512,18 @@ class Settings(QObject):
 
     # a hosszú műveletek (telepítés, eltávolítás, frissítés) külön folyamatban futnak: a Beállítások
     # bezárása nem szakítja meg őket; a végén értesítés jön, a felület a naplót mutatja
-    def _jobfiles(self, kind):
-        base = os.path.join(JOB_DIR, f"{kind}-job")
-        return base + ".pid", base + ".log", base + ".title"
-
+    # (a Fusion API feladat-protokollja: fusion.jobs — az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt)
     def _job_state(self, kind="programs"):
-        fpid, flog, ftitle = self._jobfiles(kind)
-        try:
-            pid = int(_read(fpid, "0") or 0)
-        except ValueError:
-            pid = 0
         for pr in list(self._jobprocs.values()):
-            pr.poll()                     # a saját indítású folyamat begyűjtése (ne maradjon zombi)
-        stat = _read(f"/proc/{pid}/stat") if pid > 0 else ""
-        running = bool(stat) and stat.split(")")[-1].split()[:1] != ["Z"]
-        lines = _read(flog).splitlines()
-        rc = next((int(x[3:]) for x in reversed(lines) if re.match(r"^RC=\d+$", x)), None)
-        try:
-            mtime = os.path.getmtime(flog)
-        except OSError:
-            mtime = 0
-        age = time.time() - mtime
-        # a gép indulása előtt befejeződött művelet nem „friss” (pl. a frissítés után újraindítás: ne kérje újra)
-        try:
-            boot = time.time() - float(_read("/proc/uptime", "0").split()[0])
-        except (ValueError, IndexError):
-            boot = 0
-        return {"running": running, "rc": rc, "title": _read(ftitle), "recent": running or (age < 600 and mtime > boot),
-                "lines": [x for x in lines if not x.startswith("RC=")][-14:]}
+            pr.poll()                     # a saját indítású futtató begyűjtése (ne maradjon zombi)
+        return fjobs.state(kind)
 
     def _job(self, title, args, kind="programs", cmd=("fusion-programs",), app="Programkezelő", icon="package",
              okpat="^(Telepítve|Eltávolítva|kész|fusion-programs:)"):
-        if self._job_state(kind)["running"]:
-            return "már fut egy művelet — várja meg a végét"
-        fpid, flog, ftitle = self._jobfiles(kind)
-        os.makedirs(JOB_DIR, exist_ok=True)
-        with open(ftitle, "w") as f:
-            f.write(title)
-        script = ('echo $$ > "$1"; shift; log=$1; shift; title=$1; shift; app=$1; shift; icon=$1; shift; pat=$1; shift; '
-                  ': > "$log"; "$@" >> "$log" 2>&1; rc=$?; echo "RC=$rc" >> "$log"; '
-                  'last=$(grep -E "$pat" "$log" | tail -n 1); '
-                  'if [ $rc -eq 0 ]; then fusion-notify -i "$icon" -a "$app" "$title: kész" "$last"; '
-                  'else err=$(grep -v "^RC=" "$log" | tail -n 1); fusion-notify -u critical -i "$icon" -a "$app" '
-                  '"$title: sikertelen" "${err#*: }"; fi')
-        self._jobprocs[kind] = subprocess.Popen(
-            ["sh", "-c", script, "fusion-job", fpid, flog, title, app, icon, okpat] + list(cmd) + list(args),
-            start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        err, pr = fjobs.start(kind, title, list(cmd) + list(args), app=app, icon=icon, okpat=okpat)
+        if err:
+            return err
+        self._jobprocs[kind] = pr
         time.sleep(0.2)
         self._job_watch(kind)
         return ""

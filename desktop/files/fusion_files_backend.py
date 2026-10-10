@@ -19,6 +19,7 @@ from PyQt6.QtCore import (QAbstractListModel, QByteArray, QFileSystemWatcher, QM
 from PyQt6.QtGui import QGuiApplication
 
 import fusion_ui as ui
+import fusion
 import fusion_trash as trashlib
 import fusion_apps  # noqa: F401  (a Programkezelő moduljának útvonala)
 try:
@@ -921,7 +922,7 @@ def volumes():
             usb = rm or tran == "usb" or dk.startswith("mmcblk")
             label = n.get("label") or n.get("partlabel") or n.get("name")
             out.append({"name": label, "path": mps[0] if mps else "", "icon": "drive-usb" if usb else "drive",
-                        "dev": n.get("path", ""), "mounted": bool(mps), "media": usb or bool(mps and mps[0].startswith("/run/media/")),
+                        "dev": n.get("path", ""), "mounted": bool(mps), "media": usb or bool(mps and mps[0].startswith(fusion.MEDIA + "/")),
                         "info": f"{n.get('path', '')} · {n.get('fstype', '')} · {ui.human_size(int(n.get('size') or 0))}"})
     walk(devs)
     # Lomtár

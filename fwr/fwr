@@ -29,6 +29,7 @@
 #    fwr run <id> <program.exe> [arg]  tetszőleges program a környezetben (hibakeresés)
 #    fwr check                         a runtime ellenőrzése: COM3 és OpenGL
 #    fwr prepare <id>                  a környezet létrehozása / frissítése
+#    fwr places <id>                   a Fusion helyei a fájlválasztóban (D: Adatok, E: pendrive, Asztal)
 #
 #  Környezeti változók (teszteléshez): FWR_WINE, FWR_DATA, FWR_PROFILES, FWR_TOOLS
 # =============================================================================
@@ -87,6 +88,113 @@ wine_env() {  # wine_env <id> <profil>
 wine_build_id() { cat "$FWR_WINE/.fusion-build-id" 2>/dev/null || "$WINE" --version 2>/dev/null; }
 
 # ---------------------------------------------------------------------------
+# a Fusion helyei a Windows-program fájlválasztójában (0.0.36)
+#
+#   places = standard (alapértelmezés) | none     — a profil / leírás kulcsa
+#
+#   standard:
+#     D:  „Adatok”  — a DATA meghajtó felhasználói mappái (a rendszer mappái nélkül: overlay, fwr,
+#                      programs, dev, lost+found); a nézet csak olvasható, a mappák írhatók
+#     E:  a pendrive-ok (/run/media/fusion)
+#     Asztal: Projektek, Letöltések, Saját mappa, Adatok, Pendrive — a fájlválasztó fájának tetején
+#     Dokumentumok → ~/Projektek (a programok alapértelmezett mentési helye látható helyre kerül),
+#     Letöltések   → a valódi Letöltések mappa (XDG)
+#   A profil saját drive.X betűje elsőbbséget kap. A Linux-fájlrendszer („/”), a Lomtár és a Vezérlőpult
+#   nem látszik (registry, a prepare-ben).  A Google Drive nem része a szabványos helyeknek.
+#   Minden indításkor frissül (olcsó: csak hivatkozások) — az új DATA-mappák a következő indításkor látszanak.
+# ---------------------------------------------------------------------------
+FWR_DATAROOT="${FWR_DATAROOT:-/data}"
+FWR_MEDIA="${FWR_MEDIA:-/run/media/fusion}"
+DATA_HIDDEN=" overlay fwr programs dev lost+found "
+
+xdg_dir() {  # xdg_dir <XDG_KULCS> <alapértelmezés>
+    _d=$(sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" 2>/dev/null | head -n 1)
+    case "$_d" in '$HOME'*) _d="$HOME${_d#\$HOME}" ;; esac
+    case "$_d" in /*) printf '%s' "$_d" ;; *) printf '%s' "$2" ;; esac
+}
+
+# place_link <hivatkozás> <cél>: a Wine saját (üres) mappája helyett hivatkozás; ha a mappában fájlok
+# vannak, azok a célba költöznek (ütközés esetén a mappa marad, és a napló jelzi)
+place_link() {
+    if [ -L "$1" ]; then
+        [ "$(readlink "$1")" = "$2" ] && return 0
+        rm -f "$1"
+    elif [ -d "$1" ]; then
+        for _e in "$1"/* "$1"/.[!.]*; do
+            [ -e "$_e" ] || [ -L "$_e" ] || continue
+            if [ -e "$2/${_e##*/}" ]; then
+                printf 'fwr: %s marad (ütközik: %s)\n' "$1" "${_e##*/}" >> "$LOG"; return 1
+            fi
+        done
+        for _e in "$1"/* "$1"/.[!.]*; do
+            [ -e "$_e" ] || [ -L "$_e" ] || continue
+            mv "$_e" "$2/" && printf 'fwr: átköltöztetve: %s -> %s\n' "$_e" "$2" >> "$LOG"
+        done
+        rmdir "$1" 2>/dev/null || return 1
+    elif [ -e "$1" ]; then
+        return 1
+    fi
+    ln -s "$2" "$1"
+}
+
+places_apply() {  # places_apply <profil>  (WINEPREFIX, LOG beállítva)
+    _pf=$1
+    [ -d "$WINEPREFIX/dosdevices" ] || return 0
+    _mf="$WINEPREFIX/.fwr-places"
+    _views="$WINEPREFIX/fusion-places"
+    _user=${USER:-$(id -un)}
+    _desk="$WINEPREFIX/drive_c/users/$_user/Desktop"
+    # a korábban létrehozott (kezelt) hivatkozások eltávolítása — újraépül
+    if [ -r "$_mf" ]; then
+        while IFS= read -r _l; do [ -L "$_l" ] && rm -f "$_l"; done < "$_mf"
+    fi
+    : > "$_mf"
+    [ "$(prof_get "$_pf" places)" = none ] && return 0
+
+    # D: Adatok — a DATA felhasználói mappái (hivatkozások egy csak olvasható nézetben)
+    _dv="$_views/Adatok"
+    mkdir -p "$_dv" && chmod u+w "$_dv"
+    find "$_dv" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null
+    for _e in "$FWR_DATAROOT"/*; do
+        [ -e "$_e" ] || continue
+        _n=${_e##*/}
+        case "$DATA_HIDDEN" in *" $_n "*) continue ;; esac
+        [ -r "$_e" ] || continue
+        [ -d "$_e" ] && [ ! -x "$_e" ] && continue
+        ln -s "$_e" "$_dv/$_n"
+    done
+    printf 'Adatok\n' > "$_dv/.windows-label"
+    chmod 0555 "$_dv"
+    # C: a program saját környezete — névvel, hogy a Sajátgépben érthető legyen
+    [ -e "$WINEPREFIX/drive_c/.windows-label" ] || printf 'Program\n' > "$WINEPREFIX/drive_c/.windows-label"
+
+    _letters=" $(prof_keys "$_pf" drive | cut -d'|' -f1 | tr '[:upper:]' '[:lower:]' | tr '\n' ' ') "
+    for _d in "d|$_dv" "e|$FWR_MEDIA"; do
+        _l=${_d%%|*}; _t=${_d#*|}
+        case "$_letters" in *" $_l "*) continue ;; esac
+        rm -f "$WINEPREFIX/dosdevices/$_l:"
+        ln -s "$_t" "$WINEPREFIX/dosdevices/$_l:" && printf '%s\n' "$WINEPREFIX/dosdevices/$_l:" >> "$_mf"
+    done
+
+    _proj="$HOME/Projektek"; mkdir -p "$_proj"
+    _dl=$(xdg_dir XDG_DOWNLOAD_DIR "$HOME/Letöltések"); mkdir -p "$_dl"
+    if [ -d "$WINEPREFIX/drive_c/users/$_user" ]; then
+        # a Windows-mappák a valódi mappákra mutatnak
+        place_link "$WINEPREFIX/drive_c/users/$_user/Documents" "$_proj"
+        place_link "$WINEPREFIX/drive_c/users/$_user/Downloads" "$_dl"
+        # az Asztalon: a fájlválasztó fájának tetején, névvel
+        mkdir -p "$_desk"
+        for _d in "Projektek|$_proj" "Letöltések|$_dl" "Saját mappa|$HOME" "Adatok|$_dv" "Pendrive|$FWR_MEDIA"; do
+            _n=${_d%%|*}; _t=${_d#*|}
+            [ -e "$_desk/$_n" ] && [ ! -L "$_desk/$_n" ] && continue   # a felhasználó saját fájlja: marad
+            rm -f "$_desk/$_n"
+            ln -s "$_t" "$_desk/$_n" && printf '%s\n' "$_desk/$_n" >> "$_mf"
+        done
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # prepare: a környezet létrehozása / frissítése a profil alapján
 # ---------------------------------------------------------------------------
 cmd_prepare() {
@@ -98,8 +206,8 @@ cmd_prepare() {
     [ -w "$(dirname "$WINEPREFIX")" ] || fail "a $(dirname "$WINEPREFIX") nem írható"
     stamp="$WINEPREFIX/.fwr-stamp"
     # csak a környezetet érintő kulcsok számítanak (a leírás egyéb mezői — név, ikon — nem)
-    want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16)"
-    if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then return 0; fi
+    want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides|places)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16)"
+    if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then places_apply "$pf"; return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
     # grafikus munkamenetben értesítés (az előkészítés néhány másodperc — ne tűnjön lefagyásnak)
@@ -145,6 +253,17 @@ cmd_prepare() {
         echo
         echo "[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer]"
         echo "\"NoTrayItemsDisplay\"=dword:00000001"
+        # a fájlválasztó fája: a Linux-fájlrendszer („/”), a Lomtár, a Vezérlőpult és a Wine saját
+        # Dokumentumok-eleme nem látszik (a Dokumentumok a Projektekre mutat, az Asztalon „Projektek” néven)
+        # — printf: a dash echo-ja a visszaperjeleket értelmezné
+        for ns in 'HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer' \
+                  'HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer'; do
+            for g in '{9D20AAE8-0625-44B0-9CA7-71889C2254D9}' '{645FF040-5081-101B-9F08-00AA002F954E}' \
+                     '{450D8FBA-AD25-11D0-98A8-0800361B1103}'; do
+                printf '\n[-%s\\Desktop\\Namespace\\%s]\n' "$ns" "$g"
+            done
+            printf '\n[-%s\\MyComputer\\Namespace\\%s]\n' "$ns" '{21EC2020-3AEA-1069-A2DD-08002B30309D}'
+        done
     } > "$reg"
     "$WINE" regedit /S 'C:\fusion-settings.reg' >> "$LOG" 2>&1 \
         || fail "a beállítások írása nem sikerült (napló: $LOG)"
@@ -162,6 +281,7 @@ cmd_prepare() {
         mkdir -p "$target"
         rm -f "$dd/$l:"; ln -s "$target" "$dd/$l:"
     done
+    places_apply "$pf"
     "$WINESERVER" -k 2>/dev/null; "$WINESERVER" -w 2>/dev/null
     echo "$want" > "$stamp"
     say "fwr: kész."
@@ -264,6 +384,12 @@ cmd_check() {
     return $rc
 }
 
+cmd_places() {  # a helyek frissítése (a Programkezelő a fájl Windows-útja előtt hívja)
+    [ $# -eq 1 ] || fail "használat: fwr places <id>"
+    pf=$(profile "$1"); wine_env "$1" "$pf"
+    places_apply "$pf"
+}
+
 cmd_stop() {  # a program összes Windows-folyamatának leállítása (pl. eltávolítás előtt)
     [ $# -eq 1 ] || fail "használat: fwr stop <id>"
     pf=$(profile "$1"); wine_env "$1" "$pf"
@@ -292,5 +418,6 @@ case "$cmd" in
     run)     cmd_run "$@" ;;
     check)   cmd_check ;;
     stop)    cmd_stop "$@" ;;
-    *)       fail "ismeretlen parancs: $cmd (list, install, launch, run, stop, check, prepare)" ;;
+    places)  cmd_places "$@" ;;
+    *)       fail "ismeretlen parancs: $cmd (list, install, launch, run, stop, check, prepare, places)" ;;
 esac

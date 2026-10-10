@@ -11,7 +11,7 @@ Rectangle {
         width: parent.width
         spacing: 8
         Repeater {
-            model: shell.toasts
+            model: shell ? shell.toasts : []
             delegate: Rectangle {
                 id: toastItem
                 width: col.width

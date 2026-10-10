@@ -143,12 +143,12 @@ step_build() {
     # (a systemd-stub Secure Boot nélkül a boot menü által adott parancssort használja)
     mkdir -p "$esp/loader/entries"
     local id title extra n=0
-    while IFS='|' read -r id title extra; do
-        [ -n "$id" ] || continue
+    while IFS='|' read -r id title extra _fw; do
+        case "$id" in ""|\#*) continue ;; esac
         printf 'title %s\nsort-key zz-%s\nefi /EFI/Linux/%s\noptions %s %s\n' \
             "$title" "$id" "$uki" "$cm_main" "$extra" > "$esp/loader/entries/$id.conf"
         n=$((n + 1))
-    done <<< "${BOOT_MEASURE_ENTRIES:-}"
+    done < "$BOOT_MEASURE_FILE"
     ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
 
     # a telepítőnek: a céllemez ESP-jének állandó része (systemd-boot, loader.conf, bejegyzések, diagnosztika) —

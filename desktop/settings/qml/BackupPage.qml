@@ -89,7 +89,7 @@ SettingsPage {
         Repeater {
             model: p.s.backups
             InfoRow { icon: "archive-in"; label: modelData.when
-                      value: "FusionOS " + modelData.version + "   ·   " + modelData.sizeText + "   ·   " + modelData.volume.replace("/run/media/", "") +
+                      value: "FusionOS " + modelData.version + "   ·   " + modelData.sizeText + "   ·   " + modelData.volume.replace("/run/media/fusion/", "") +
                              (modelData.parts.length > 1 ? "   ·   " + modelData.parts.length + " darab" : "") }
         }
         InfoRow { visible: p.s.backups.length === 0; label: "—"; value: "a csatolt köteteken nincs FusionOS-mentés" }

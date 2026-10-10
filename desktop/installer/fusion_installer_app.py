@@ -48,7 +48,7 @@ def load_list():
         b["sizeText"] = ui.human_size(b.get("bytes", 0))
         b["dataText"] = ui.human_size(b.get("dataUsed", 0))
         b["when"] = b.get("date", "")[:16].replace("T", " ")
-        b["where"] = b.get("volume", "").replace("/run/media/", "")
+        b["where"] = b.get("volume", "").replace("/run/media/fusion/", "").replace("/run/media/", "")
     m = d.get("machine", {})
     if m.get("memory"):
         m["memoryText"] = ui.human_size(m["memory"])

@@ -1,4 +1,4 @@
-"""FusionOS — Fusion Desktop: az X11-ablakkezelés szabványos (EWMH) része
+"""FusionOS — Fusion API: ablakok (X11, EWMH) — a Fusion Shell és a Feladatkezelő közös alapja (M8)
 
 A Fusion Shell ezen át látja és kezeli az ablakokat — ablakkezelőtől függetlenül,
 az EWMH szabvány szerint (_NET_CLIENT_LIST, _NET_ACTIVE_WINDOW, _NET_CLOSE_WINDOW):
@@ -18,14 +18,18 @@ ATOMS = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING"
          "_NET_WM_STATE", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER",
          "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
          "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID",
-         "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW")
+         "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
+         "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW")
 
 
 class X11:
-    def __init__(self):
+    def __init__(self, events=False):
+        """events=True: a gyökérablak szerkezeti eseményei is (a Feladatkezelő pingjéhez)"""
         self.d = display.Display()
         self.root = self.d.screen().root
         self.a = {n: self.d.intern_atom(n) for n in ATOMS}
+        if events:
+            self.root.change_attributes(event_mask=X.SubstructureNotifyMask)
 
     def screen_size(self):
         g = self.root.get_geometry()
@@ -75,7 +79,7 @@ class X11:
     # --- ablaklista ---
     def _prop(self, win, name, typ=X.AnyPropertyType):
         try:
-            p = win.get_full_property(self.a[name], typ)
+            p = win.get_full_property(self.a[name] if isinstance(name, str) else name, typ)
             return p.value if p else None
         except Exception:
             return None

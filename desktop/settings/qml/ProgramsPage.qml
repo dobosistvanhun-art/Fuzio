@@ -39,8 +39,8 @@ SettingsPage {
         function onResult(tag, r) {
             if (tag === "dev") { p.dev = r; p.devLoaded = true; return }
             if (tag === "programs" && r.programs) {
-                p.progs = r.programs; p.roles = r.roles; p.recipes = r.recipes; p.inst = r.installers; p.job = r.job
-                settings.programSizes()
+                p.progs = r.programs; p.roles = r.roles; p.recipes = r.recipes; p.job = r.job
+                if (r.installers !== undefined) { p.inst = r.installers; settings.programSizes() }
             } else if (tag === "program-sizes" && !r.error) p.sizes = r
             else if (tag === "program-job") {
                 var was = p.job.running || p.pending

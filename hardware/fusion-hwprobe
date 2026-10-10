@@ -138,8 +138,17 @@ profile_get() {
     sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1 | sed 's/[[:space:]]*$//'
 }
 
+# kézi profilválasztás (mérési boot-bejegyzések, 0.0.30): fusion.display.profile=<id> — csak az ilyen azonosítójú
+# profil jöhet szóba; ha egyik adapterhez sem illeszkedik, a szokásos automatikus választás marad (figyelmeztetéssel)
+PROFILE_OVERRIDE=""
+for _w in $CMDLINE; do
+    case "$_w" in fusion.display.profile=*) PROFILE_OVERRIDE=${_w#*=} ;; esac
+done
+
+select_profiles() {
 for pf in "$PROFILES"/*.profile; do
     [ -r "$pf" ] || continue
+    if [ -n "$1" ] && [ "$(profile_get "$pf" id)" != "$1" ]; then continue; fi
     prio=$(profile_get "$pf" priority); prio=${prio:-500}
     kind=$(profile_get "$pf" match.kind); kind=${kind:-pci}
     if [ "$kind" = "firmware" ]; then
@@ -168,6 +177,20 @@ for pf in "$PROFILES"/*.profile; do
     done
     IFS=$oldifs
 done
+}
+OVERRIDE_STATE=""
+if [ -n "$PROFILE_OVERRIDE" ]; then
+    select_profiles "$PROFILE_OVERRIDE"
+    if [ -n "$BEST_FILE" ]; then
+        OVERRIDE_STATE="used"
+    else
+        OVERRIDE_STATE="nomatch"
+        BEST_PRIO=100000; BEST_FILE=""; BEST_SLOT=""; BEST_ID=""; BEST_BVGA=0; FW_PRIO=100000; FW_FILE=""
+        select_profiles ""
+    fi
+else
+    select_profiles ""
+fi
 
 # -----------------------------------------------------------------------------
 # 3) Döntés és állapot
@@ -181,9 +204,17 @@ if [ -n "$BEST_FILE" ]; then
         MESSAGE=$(profile_get "$CHOSEN" hint.multi_adapter)
         [ -n "$MESSAGE" ] || MESSAGE="Ez a profil egyetlen grafikus adaptert feltételez, de $ADAPTER_COUNT látható."
     fi
+    if [ "$OVERRIDE_STATE" = "used" ]; then
+        MESSAGE="Kézi profilválasztás (mérés): $PROFILE_OVERRIDE${MESSAGE:+ — $MESSAGE}"
+        [ "$STATUS" = "ok" ] && STATUS="manual"
+    fi
 elif [ -n "$FW_FILE" ]; then
     CHOSEN=$FW_FILE; STATUS="fallback"
     MESSAGE="Nincs illeszkedő PCI grafikus profil; a firmware framebuffer marad használatban."
+fi
+if [ "$OVERRIDE_STATE" = "nomatch" ]; then
+    STATUS="warning"
+    MESSAGE="A kért profil ($PROFILE_OVERRIDE) egyik grafikus adapterhez sem illeszkedik — automatikus választás.${MESSAGE:+ $MESSAGE}"
 fi
 
 # -----------------------------------------------------------------------------
@@ -349,6 +380,11 @@ if [ "$APPLY" -eq 1 ] && mkdir -p "$HW_DIR" 2>/dev/null; then
                 echo '    ModulePath "/usr/lib/xorg/modules"'
                 echo 'EndSection'
             fi
+            # csak a kiválasztott adapter: az Xorg ne vegye fel ugyanazt (vagy a másik kártyát) automatikusan második
+            # „GPU-képernyőként” — ZBook, NVIDIA 470: „(EE) NVIDIA(GPU-1): Failed to initialize the NVIDIA graphics device”
+            echo 'Section "ServerFlags"'
+            echo '    Option "AutoAddGPU" "false"'
+            echo 'EndSection'
             echo 'Section "Device"'
             echo '    Identifier "fusion-display"'
             echo "    Driver \"$XORG_DRIVER\""

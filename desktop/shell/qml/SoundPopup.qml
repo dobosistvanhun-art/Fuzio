@@ -9,7 +9,7 @@ Rectangle {
     border.color: Theme.border
     focus: true
     Keys.onEscapePressed: shell.togglePopup("sound")
-    readonly property var st: shell.sound
+    readonly property var st: shell ? shell.sound : ({})
     // a csúszka húzása közben ne ugráljon vissza a kiszolgáló régebbi értékére
     property bool dragging: vol.pressed || mic.pressed
     Timer { id: volT; interval: 60; onTriggered: shell.soundSet(Math.round(vol.value)) }

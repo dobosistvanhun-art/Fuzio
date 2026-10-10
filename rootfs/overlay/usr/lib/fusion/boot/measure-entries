@@ -1,0 +1,10 @@
+# FusionOS — mérési / tartalék boot-bejegyzések (egyetlen forrás: ebből készül a build ESP-je, és ebből pótolja
+# a fusion-update boot-check a lemezen hiányzókat — így egy frissítés után is megjelennek).
+# formátum: azonosító|menücím (systemd-boot)|a parancssorhoz fűzött elemek|UEFI-bejegyzés neve (F9 menü; üres: nincs)
+# A UEFI-név ékezet nélküli: a gépek firmware-menüje nem mindig tud ékezetet megjeleníteni.
+fusion-meres-kms-ki|FusionOS — mérés: KMS nélkül (nvidia-drm.modeset=0)|nvidia-drm.modeset=0|
+fusion-meres-xorg-root|FusionOS — tartalék: Xorg root-joggal|fusion.xorg.root=yes|
+fusion-konzol|FusionOS — szöveges konzol (Desktop nélkül)|fusion.desktop=0|
+fusion-meres-intel|FusionOS — mérés: Intel grafika (BIOS: Hybrid Graphics = Enable)|fusion.display.profile=intel-kms|Fusion meres - Intel grafika
+fusion-meres-nouveau|FusionOS — mérés: Nouveau (nyílt NVIDIA-driver)|fusion.display.profile=nvidia-nouveau|Fusion meres - Nouveau
+fusion-meres-szoftveres|FusionOS — mérés: Fusion-felület szoftveres rajzolással (memória)|fusion.ui.render=software|Fusion meres - szoftveres felulet

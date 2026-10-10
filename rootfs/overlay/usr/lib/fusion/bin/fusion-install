@@ -31,6 +31,8 @@ import tarfile
 import tempfile
 import time
 
+from fusion import hardware as fhw
+
 os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
 os.environ["LC_ALL"] = "C.UTF-8"
 ADMIN = "/usr/lib/fusion/bin/fusion-admin"
@@ -173,7 +175,7 @@ def payload():
 def machine():
     dmi = lambda k: read(f"/sys/class/dmi/id/{k}")      # noqa: E731
     mem = {l.split(":")[0]: l.split(":")[1] for l in read("/proc/meminfo").splitlines() if ":" in l}
-    env = dict(l.split("=", 1) for l in read("/run/fusion/hardware/display.env").splitlines() if "=" in l)
+    env = fhw.display()["raw"]      # Fusion API: a display.env helyes (idézőjel nélküli) olvasása
     ac = [read(p + "/online") for p in glob.glob("/sys/class/power_supply/*") if read(p + "/type") == "Mains"]
     bat = [p for p in glob.glob("/sys/class/power_supply/*") if read(p + "/type") == "Battery"]
     return {"model": (dmi("sys_vendor") + " " + dmi("product_name")).strip() or "ismeretlen gép",
@@ -264,7 +266,7 @@ def unmount_disk(disk):
         dev, mp = line.split()[:2]
         mp = mp.replace("\\040", " ")
         if os.path.realpath(dev).startswith(f"/dev/{disk}") and dev != "tmpfs":
-            if not mp.startswith("/run/media/"):
+            if not mp.startswith("/run/media/fusion/"):
                 raise InstallError(f"a lemez egy kötetét a rendszer használja: {mp}")
             r = run([ADMIN, "unmount", mp], check=False)
             if r.returncode != 0:
@@ -344,7 +346,7 @@ def wifi_known():
 
 def backups():
     out = []
-    for info_f in sorted(glob.glob("/run/media/*/FusionOS-mentes/*.info.json"), reverse=True):
+    for info_f in sorted(glob.glob("/run/media/fusion/*/FusionOS-mentes/*.info.json"), reverse=True):
         try:
             with open(info_f) as f:
                 info = json.load(f)
@@ -521,7 +523,7 @@ def cmd_run(disk, mode, confirm, fupd=None, restore=None, wifi=False):
                     raise InstallError(f"az ESP-ről hiányzik: {need}")
             say(f"ESP: systemd-boot + {uki}")
         finally:
-            os.sync()
+            fu.syncfs(t)
             run(["umount", t], check=False)
     r = run(["fsck.vfat", "-n", pesp], check=False)
     if r.returncode not in (0, 1):
@@ -541,7 +543,7 @@ def cmd_run(disk, mode, confirm, fupd=None, restore=None, wifi=False):
                     if wifi:
                         copy_wifi(t)
                 finally:
-                    os.sync()
+                    fu.syncfs(t)
                     run(["umount", t], check=False)
     else:
         r = run(["e2fsck", "-n", pdata], check=False, timeout=1800)
@@ -673,7 +675,7 @@ def cmd_media(fupd, disk, confirm):
             with open(os.path.join(t, "loader/loader.conf"), "w") as f:
                 f.write("timeout 3\ndefault fusion-installer*\nconsole-mode keep\neditor yes\n")
         finally:
-            os.sync()
+            fu.syncfs(t)
             run(["umount", t], check=False)
     progress(68)
 
@@ -690,6 +692,8 @@ def cmd_media(fupd, disk, confirm):
                         break
                     o.write(b)
                     done += len(b)
+                    if done % (32 << 20) == 0:
+                        os.fdatasync(o.fileno())      # lásd fu.write_slot: kis adagokban a pendrive-ra
                     pct = done * 100 // total
                     if pct >= last + 5:
                         last = pct - pct % 5
@@ -702,7 +706,7 @@ def cmd_media(fupd, disk, confirm):
                         "Új telepítés, újratelepítés a DATA megőrzésével, vagy új telepítés egy mentésből.\n"
                         "A .fupd kicserélhető egy újabbra (egyszerre csak egy legyen itt).\n")
         finally:
-            os.sync()
+            fu.syncfs(t)
             run(["umount", t], check=False)
     r = run(["fsck.vfat", "-n", ppay], check=False)
     if r.returncode not in (0, 1):
@@ -730,7 +734,7 @@ def cmd_report():
             say(r.stdout.strip().splitlines()[-2] if r.stdout.strip() else "a hibajelentés nem készült el")
             say("a telepítő pendrive „FUSIONINST” kötetén, a hibajelentes mappában")
         finally:
-            os.sync()
+            fu.syncfs(t)
             run(["umount", t], check=False)
 
 
@@ -764,6 +768,10 @@ def main(argv):
         return 1
     except subprocess.TimeoutExpired as e:
         print(f"fusion-install: időtúllépés: {e.cmd[0]}", file=sys.stderr, flush=True)
+        return 1
+    except OSError as e:
+        print(f"fusion-install: lemezhiba: {e.strerror or e}{' (' + e.filename + ')' if e.filename else ''} — a lemez "
+              "nem válaszol: kihúzták, kilazult, vagy meghibásodott. Másik USB-port vagy pendrive.", file=sys.stderr, flush=True)
         return 1
     return 0
 

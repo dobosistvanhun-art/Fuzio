@@ -8,7 +8,7 @@ személyes fájlnevek.
     fusion-report [-d "a hiba leírása"] [-o mappa]    a jelentés (alapból a Letöltések mappába)
     fusion-report --system                            a rendszeroldali rész (root; a fusion-admin hívja)
 
-Konzolról is fut (pl. ha a felület nem indul: Ctrl+Alt+F2, bejelentkezés, fusion-report -o /run/media/…).
+Konzolról is fut (pl. ha a felület nem indul: Ctrl+Alt+F2, bejelentkezés, fusion-report -o /run/media/fusion/…).
 """
 import datetime
 import glob
@@ -22,6 +22,8 @@ import subprocess
 import sys
 import time
 
+from fusion import kv as fkv
+
 os.environ["LC_ALL"] = "C.UTF-8"
 os.environ["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 ADMIN = "/usr/lib/fusion/bin/fusion-admin"
@@ -29,6 +31,14 @@ FUSION_UNITS = ["fusion-hardware", "fusion-boot-check", "fusion-klipper", "fusio
                 "systemd-networkd", "systemd-resolved", "systemd-timesyncd", "systemd-logind", "dbus", "getty@tty1"]
 USER_UNITS = ["fusion-drive", "pipewire", "pipewire-pulse", "wireplumber", "xdg-desktop-portal"]
 MAX_LINE = 400
+
+
+def render_text():
+    """a Fusion-felület rajzolása (Beállítások → Kijelző, vagy a mérési boot-bejegyzés) — a Fusion API-ból"""
+    from fusion import ui as fui
+    rf = os.path.join(os.path.expanduser("~") if os.getuid() else "/home/fusion", ".config/fusion/render")
+    t = "szoftveres (processzor)" if fui.render_mode(rf) == "software" else "grafikus kártya (OpenGL)"
+    return t + (" — a boot-bejegyzés szerint" if fui.render_forced() else "")
 
 
 def run(cmd, timeout=20, env=None):
@@ -54,8 +64,8 @@ def tail(path, n):
 
 
 def kv(path):
-    return {k: v.strip().strip('"').strip("'") for k, v in
-            (l.split("=", 1) for l in read(path).splitlines() if "=" in l and not l.startswith("#"))}
+    """kulcs=érték / shell-idézett fájlok — a Fusion API olvasójával (fusion.kv)"""
+    return fkv.read(path, shell=True)
 
 
 def human(n):
@@ -268,6 +278,63 @@ def indent(text, n=2):
     return [(" " * n + l)[:MAX_LINE] for l in (text or "").splitlines()]
 
 
+# --- Wi-Fi (0.0.36): a megszakadások okának megtalálásához ----------------------------------------------
+WIFI_KERNEL = re.compile(r"wlan|wlp|wlx|iwl|ieee80211|cfg80211|mac80211|deauth|disassoc|beacon|"
+                         r"Microcode SW error|firmware.*(crash|error|restart)", re.I)
+WIFI_ASSOC = re.compile(r": associated$|: associated |Associated with", re.I)
+WIFI_DROP = re.compile(r"deauthenticat|disassociat|Connection to AP .* lost|beacon loss|disconnect", re.I)
+
+
+def wifi_devices():
+    try:
+        return [d for d in sorted(os.listdir("/sys/class/net")) if os.path.isdir(f"/sys/class/net/{d}/wireless")]
+    except OSError:
+        return []
+
+
+def wifi_kernel_lines():
+    k = run(["journalctl", "-k", "-b", "-q", "--no-pager", "-o", "short-iso"], timeout=30).splitlines()
+    return [l for l in k if WIFI_KERNEL.search(l)]
+
+
+def wifi_counts():
+    """(kapcsolódások, megszakadás-jellegű üzenetek) ennél az indításnál — a kernel naplójából"""
+    k = wifi_kernel_lines()
+    return len([l for l in k if WIFI_ASSOC.search(l)]), len([l for l in k if WIFI_DROP.search(l)])
+
+
+def wifi_section():
+    L = []
+    devs = wifi_devices()
+    if not devs:
+        return ["  nincs Wi-Fi-eszköz"]
+    for d in devs:
+        drv = os.path.basename(os.path.realpath(f"/sys/class/net/{d}/device/driver"))
+        ps = run(["iw", "dev", d, "get", "power_save"], timeout=5).strip()
+        L.append(f"  {d}: meghajtó: {drv or '?'}, energiatakarékosság: {ps.split(':')[-1].strip() if ps else '? (iw)'}")
+        L += indent(run(["iw", "dev", d, "link"], timeout=5), 4)
+    par = []
+    for mod, prm in (("iwlwifi", "power_save"), ("iwlwifi", "power_level"), ("iwlwifi", "uapsd_disable"),
+                     ("iwlwifi", "11n_disable"), ("iwlwifi", "swcrypto"), ("iwlwifi", "bt_coex_active"),
+                     ("iwlmvm", "power_scheme")):
+        v = read(f"/sys/module/{mod}/parameters/{prm}")
+        if v:
+            par.append(f"{mod}.{prm}={v}")
+    if par:
+        L.append("  Modulparaméterek: " + " ".join(par))
+    assoc, drops = wifi_counts()
+    L.append(f"  Ennél az indításnál: kapcsolódás {assoc}×, megszakadásra utaló kernelüzenet {drops}×")
+    L.append("  Kernel — Wi-Fi üzenetek (utolsó 60):")
+    L += indent("\n".join(wifi_kernel_lines()[-60:]) or "(nincs)", 4)
+    L.append("  iwd napló (utolsó 60, a kártya induláskori képességlistája nélkül):")
+    iw = run(["journalctl", "-b", "-u", "iwd", "-q", "--no-pager", "-o", "short-iso", "-n", "600"], timeout=30).splitlines()
+    iw = [l for l in iw if not re.match(r"^\S+ \S+ \S+: (\s|Wiphy:|Permanent Address|Bands:|Ciphers:|Supported iftypes|"
+                                        r"Interface Types|Supported Bands|Max HE)", l)]
+    L += indent("\n".join(iw[-60:]) or "(nincs)", 4)
+    return L
+
+
+
 def quick_checks(sysinfo):
     """gyors, determinisztikus ellenőrzések: [OK] / [FIGY] / [HIBA] / [--]"""
     res = []
@@ -301,6 +368,10 @@ def quick_checks(sysinfo):
                                               "&& iwctl station $d show; done"], timeout=8))
     stt = re.search(r"State\s+(\S+)", wl)
     add("OK" if stt and stt.group(1) == "connected" else "--", "Wi-Fi: " + (stt.group(1) if stt else "nincs Wi-Fi-eszköz / iwd"))
+    if wifi_devices():
+        assoc, drops = wifi_counts()
+        add("OK" if assoc <= 1 and drops == 0 else "FIGY",
+            f"Wi-Fi ennél az indításnál: {assoc}× kapcsolódott, {drops} megszakadásra utaló üzenet (részletek: WI-FI)")
     defroute = run(["ip", "route", "show", "default"], timeout=5).strip()
     add("OK" if defroute else "--", "hálózat: " + ("van alapértelmezett útvonal" if defroute else "nincs kapcsolat"))
     for role in ("laser", "printer"):
@@ -343,6 +414,7 @@ def build(desc, sysinfo, m):
          f"Grafika:      " + ("; ".join(re.sub(r"^\S+\s+", "", g) for g in gpu) or "?"),
          f"Videódriver:  " + (nv[0].split("  ", 1)[-1].strip() if nv else "nincs NVIDIA-driver betöltve")
          + f"   ·   profil: {env.get('FUSION_DISPLAY_PROFILE', '?')} ({env.get('FUSION_DISPLAY_STATUS', '?')})",
+         f"Felület:      {render_text()}",
          "", "A felhasználó leírása:"]
     L += indent(desc.strip(), 2) if desc.strip() else ["  (nincs megadva)"]
 
@@ -373,7 +445,8 @@ def build(desc, sysinfo, m):
     L += section("LEMEZEK")
     L += indent(run(["lsblk", "-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS,TRAN,MODEL"]), 2)
     L.append("")
-    L += indent(run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "efivarfs"]), 2)
+    L += indent(run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "efivarfs",
+                       "-x", "fuse", "-x", "fuse.rclone", "-x", "fuse.portal", "-x", "fuse.gvfsd-fuse"]), 2)
     if sysinfo and sysinfo.get("smart"):
         L.append("  Lemezállapot (SMART):")
         L += ["    " + x for x in sysinfo["smart"]]
@@ -384,6 +457,9 @@ def build(desc, sysinfo, m):
     L += indent(re.sub(r"\x1b\[[0-9;]*m", "", run(["sh", "-c", "for d in $(ls /sys/class/net); do [ -d /sys/class/net/$d/wireless ] "
                                                        "&& iwctl station $d show; done"], timeout=8)), 2)
     L.append("  DNS: " + " ".join(re.findall(r"^nameserver\s+(\S+)", read("/etc/resolv.conf"), re.M)))
+
+    L += section("WI-FI")
+    L += wifi_section()
 
     L += section("RENDSZERFRISSÍTÉS (A/B)")
     L += indent(sysinfo.get("update", "") if sysinfo else read("/run/fusion/boot-state") or "nincs adat", 2)

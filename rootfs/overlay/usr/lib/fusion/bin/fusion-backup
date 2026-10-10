@@ -22,7 +22,7 @@ import time
 
 os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
 os.environ["LC_ALL"] = "C.UTF-8"
-MEDIA = "/run/media"
+MEDIA = "/run/media/fusion"   # = fusion.MEDIA
 DATA = os.environ.get("FUSION_BACKUP_DATA", "/data")    # a másik érték csak fejlesztői próbához (a sudo nem engedi át)
 DIR = "FusionOS-mentes"
 PART = 3900 * 1024 * 1024

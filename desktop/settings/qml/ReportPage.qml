@@ -114,7 +114,7 @@ SettingsPage {
     }
     Text {
         width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11
-        text: "Ha a felület nem indul: Ctrl+Alt+F2, bejelentkezés, majd: fusion-report -o /run/media/<pendrive>  " +
+        text: "Ha a felület nem indul: Ctrl+Alt+F2, bejelentkezés, majd: fusion-report -o /run/media/fusion/<pendrive>  " +
               "(a jelentés a pendrive-ra kerül). Megosztás előtt érdemes átolvasni."
     }
 }

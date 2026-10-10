@@ -28,7 +28,10 @@ SettingsPage {
                 label: modelData.name
                 value: (modelData.present ? "Csatlakoztatva: " + modelData.dev + "  →  /dev/fusion/" + modelData.role
                                           : (modelData.key ? "Nincs csatlakoztatva" : "Nincs hozzárendelve (az első illeszkedő eszköz automatikusan megkapja)"))
-                       + (modelData.com ? "\nWindows-programoknak: " + modelData.com : "") + (modelData.key ? "\nAzonosító: " + modelData.key : "")
+                       + ((modelData.programs || []).length
+                          ? "\nWindows-programok: " + modelData.programs.map(x => (x.name || x.id) + " → " + x.com).join(", ")
+                          : (modelData.com ? "\nWindows-programoknak ajánlott: " + modelData.com + " (Programkezelő → Eszközök)" : ""))
+                       + (modelData.key ? "\nAzonosító: " + modelData.key : "")
                 valueColor: modelData.present ? Theme.ok : Theme.text
                 FButton { visible: modelData.key !== ""; text: "Elfelejtés"; onClicked: settings.deviceForget(modelData.role) }
             }

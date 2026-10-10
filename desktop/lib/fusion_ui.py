@@ -77,11 +77,10 @@ def admin(*args, timeout=60):
     return run(["sudo", "-n", ADMIN] + [str(a) for a in args], timeout=timeout)
 
 
-def notify(summary, body="", icon="", app="FusionOS", timeout_ms=-1):
-    """értesítés a Fusion Shellnek (org.freedesktop.Notifications)"""
-    return run(["busctl", "--user", "--", "call", "org.freedesktop.Notifications",
-                "/org/freedesktop/Notifications", "org.freedesktop.Notifications", "Notify",
-                "susssasa{sv}i", app, "0", icon, summary, body, "0", "0", str(timeout_ms)], timeout=5)
+def notify(summary, body="", icon="", app="FusionOS", timeout_ms=-1, urgency="normal"):
+    """értesítés a Fusion Shellnek — a Fusion API egyetlen küldőjén át (fusion.notify)"""
+    from fusion import notify as _n
+    return _n.send(summary, body, icon, app, urgency, timeout_ms)
 
 
 def load_json(path, default):
@@ -119,8 +118,17 @@ class Sys(QObject):
         return fusion_version()
 
 
+# a rajzolási mód a Fusion API-ban (Qt nélkül, a parancssor és a hibajelentés is ezt használja)
+from fusion.ui import RENDER_FILE, render_forced, render_mode  # noqa: E402,F401
+
+
 def create_app(name, title, icon="app"):
     """QGuiApplication + QML-motor a FusionUI modullal"""
+    if render_mode() == "software":
+        # mérés (0.0.30): a Qt Quick szoftveres rajzolója OpenGL nélkül — kevesebb memória, több CPU.
+        # API-hívás, nem környezeti változó: a Fusion-programokból indított más programokat nem érinti.
+        from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
+        QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Software)
     app = QGuiApplication(sys.argv)
     app.setApplicationName(name)
     app.setApplicationDisplayName(title)
