@@ -28,3 +28,10 @@ XTerm*color12: #79c0ff
 XTerm*color13: #d2a8ff
 XTerm*color14: #56d4dd
 XTerm*color15: #f0f6fc
+! másolás / beillesztés (0.0.39): a kijelölés azonnal a vágólapra kerül (selectToClipboard);
+! Ctrl+Shift+C másol, Ctrl+V és Ctrl+Shift+V (és Shift+Insert) beilleszt. A Ctrl+C marad a futó parancs megszakítása.
+XTerm*VT100.translations: #override \n\
+    Ctrl Shift <Key>C: copy-selection(CLIPBOARD) \n\
+    Ctrl Shift <Key>V: insert-selection(CLIPBOARD) \n\
+    Ctrl ~Shift <Key>v: insert-selection(CLIPBOARD) \n\
+    Shift <Key>Insert: insert-selection(CLIPBOARD)
