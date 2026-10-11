@@ -320,6 +320,26 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     a=$(prun fusion-programs assoc /tmp/x.fprb | cut -f1)
     [ -n "$a" ] && prun fusion-run "$a" /tmp/x.fprb; sleep 2
     echo "FUSION-PROG: NATIVE assoc=$a out=$(cat /tmp/fusion-prog-native.txt 2>/dev/null)"
+    # 0.0.39: URL-séma (mint a Printables → PrusaSlicer): a böngésző linkje a program receptjéből bejegyzett
+    # x-scheme-handler-en át a programhoz jut, a kapcsolóival (url_args)
+    install -d -o fusion -g fusion $P/urlproba
+    printf '#!/bin/sh\necho "$@" > /tmp/fusion-url-proba.txt\n' > $P/urlproba/urlproba; chmod 755 $P/urlproba/urlproba
+    printf 'id = urlproba\nname = URL próba\ntype = native\nexec = urlproba\nscheme = fusionproba\nurl_args = --single-instance-on-url\n' > $P/urlproba/program.fusion
+    chown -R fusion:fusion $P/urlproba; rm -f /tmp/fusion-url-proba.txt
+    prun fusion-programs sync >/dev/null 2>&1
+    prun xdg-open 'fusionproba://open?file=https%3A%2F%2Fmedia.printables.com%2Fx.stl' >/dev/null 2>&1; sleep 2
+    xo=$(cat /tmp/fusion-url-proba.txt 2>/dev/null); rm -f /tmp/fusion-url-proba.txt
+    # a Flatpak-programok (Firefox) útja: az OpenURI portál — tájékoztató (a portál rákérdezhet)
+    # (lassú, KVM nélküli gépen a portál első indulása sokáig tarthat — türelmes várakozás)
+    pres=$(timeout 90 runuser -u fusion -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0 \
+        busctl --user --timeout=80 call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
+        org.freedesktop.portal.OpenURI OpenURI 'ssa{sv}' "" "fusionproba://open?file=portal" 0 2>&1 | tr '\n' ' ')
+    i=0; while [ $i -lt 40 ] && [ ! -s /tmp/fusion-url-proba.txt ]; do sleep 1; i=$((i + 1)); done
+    po=$(cat /tmp/fusion-url-proba.txt 2>/dev/null)
+    echo "FUSION-URL: portal-hívás: ${pres:-?} várakozás=${i}s választás=$(prun flatpak permissions desktop-used-apps x-scheme-handler/fusionproba 2>&1 | tr '\t\n' '| ')"
+    [ -n "$po" ] || journalctl --user -M fusion@ -b --no-pager -q -n 15 2>/dev/null | grep -i portal | sed 's/^/FUSION-URL:   /'
+    echo "FUSION-URL: handler=$(prun xdg-mime query default x-scheme-handler/fusionproba) xdg-open=$xo portal=${po:-nincs}"
+    prun fusion-programs remove urlproba >/dev/null 2>&1
     echo "FUSION-PROG: LIST $(prun fusion-programs list --json | python3 -c 'import json,sys; print(" ".join(p["id"] + ":" + p["type"] for p in json.load(sys.stdin)))')"
     # a Start menü programlistája a leírásokból
     echo "FUSION-PROG: APPS $(prun env QT_QPA_PLATFORM=offscreen fusion-settings --selftest 2>/dev/null | sed -n 's/.*FUSION-SETTINGS: APPS //p')"

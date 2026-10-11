@@ -74,6 +74,7 @@ import io  # noqa: E402
 import json  # noqa: E402
 import time  # noqa: E402
 for f in [os.path.join(ROOT, "fwr", "profiles", x) for x in os.listdir(os.path.join(ROOT, "fwr", "profiles"))] + \
+        [os.path.join(ROOT, "programs", "recipes", x) for x in os.listdir(os.path.join(ROOT, "programs", "recipes"))] + \
         [os.path.join(ROOT, "devices", "roles", x) for x in os.listdir(os.path.join(ROOT, "devices", "roles"))]:
     probs = schema.validate_file(f)
     check(f"schema: {os.path.basename(f)} érvényes", not probs, probs)
@@ -199,5 +200,27 @@ try:
 except ValueError:
     check("trash: érvénytelen napszám elutasítva", True)
 check("trash.empty", ftrash.empty() == 1 and ftrash.state()["count"] == 0)
+# --- 0.0.39: URL-séma (Printables → PrusaSlicer): Linux-recept, XDG-bejegyzés, indítóparancs ---
+import fusion_programs as fpm  # noqa: E402
+ex = os.path.join(T, "fpexports")
+os.makedirs(os.path.join(ex, "applications"))
+open(os.path.join(ex, "applications", "com.prusa3d.PrusaSlicer.desktop"), "w").write(
+    "[Desktop Entry]\nName=PrusaSlicer\nExec=prusa-slicer %F\nMimeType=model/stl;model/3mf;\nCategories=Graphics;3DGraphics;\n")
+fpm.FLATPAK_EXPORTS = ex
+fpm.APPS_DIR = os.path.join(T, "apps")
+fpm.HOME = os.path.join(T, "home")
+mm = fpm._flatpak_manifest("com.prusa3d.PrusaSlicer", "2.9.6")
+check("Linux-recept: URL-séma a leírásban", mm.get("scheme") == "prusaslicer" and mm.get("url_args") == "--single-instance-on-url"
+      and mm.get("recipe") == "com.prusa3d.PrusaSlicer.recipe" and mm["id"] == "prusaslicer" and mm["type"] == "flatpak", mm)
+fpm.sync_desktop()
+dtop = open(os.path.join(fpm.APPS_DIR, "fusion-prusaslicer.desktop")).read()
+mapps = open(os.path.join(fpm.HOME, ".config", "mimeapps.list")).read()
+check("XDG: x-scheme-handler/prusaslicer → fusion-prusaslicer.desktop", "x-scheme-handler/prusaslicer;" in dtop
+      and "x-scheme-handler/prusaslicer=fusion-prusaslicer.desktop" in mapps and "Exec=fusion-run prusaslicer %U" in dtop, dtop + mapps)
+u = "prusaslicer://open?file=https%3A%2F%2Fmedia.printables.com%2Fx.stl"
+cmd, _cwd = fpm.command("prusaslicer", [u])
+check("indítás URL-lel: --single-instance-on-url", cmd == ["flatpak", "run", "com.prusa3d.PrusaSlicer", "--single-instance-on-url", u], cmd)
+cmd, _cwd = fpm.command("prusaslicer", [])
+check("indítás URL nélkül: kapcsoló nélkül", cmd == ["flatpak", "run", "com.prusa3d.PrusaSlicer"], cmd)
 print(f"Eredmény: {ok} sikeres, {fail} hibás")
 sys.exit(1 if fail else 0)

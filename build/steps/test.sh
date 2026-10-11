@@ -370,6 +370,7 @@ step_test() {
             _check "$log" "FUSION-PLACES: HIDDEN root=0 trash=0 control=0" "a „/”, a Lomtár és a Vezérlőpult nem látszik" || ok_run=0
             _check "$log" "FUSION-PLACES: RUN-DATA rc=0 args=.*D:.import.proba adat.lbrn" "indítás DATA-n lévő fájllal: D:\\import\\…" || ok_run=0
             _check "$log" "FUSION-PROG: DETECT archive win64" "telepítőfájl felismerése" || ok_run=0
+            _check "$log" "FUSION-URL: handler=fusion-urlproba.desktop xdg-open=--single-instance-on-url fusionproba://open?file=https%3A%2F%2Fmedia.printables.com%2Fx.stl portal=--single-instance-on-url fusionproba://open?file=portal" "URL-séma: a böngésző linkje a programhoz jut, a portálon át is kérdés nélkül (Printables → PrusaSlicer)" || ok_run=0
             _check "$log" "FUSION-PROG: NATIVE assoc=fprobaprog out=/tmp/x.fprb" "Linux-program archívumból, fájltársítás (X-Fusion-Open)" || ok_run=0
             _check "$log" "FUSION-PROG: APPS prog-fprobaprog,prog-fusionteszt,prog-lightburn,printer" "a Start menü a leírásokból" || ok_run=0
             _check "$log" "FUSION-PROG: REMOVED left=desktop=0 fwr-lightburn=nincs" "eltávolítás: mappa, Windows-környezet, Start menü bejegyzés" || ok_run=0

@@ -7,6 +7,7 @@ a szélein lévő szóközök nélkül. Ellenőrzés: `fusion validate <fájl>�
 | --- | --- | --- |
 | `program.fusion` | `/data/programs/<id>/program.fusion` | a Programkezelő (telepítéskor, a Beállításokban) |
 | `<id>.fwr` — recept | `/usr/lib/fusion/fwr/profiles/` | a FusionOS (rendszerkép): ismert Windows-programok gyári beállításai |
+| `<Flatpak-azonosító>.recipe` — Linux-recept | `/usr/lib/fusion/programs/recipes/` | a FusionOS (rendszerkép): ismert Linux-programok kiegészítései (pl. URL-séma) |
 | `NN-<szerep>.role` | `/usr/lib/fusion/devices/roles/` | a FusionOS (rendszerkép): eszközszerepek |
 
 ## program.fusion és *.fwr recept
@@ -40,6 +41,8 @@ a szélein lévő szóközök nélkül. Ellenőrzés: `fusion validate <fájl>�
 | `appid` |  | appid | flatpak | Flatpak-azonosító (com.prusa3d.PrusaSlicer) |
 | `installation` |  | enum (user, system) | flatpak | Flatpak-telepítés helye |
 | `exec` |  | relpath | appimage, native | az indítófájl a program mappájához képest |
+
+A `scheme` és az `url_args` kulcs (0.0.39): a program által kezelt URL-sémák (`prusaslicer`) és az URL-es indítás kapcsolói (`--single-instance-on-url`); az XDG-bejegyzésbe `x-scheme-handler/<séma>` kerül.
 
 Típusonként kötelező: `win64`: `exe`; `flatpak`: `appid`; `appimage`, `native`: `exec`.
 `port.COMn`: n = 1…9, az érték egy szerep neve (`port.COM3 = laser`). `drive.X`: X = D…Y.

@@ -56,6 +56,8 @@ PROGRAM_FIELDS = {
     "installed":   _f("text", "a telepítés ideje (a Programkezelő írja)"),
     "source":      _f("text", "honnan települt (fájlnév, flathub …)"),
     "recipe":      _f("text", "a recept fájlneve, amelyből a leírás készült"),
+    "scheme":      _f("schemes", "URL-sémák, amelyeket a program kezel, szóközzel (prusaslicer) — a böngésző linkjei ide jutnak"),
+    "url_args":    _f("args", "kapcsolók URL-es indításhoz (--single-instance-on-url)"),
     # win64
     "exe":         _f("winpath", "a program Windows-útja (C:\\…\\x.exe)", types=["win64"]),
     "windows":     _f("enum", "a jelentett Windows-verzió", values=WINDOWS_VERSIONS, types=["win64"]),
@@ -117,6 +119,12 @@ def _check_value(kind, v, values=()):
     if kind == "usbids":
         bad = [e for e in v.split() if not USB_RE.match(e.lower())]
         return None if v.split() and not bad else "vid:pid alak kell (1a86:7523)"
+    if kind == "schemes":
+        bad = [e for e in v.split() if not re.match(r"^[a-z][a-z0-9+.-]*$", e) or e in ("http", "https", "file")]
+        return None if v.split() and not bad else "URL-séma kisbetűvel (prusaslicer); http/https/file nem"
+    if kind == "args":
+        bad = [e for e in v.split() if not re.match(r"^--?[A-Za-z0-9][A-Za-z0-9_=.-]*$", e)]
+        return None if not bad else "csak kapcsolók (--valami)"
     if kind == "com":
         return None if COM_RE.match(v) else "COM1 … COM9"
     if kind == "appid":
@@ -167,7 +175,7 @@ def validate_role(data):
 
 def kind_of(path):
     b = os.path.basename(path)
-    if b.endswith(".fwr"):
+    if b.endswith(".fwr") or b.endswith(".recipe"):
         return "recipe"
     if b.endswith(".role"):
         return "role"

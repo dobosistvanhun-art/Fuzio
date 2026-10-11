@@ -39,6 +39,8 @@ import zipfile
 
 PROGRAMS = os.environ.get("FUSION_PROGRAMS_DIR", "/data/programs")
 RECIPES = os.environ.get("FWR_PROFILES", "/usr/lib/fusion/fwr/profiles")
+# Linux-programok receptjei (Flatpak-azonosító szerint): ugyanaz a séma; pl. URL-sémák (scheme), indítási kapcsolók
+LINUX_RECIPES = os.environ.get("FUSION_PROGRAM_RECIPES", os.path.join(os.path.dirname(os.path.realpath(__file__)), "recipes"))
 FWR_DATA = os.environ.get("FWR_DATA", "/data/fwr")
 HOME = os.path.expanduser("~")
 APPS_DIR = os.path.join(HOME, ".local/share/applications")
@@ -133,6 +135,32 @@ def recipes():
             r["recipe_file"] = f
             out.append(r)
     return out
+
+
+def linux_recipe(appid):
+    """a Flatpak-program receptje (<appid>.recipe), vagy None"""
+    if not appid or not re.match(r"^[A-Za-z0-9_.-]+$", appid):
+        return None
+    f = os.path.join(LINUX_RECIPES, appid + ".recipe")
+    r = read_kv(f) if os.path.isfile(f) else {}
+    if not r:
+        return None
+    r["recipe_file"] = f
+    return r
+
+
+def _apply_linux_recipe(m):
+    """a recept kulcsai a leírásba (az azonosság — id, név, típus — a leírásé marad) → True, ha változott"""
+    rec = linux_recipe(m.get("appid"))
+    if not rec:
+        return False
+    new = _fschema.apply_recipe({k: v for k, v in rec.items() if k not in ("id", "name", "type", "appid")}, m)
+    new["recipe"] = os.path.basename(rec["recipe_file"])
+    if new == m:
+        return False
+    m.clear()
+    m.update(new)
+    return True
 
 
 def new_id(name):
@@ -674,6 +702,11 @@ def _flatpak_manifest(appid, version="", source="flathub", installation="user"):
         dst = os.path.join(PROGRAMS, pid, "icon" + os.path.splitext(best)[1])
         shutil.copy2(best, dst)
         m["icon"] = os.path.basename(dst)
+    old = manifest(pid) if existing else {}
+    for k, v in (old or {}).items():          # a korábbi leírás kiegészítései (recept, felhasználói beállítás) maradnak
+        if k not in m and k != "dir":
+            m[k] = v
+    _apply_linux_recipe(m)
     write_manifest(m)
     return manifest(pid)
 
@@ -914,6 +947,11 @@ def sync(log=None):
         for p in programs():
             if p.get("type") == "flatpak":
                 known[p.get("appid")] = p
+        for appid, p in known.items():         # recept (pl. URL-séma) a már meglévő leírásokra is
+            if appid in have and _apply_linux_recipe(p):
+                p.pop("dir", None)
+                write_manifest(p)
+                _log(log, f"Recept alkalmazva: {p.get('name', appid)} ({p['recipe']})")
         for appid, (ver, inst) in sorted(have.items()):
             if appid not in known:
                 m = _flatpak_manifest(appid, ver, "flatpak (parancssor)", inst)
@@ -965,6 +1003,7 @@ def sync_desktop():
     os.makedirs(APPS_DIR, exist_ok=True)
     keep = set()
     defaults = {}
+    schemes = {}
     for m in programs():
         fn = os.path.join(APPS_DIR, f"fusion-{m['id']}.desktop")
         keep.add(fn)
@@ -973,6 +1012,9 @@ def sync_desktop():
             mt = mimetypes.guess_type("x" + ext)[0]
             if mt and mt not in mimes:
                 mimes.append(mt)
+        for sch in m.get("scheme", "").split():       # URL-séma (pl. prusaslicer://) — a böngészőből ide jut
+            if re.match(r"^[a-z][a-z0-9+.-]*$", sch) and "x-scheme-handler/" + sch not in mimes:
+                mimes.append("x-scheme-handler/" + sch)
         lines = ["[Desktop Entry]", "Type=Application", f"Name={m.get('name', m['id'])}",
                  f"Exec=fusion-run {m['id']} %U", f"Comment={m.get('comment', '')}",
                  f"Icon={icon_path(m) or 'application-x-executable'}", "Terminal=false",
@@ -982,6 +1024,9 @@ def sync_desktop():
             f.write("\n".join(lines) + "\n")
         for mt in mimes:
             defaults.setdefault(mt, os.path.basename(fn))
+            if mt.startswith("x-scheme-handler/"):
+                schemes[mt] = f"fusion-{m['id']}"
+    _seed_url_choices(schemes)
     for f in glob.glob(os.path.join(APPS_DIR, "fusion-*.desktop")):
         if f not in keep:
             os.unlink(f)
@@ -1001,6 +1046,31 @@ def sync_desktop():
     os.makedirs(os.path.join(HOME, ".config"), exist_ok=True)
     with open(os.path.join(HOME, ".config", "mimeapps.list"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def _seed_url_choices(schemes):
+    """Flatpak-programok (pl. a Firefox) linkjei az OpenURI-portálon át nyílnak meg, amely az első néhány alkalommal
+    „Megnyitás ezzel…” ablakot mutat — az URL-sémás programnál (prusaslicer://) ez fölösleges kérdés. A portál
+    „korábbi választás” tárolójába (desktop-used-apps) bejegyezzük a programot minden Flatpak-programnak, amelynek
+    még nincs választása; a felhasználó későbbi választását nem írjuk felül."""
+    if not schemes or not shutil.which("flatpak"):
+        return
+    try:
+        r = subprocess.run(["flatpak", "list", "--app", "--columns=application"], capture_output=True, text=True, timeout=30)
+        # "" = nem homokozós hívó (a portál így azonosítja) — a QEMU-teszt és a gio-alapú programok útja
+        apps = [""] + sorted({a.strip() for a in r.stdout.split() if re.match(r"^[A-Za-z0-9_.-]+$", a.strip())})
+    except (OSError, subprocess.SubprocessError):
+        return
+    for ctype, choice in schemes.items():
+        try:
+            r = subprocess.run(["flatpak", "permissions", "desktop-used-apps", ctype], capture_output=True, text=True, timeout=10)
+            have = {l.split("\t")[2] for l in r.stdout.splitlines() if l.count("\t") >= 3 and l.startswith("desktop-used-apps")}
+            for app in apps:
+                if app not in have:
+                    subprocess.run(["flatpak", "permission-set", "desktop-used-apps", ctype, app, choice, "3"],
+                                   capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
 
 
 def _assoc_user():
@@ -1128,11 +1198,17 @@ def command(pid, files=()):
             cmd += ["--file-forwarding", m["appid"], "@@"] + paths + ["@@"]
         else:
             cmd += [m["appid"]]
-        return cmd + urls, None
+        return cmd + (_url_args(m) if urls else []) + urls, None
     exe = os.path.join(m["dir"], m.get("exec", ""))
     if not os.path.isfile(exe):
         raise ProgramError("a program indítófájlja hiányzik: " + exe)
-    return [exe] + list(files), os.path.dirname(exe)
+    urls = [f for f in files if is_url(f)]
+    return [exe] + (_url_args(m) if urls else []) + list(files), os.path.dirname(exe)
+
+
+def _url_args(m):
+    """a program kapcsolói webcímes / URL-sémás indításhoz (url_args), pl. --single-instance-on-url"""
+    return [a for a in m.get("url_args", "").split() if re.match(r"^--?[A-Za-z0-9][A-Za-z0-9_=.-]*$", a)]
 
 
 def launch(pid, files=()):

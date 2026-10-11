@@ -1,0 +1,10 @@
+# Linux-program recept (Flatpak) — a Programkezelő a Flathubról telepített PrusaSlicer leírásába írja (0.0.39)
+# A séma ugyanaz, mint a program.fusion-é (fusion validate); az id és a név a leírásé marad.
+id = prusaslicer
+name = PrusaSlicer
+type = flatpak
+appid = com.prusa3d.PrusaSlicer
+# a Printables „Open in PrusaSlicer” gombja (prusaslicer://open?file=…): a böngészőből a PrusaSlicerbe;
+# ha a PrusaSlicer már fut, az veszi át (nem nyílik második példány)
+scheme = prusaslicer
+url_args = --single-instance-on-url

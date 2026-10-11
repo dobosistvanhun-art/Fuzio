@@ -194,6 +194,9 @@ PG="$R/usr/lib/fusion/programs"
 rm -rf "$PG"; mkdir -p "$PG/tests"
 install -m 0644 "$FUSION_ROOT/programs/fusion_programs.py" "$PG/fusion_programs.py"
 install -m 0644 "$FUSION_ROOT/programs/fusion_store.py" "$PG/fusion_store.py"
+# Linux-programok receptjei (Flatpak-azonosító szerint, pl. a PrusaSlicer prusaslicer:// URL-sémája) — 0.0.39
+install -d "$PG/recipes"
+install -m 0644 "$FUSION_ROOT"/programs/recipes/*.recipe "$PG/recipes/"
 for f in fusion-programs fusion-run fusion-appmeasure fusion-dev; do
     install -m 0755 "$FUSION_ROOT/programs/$f" "$PG/$f"
     ln -sf "/usr/lib/fusion/programs/$f" "$R/usr/bin/$f"
