@@ -298,6 +298,10 @@ in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.servi
 in_root systemctl mask nvidia-persistenced.service >/dev/null 2>&1
 # a noble login-PAM-ja a pam_lastlog-ot kéri, de a modul nincs a csomagban → minden belépéskor hibaüzenet a naplóban
 sed -i '/pam_lastlog\.so/d' "$R/etc/pam.d/login"
+# Terminál: több soros parancs beillesztése (pl. egy leírásból) soronként fusson, ne kerüljenek a sorba
+# „^[[200~” vezérlőjelek (a bash „bracketed paste” módja xtermben) — 0.0.39
+grep -q 'enable-bracketed-paste' "$R/etc/inputrc" 2>/dev/null \
+    || printf '\n# FusionOS: beillesztés soronként (xterm)\nset enable-bracketed-paste off\n' >> "$R/etc/inputrc"
 # NVIDIA-csomag: „alias nouveau off” — ez a Nouveau kifejezett betöltését is tiltaná (mérési bejegyzés, 0.0.30).
 # Az automatikus betöltést a Fusion Hardware Layer saját tiltólistája (fusion-display.conf) amúgy is tiltja.
 rm -f "$R/usr/lib/modprobe.d/nvidia-graphics-drivers.conf" "$R/lib/modprobe.d/nvidia-graphics-drivers.conf"
