@@ -604,6 +604,24 @@ print("FUSION-CLI: JSON " + " ".join(res))
 PYEOF
 echo "FUSION-CLI: VERSION $(urun fusion system --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["version"], j["api"], j["display"]["profile"])')"
 echo "FUSION-CLI: VALIDATE $(urun fusion validate /usr/lib/fusion/fwr/profiles/*.fwr /usr/lib/fusion/devices/roles/*.role >/dev/null 2>&1 && echo ok || echo HIBA) rc-hibas=$(printf 'id = Rossz\n' > /tmp/rossz.fusion; urun fusion validate /tmp/rossz.fusion >/dev/null 2>&1; echo $?)"
+# 0.0.38: Lomtár automatikus ürítése (a beállítás szerint) — egy 40 napos és egy friss elem (előtte üres Lomtár)
+urun fusion trash empty >/dev/null 2>&1
+urun sh -c 'T=$HOME/.local/share/Trash; mkdir -p $T/files $T/info; echo a > $T/files/regi.txt; echo b > $T/files/friss.txt
+  printf "[Trash Info]\nPath=/home/fusion/regi.txt\nDeletionDate=%s\n" "$(date -d "-40 days" +%Y-%m-%dT%H:%M:%S)" > $T/info/regi.txt.trashinfo
+  printf "[Trash Info]\nPath=/home/fusion/friss.txt\nDeletionDate=%s\n" "$(date +%Y-%m-%dT%H:%M:%S)" > $T/info/friss.txt.trashinfo'
+tr0=$(urun fusion trash --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("count=%d auto=%d" % (j["count"], j["autoDays"]))')
+tr1=$(urun fusion trash purge-old --json | python3 -c 'import json,sys; print("removed=%d" % json.load(sys.stdin)["removed"])')
+trl=$(urun ls /home/fusion/.local/share/Trash/files | tr '\n' ',')
+urun fusion trash auto 0 >/dev/null; tr2=$(urun fusion trash --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("count=%d auto=%d" % (j["count"], j["autoDays"]))')
+urun fusion trash auto 30 >/dev/null; urun fusion trash empty >/dev/null
+echo "FUSION-TRASH: $tr0 $tr1 left=$trl $tr2 after=$(urun fusion trash --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["count"])')"
+# 0.0.38: a Programkezelő külön ablakban (fusion-settings programs → saját ablak „Programkezelő” címmel)
+if urun xdpyinfo >/dev/null 2>&1; then
+    urun fusion-settings programs >/dev/null 2>&1 &
+    i=0; while [ $i -lt 40 ] && [ "$(winview "Programkezelő")" = 0 ]; do sleep 1; i=$((i + 1)); done
+    echo "FUSION-PROGWIN: window=$(winview "Programkezelő") wait=${i}s settings=$(winview "Beállítások")"
+    pkill -u fusion -f 'fusion_settings.py programs' 2>/dev/null
+fi
 # M8d: a Lézer állapot próba-program (csak a Fusion API-n át) — önteszt a valódi eszközréteggel
 urun env QT_QPA_PLATFORM=offscreen fusion-laser --selftest 2>&1 | grep '^FUSION-LASER:'
 # feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át; az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt

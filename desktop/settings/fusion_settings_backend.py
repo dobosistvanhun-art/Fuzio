@@ -26,6 +26,7 @@ import fusion_ui as ui
 import fusion
 from fusion import devices as fdev
 from fusion import jobs as fjobs
+from fusion import trash as ftrash
 
 MOONRAKER = "http://127.0.0.1:7125"
 BG_FILE = os.path.join(ui.CONFIG, "background")
@@ -322,7 +323,15 @@ def system():
             "memPct": round(100.0 * (mem.get("MemTotal", 1) - mem.get("MemAvailable", 0)) / max(1, mem.get("MemTotal", 1)), 1),
             "uptime": f"{int(up // 86400)} nap {int(up % 86400 // 3600)} óra {int(up % 3600 // 60)} perc" if up >= 86400 else f"{int(up // 3600)} óra {int(up % 3600 // 60)} perc",
             "disks": disks, "blk": [l for l in lsb.splitlines() if l.strip() and not l.startswith(("loop", "zram"))],
-            "gpu": gpu}
+            "gpu": gpu, "trash": trash_state()}
+
+
+def trash_state():
+    try:
+        t = ftrash.state()
+    except Exception:
+        return {"count": 0, "sizeText": "?", "autoDays": 0, "autoChoices": [0, 7, 30, 90]}
+    return dict(t, sizeText=ui.human_size(t["size"]))
 
 
 class Settings(QObject):
@@ -870,6 +879,19 @@ class Settings(QObject):
     @pyqtSlot()
     def systemRefresh(self):
         self._async("system", system)
+
+    @pyqtSlot(int, result=str)
+    def trashSetAuto(self, days):
+        try:
+            ftrash.set_auto_days(days)
+        except (ValueError, OSError) as e:
+            return str(e)
+        self._async("system", system)
+        return ""
+
+    @pyqtSlot()
+    def trashEmpty(self):
+        self._async("trash-empty", lambda: {"removed": ftrash.empty(), **system()})
 
     @pyqtSlot(str)
     def power(self, action):

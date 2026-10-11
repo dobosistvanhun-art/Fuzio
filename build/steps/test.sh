@@ -305,6 +305,8 @@ step_test() {
             _check "$log" "FUSION-CLI: VERSION $FUSION_VERSION 1 generic-kms" "fusion system: verzió, API, kijelzőprofil" || ok_run=0
             _check "$log" "FUSION-LASER: STATE ok present=[TF][a-z]* dev=" "Lézer állapot (M8d): a szerep a Fusion API-ból" || ok_run=0
             _check "$log" "FUSION-LASER: QML ok" "Lézer állapot: a felület betöltődik" || ok_run=0
+            _check "$log" "FUSION-TRASH: count=2 auto=30 removed=1 left=friss.txt, count=1 auto=0 after=0" "Lomtár: automatikus ürítés 30 nap után, kikapcsolható, teljes ürítés" || ok_run=0
+            _check "$log" "FUSION-PROGWIN: window=1 wait=" "a Programkezelő külön ablakban" || ok_run=0
             _check "$log" "FUSION-CLI: VALIDATE ok rc-hibas=1" "fusion validate: a receptek és szerepfájlok érvényesek, a hibás leírás 1-es kóddal" || ok_run=0
             _check "$log" "FUSION-CLI: JOB start=ok running=False rc=0 title=Hibajelentés file=van" "feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át" || ok_run=0
             _check "$log" "FUSION-M6: CTRLALTDEL 1 target=masked" "Ctrl+Alt+Del: Feladatkezelő (a konzolon nem indít újra)" || ok_run=0

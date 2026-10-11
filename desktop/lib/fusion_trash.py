@@ -6,6 +6,7 @@
 
 A lomtárba helyezés átnevezés ugyanazon a köteten belül: azonnali, akármekkora a fájl.
 """
+import json
 import os
 import shutil
 import time
@@ -15,6 +16,10 @@ HOME = os.path.expanduser("~")
 HOME_TRASH = os.environ.get("FUSION_TRASH_DIR") or os.path.join(
     os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share"), "Trash")
 UID = os.getuid()
+# automatikus ürítés: az ennél régebben lomtárba tett elemek végleges törlése (0 = kikapcsolva) — Beállítások → Rendszer
+SETTINGS_FILE = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "fusion", "trash.json")
+AUTO_DEFAULT_DAYS = 30
+AUTO_CHOICES = (0, 7, 30, 90)
 NETWORK_FS = ("fuse", "fuse.rclone", "nfs", "nfs4", "cifs", "smb3", "fuse.sshfs")
 
 
@@ -238,3 +243,28 @@ def size():
         except OSError:
             pass
     return tot, cnt
+
+
+def auto_days():
+    try:
+        with open(SETTINGS_FILE, encoding="utf-8") as f:
+            d = int(json.load(f).get("autoPurgeDays", AUTO_DEFAULT_DAYS))
+        return d if d in AUTO_CHOICES else AUTO_DEFAULT_DAYS
+    except (OSError, ValueError, TypeError, AttributeError):
+        return AUTO_DEFAULT_DAYS
+
+
+def set_auto_days(days):
+    if days not in AUTO_CHOICES:
+        raise TrashError("lehetséges értékek: " + ", ".join(map(str, AUTO_CHOICES)))
+    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+    tmp = SETTINGS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"autoPurgeDays": days}, f)
+    os.replace(tmp, SETTINGS_FILE)
+
+
+def auto_purge():
+    """a beállítás szerinti automatikus ürítés (a Fusion Shell indításkor és 6 óránként hívja) → törölt elemek száma"""
+    d = auto_days()
+    return purge_older(d) if d > 0 else 0

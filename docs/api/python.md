@@ -9,6 +9,7 @@
 | `fusion.devices` | `roles()`, `present()`, `com_usage()`, `assign(szerep, eszköz)`, `forget(szerep)` (a `fusion-admin` kapun át) |
 | `fusion.programs` | `list_programs()`, `info(id)`, `run(id, fájlok)`, `opener(fájl)`, `users_of(szerep)` — a Programkezelő felülete |
 | `fusion.power` | `batteries()` (töltöttség, töltés / merülés, becsült idő, állapot a gyárihoz képest, ciklusok), `ac_online()`, `summary()` |
+| `fusion.trash` | `state()`, `set_auto_days(n)`, `auto_purge()`, `empty()` — Lomtár (freedesktop-szabvány), automatikus ürítés |
 | `fusion.jobs` | `start()`, `state()`, `list_jobs()`, `parse_line()` — [feladatok.md](feladatok.md) |
 | `fusion.notify` | `send(cím, szöveg, ikon, program, sürgősség, ms)` — `org.freedesktop.Notifications` |
 | `fusion.ui` | `render_mode()`, `render_forced()`, `RENDER_FILE` — a felület rajzolása (Qt nélkül) |

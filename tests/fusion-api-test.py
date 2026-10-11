@@ -175,5 +175,29 @@ check("cli power --json", rc == 0 and json.loads(o) == {"ac": None, "batteries":
 from fusion import programs as fprog  # noqa: E402
 check("programs.users_of", fprog.users_of("laser") == [{"id": "lightburn", "name": "LightBurn", "com": "COM3"}], fprog.users_of("laser"))
 check("programs.info ismeretlen", fprog.info("nincs-ilyen") is None and fprog.info("../x") is None)
+# --- Lomtár: automatikus ürítés (fusion.trash) ---
+import time as _t2  # noqa: E402
+td = os.path.join(T, "Trash")
+os.makedirs(os.path.join(td, "files")); os.makedirs(os.path.join(td, "info"))
+for n, age in (("regi.txt", 40), ("friss.txt", 0)):
+    open(os.path.join(td, "files", n), "w").write("x")
+    open(os.path.join(td, "info", n + ".trashinfo"), "w").write(
+        "[Trash Info]\nPath=/x/%s\nDeletionDate=%s\n" % (n, _t2.strftime("%Y-%m-%dT%H:%M:%S", _t2.localtime(_t2.time() - age * 86400))))
+import fusion_trash  # noqa: E402
+fusion_trash.HOME_TRASH = td
+fusion_trash.SETTINGS_FILE = os.path.join(T, "cfg", "trash.json")
+fusion_trash.trash_dirs = lambda: [td]
+from fusion import trash as ftrash  # noqa: E402
+st = ftrash.state()
+check("trash.state alapértelmezés: 30 nap", st["count"] == 2 and st["autoDays"] == 30, st)
+check("trash.auto_purge: csak a 30 napnál régebbi", ftrash.auto_purge() == 1 and os.listdir(os.path.join(td, "files")) == ["friss.txt"])
+ftrash.set_auto_days(0)
+check("trash: kikapcsolva nem töröl", ftrash.state()["autoDays"] == 0 and ftrash.auto_purge() == 0)
+try:
+    ftrash.set_auto_days(5)
+    check("trash: érvénytelen napszám elutasítva", False)
+except ValueError:
+    check("trash: érvénytelen napszám elutasítva", True)
+check("trash.empty", ftrash.empty() == 1 and ftrash.state()["count"] == 0)
 print(f"Eredmény: {ok} sikeres, {fail} hibás")
 sys.exit(1 if fail else 0)

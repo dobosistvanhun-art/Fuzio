@@ -8,6 +8,9 @@
     fusion devices forget <szerep>
     fusion volumes [--json]                   csatolt cserélhető kötetek (pendrive, SD) és a DATA
     fusion power [--json]                     akkumulátor (töltöttség, töltés / merülés, becsült idő, állapot)
+    fusion trash [--json]                     Lomtár: méret, elemek, automatikus ürítés (napok)
+    fusion trash auto <0|7|30|90>             automatikus ürítés beállítása (0 = ki)
+    fusion trash purge-old | empty            ürítés a beállítás szerint / teljes ürítés
     fusion programs …                         = fusion-programs … (list --json, info, install, run …)
     fusion notify [-i ikon] [-u sürgősség] [-a program] [-t ms] <cím> [szöveg]
     fusion jobs [list] [--json]               a hosszú műveletek állapota (feladat-protokoll)
@@ -23,7 +26,7 @@ import os
 import shutil
 import sys
 
-from . import API_VERSION, MEDIA, PREFIX, RUN, devices, hardware, jobs, kv, notify, power, schema, ui
+from . import API_VERSION, MEDIA, PREFIX, RUN, devices, hardware, jobs, kv, notify, power, schema, trash, ui
 
 
 class UsageError(Exception):
@@ -136,6 +139,22 @@ def main(argv=None):
             b = power.batteries()
             _out({"ac": power.ac_online(), "batteries": b}, as_json, lambda: power.summary() or "nincs akkumulátor")
             return 0
+        if cmd == "trash":
+            sub = rest[0] if rest else "state"
+            if sub == "state":
+                t = trash.state()
+                _out(t, as_json, lambda: f"Lomtár: {t['count']} elem, {t['size'] / 1e6:.1f} MB; automatikus ürítés: "
+                     + (f"{t['autoDays']} napnál régebbi elemek" if t["autoDays"] else "ki"))
+                return 0
+            if sub == "auto" and len(rest) == 2 and rest[1].isdigit():
+                trash.set_auto_days(int(rest[1]))
+                _out({"ok": True, "autoDays": int(rest[1])}, as_json, "rendben")
+                return 0
+            if sub in ("purge-old", "empty") and len(rest) == 1:
+                n = trash.auto_purge() if sub == "purge-old" else trash.empty()
+                _out({"ok": True, "removed": n}, as_json, f"törölve: {n} elem")
+                return 0
+            raise UsageError("fusion trash [auto <0|7|30|90> | purge-old | empty]")
         if cmd == "programs":
             exe = shutil.which("fusion-programs") or os.path.join(PREFIX, "programs", "fusion-programs")
             os.execv(sys.executable, [sys.executable, exe] + rest + (["--json"] if as_json else []))

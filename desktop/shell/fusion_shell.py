@@ -786,6 +786,23 @@ def main():
         timers.append(t)
     app._timers = timers
 
+    # Lomtár: automatikus ürítés a beállítás szerint (Beállítások → Rendszer) — 1 perc után, majd 6 óránként, háttérszálon
+    def trash_auto():
+        def work():
+            try:
+                import fusion_trash
+                n = fusion_trash.auto_purge()
+                if n:
+                    print(f"fusion-shell: Lomtár — {n} régi elem automatikusan törölve", flush=True)
+            except Exception as e:      # a Lomtár hibája nem állíthatja meg a Shellt
+                print(f"fusion-shell: Lomtár automatikus ürítése: {e}", flush=True)
+        threading.Thread(target=work, daemon=True).start()
+    QTimer.singleShot(60000, trash_auto)
+    tt = QTimer(app)
+    tt.timeout.connect(trash_auto)
+    tt.start(6 * 3600 * 1000)
+    timers.append(tt)
+
     def teardown():
         """leállításkor (pl. újraindítás a rajzolási mód váltása után) előbb a QML-felületek ürülnek ki, amíg a
         Shell-objektum még él — különben a kötések „Cannot read property … of null” sorokkal töltik a naplót"""

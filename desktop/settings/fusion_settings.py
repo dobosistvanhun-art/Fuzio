@@ -70,11 +70,17 @@ def main():
     args = sys.argv[1:]
     if args[:1] == ["--selftest"]:
         return selftest()
-    page = args[0] if args and args[0] in PAGES else "wifi"
+    # a Programkezelő külön ablakban: fusion-settings --app programs [programs|store] [paraméter]
+    app_mode = ""
+    if args[:2] == ["--app", "programs"]:
+        app_mode, args = "programs", args[2:]
+    elif args[:1] in (["programs"], ["store"]):          # a Programkezelő / Programbolt mindig a saját ablakában
+        app_mode = "programs"
+    page = args[0] if args and args[0] in PAGES else ("programs" if app_mode else "wifi")
     param = args[1] if len(args) > 1 else ""
 
     from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-    name = f"fusion-settings-{os.getuid()}"
+    name = f"fusion-{app_mode or 'settings'}-{os.getuid()}"
     # már fut? → oldalváltás kérése, és kilépés
     sock = QLocalSocket()
     sock.connectToServer(name)
@@ -84,7 +90,8 @@ def main():
         sock.disconnectFromServer()
         return 0
 
-    app, engine = ui.create_app("fusion-settings", "Beállítások", "settings")
+    app, engine = (ui.create_app("fusion-programkezelo", "Programkezelő", "package") if app_mode
+                   else ui.create_app("fusion-settings", "Beállítások", "settings"))
     import fusion_settings_backend as sb
     settings = sb.Settings()
     server = QLocalServer()
@@ -109,6 +116,7 @@ def main():
     ctx.setContextProperty("settings", settings)
     ctx.setContextProperty("startPage", page)
     ctx.setContextProperty("startParam", param)
+    ctx.setContextProperty("appMode", app_mode)
     ui.load(engine, os.path.join(HERE, "qml", "Settings.qml"))
     app._keep = [server, settings]
     return app.exec()

@@ -11,7 +11,7 @@ SettingsPage {
     onRefresh: settings.systemRefresh()
     Component.onCompleted: settings.systemRefresh()
     Timer { interval: 5000; running: true; repeat: true; onTriggered: settings.systemRefresh() }
-    Connections { target: settings; function onResult(tag, r) { if (tag === "system" && r.version) p.s = r } }
+    Connections { target: settings; function onResult(tag, r) { if ((tag === "system" || tag === "trash-empty") && r.version) p.s = r } }
     Section {
         title: "FUSIONOS"
         InfoRow { icon: "info"; label: "Verzió"; value: "FusionOS " + p.s.version + (p.s.milestone ? " (" + p.s.milestone + ")" : "") }
@@ -32,6 +32,30 @@ SettingsPage {
                 value: modelData.used + " / " + modelData.total + "  (" + modelData.pctText + " %)"
                 valueColor: modelData.pct > 90 ? Theme.danger : Theme.text
             }
+        }
+    }
+    Section {
+        title: "LOMTÁR"
+        InfoRow { icon: "trash"; label: "Tartalom"; value: p.s.trash ? (p.s.trash.count + " elem, " + p.s.trash.sizeText) : "" }
+        Column {
+        x: 12; width: parent.width - 24; spacing: 8; topPadding: 6; bottomPadding: 10
+        Flow {
+            width: parent.width
+            spacing: 8
+            FLabel { width: 200; height: 30; text: "Automatikus ürítés"; dim: true }
+            Repeater {
+                model: p.s.trash ? p.s.trash.autoChoices : []
+                FButton { text: modelData === 0 ? "Ki" : modelData + " napnál régebbi"; flat: !checked
+                          checked: p.s.trash && p.s.trash.autoDays === modelData
+                          onClicked: settings.trashSetAuto(modelData) }
+            }
+        }
+        FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true
+                 text: "A beállított időnél régebben lomtárba tett elemek végleg törlődnek (bejelentkezés után és 6 óránként). "
+                       + "A pendrive-ok lomtára is, ha éppen csatlakoztatva vannak." }
+        FButton { text: p.confirm === "trash" ? "Lomtár ürítése — biztosan? (végleges)" : "Lomtár ürítése most"; icon: "trash"
+                  danger: p.confirm === "trash"; enabled: !!p.s.trash && p.s.trash.count > 0
+                  onClicked: { if (p.confirm === "trash") { settings.trashEmpty(); p.confirm = "" } else p.confirm = "trash" } }
         }
     }
     Flow {
