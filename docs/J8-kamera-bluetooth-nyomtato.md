@@ -8,6 +8,11 @@
   - A program Qt Multimedia-t használ, FFmpeg-háttérrel; a kamerát közvetlenül, V4L2-n olvassa.
   - Mérés (QEMU, virtuális kamera): a Qt 6.4 GStreamer-háttere Pythonból összeomlott, X alatt pedig nem adott képkockát. Az FFmpeg-háttér mindkét úton hibátlan volt.
   - A fénykép az élőkép aktuális képkockája.
+  - 0.0.42 (ZBook, 0.0.41: fekete élőkép szoftveres felületnél, gyenge képminőség):
+    - A Qt Quick szoftveres rajzolója a videót nem jeleníti meg (helyben mérve: szoftveresen üres, OpenGL-lel látszik).
+      Ezért a Kamera program mindig OpenGL-lel rajzol, a Beállítások → Kijelző beállításától függetlenül.
+    - A kamera formátuma: a legnagyobb felbontás 1280×720-ig, legalább 15 kép/mp, egyenlőnél a gyorsabb. Eddig a Qt
+      választott, és gyakran a legkisebbet.
 - **Beállítások → Eszközök és kamera → KAMERÁK**: a kamerák listája, Megnyitás gomb.
 - A böngészők és a videohívó programok (Flatpak) maguk érik el a kamerát.
 - Nincs kamera a listában? Egyes gépeken a BIOS-ban vagy egy billentyűvel ki lehet kapcsolni.

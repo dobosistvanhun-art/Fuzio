@@ -366,6 +366,7 @@ step_test() {
             _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fusion API listája (V4L2)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA FRAMES ok" "Kamera program: élőkép (Qt Multimedia, FFmpeg)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA CAPTURE ok" "Kamera program: fénykép az élőképből" || ok_run=0
+            _check "$log" "FUSION-J8: CAMERA RENDER ok .*(felület: software) formátum: 1280x720" "Kamera: szoftveres felületnél is OpenGL (élőkép), 1280×720" || ok_run=0
             _check "$log" "FUSION-J8: BT controllers=2 .*service=active" "Bluetooth: bluetoothd a (virtuális) vezérlőkkel" || ok_run=0
             _check "$log" "FUSION-J8: BT-POWER True" "Bluetooth: bekapcsolás" || ok_run=0
             _check "$log" "FUSION-J8: BT-SCAN True talalt=True" "Bluetooth: eszközkeresés" || ok_run=0

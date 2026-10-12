@@ -57,8 +57,11 @@ class Backend(QObject):
 
     shot = ""
 
-    @pyqtSlot(QObject)
-    def selftestShot(self, sink):
+    fmt = ""
+
+    @pyqtSlot(QObject, str)
+    def selftestShot(self, sink, fmt):
+        self.fmt = fmt
         self.shot = save_frame(sink, os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "fusion-camera-selftest.jpg"))
 
     @pyqtSlot(QObject, result=str)
@@ -90,7 +93,7 @@ def selftest():
     cams = camera.cameras()
     print("FUSION-CAMERA: LIST " + (", ".join(f"{c['dev']}={c['name']}" for c in cams) or "nincs"), flush=True)
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    app, engine = ui.create_app("fusion-camera", "Kamera", "camera")
+    app, engine = ui.create_app("fusion-camera", "Kamera", "camera", software_ok=False)
     be = Backend()
     engine.rootContext().setContextProperty("cam", be)
     engine.rootContext().setContextProperty("selftestMode", True)
@@ -110,6 +113,10 @@ def selftest():
     size = os.path.getsize(be.shot) if be.shot and os.path.isfile(be.shot) else 0
     check("FRAMES", bool(be.shot), "az élőképben van képkocka" if be.shot else "nincs képkocka az élőképben")
     check("CAPTURE", size > 1000, f"{size} bájt")
+    from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
+    api = QQuickWindow.graphicsApi()
+    check("RENDER", api != QSGRendererInterface.GraphicsApi.Software,
+          f"{api.name} (felület: {ui.render_mode()}) formátum: {be.fmt or '?'}")
     return 0 if ok else 1
 
 
@@ -125,7 +132,7 @@ def main():
         sock.write(b'{"raise": true}\n')
         sock.waitForBytesWritten(500)
         return 0
-    app, engine = ui.create_app("fusion-camera", "Kamera", "camera")
+    app, engine = ui.create_app("fusion-camera", "Kamera", "camera", software_ok=False)
     be = Backend()
     server = QLocalServer()
     QLocalServer.removeServer(name)

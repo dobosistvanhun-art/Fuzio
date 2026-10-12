@@ -660,7 +660,8 @@ if [ -f /tmp/fusion-test-stick ]; then
 # kamera: virtuális teszt-kamera (vivid, csak képrögzítő csomópont) — lista a Fusion API-ból, fénykép a Kamera programmal
 modprobe vivid n_devs=1 node_types=0x1 2>/dev/null; udevadm settle --timeout=10
 echo "FUSION-J8: CAMERAS $(urun fusion cameras --json | python3 -c 'import json,sys; c=json.load(sys.stdin); print(len(c), ",".join(x["name"] + ":" + x["bus"] for x in c))' 2>&1 | tail -n 1)"
-urun env QT_QPA_PLATFORM=offscreen GST_DEBUG=2 timeout 90 fusion-camera --selftest > /tmp/fusion-camera.out 2>&1
+# szoftveres felülettel (FUSION_UI_RENDER=software): a Kamera ekkor is OpenGL-lel rajzol (ZBook 0.0.41: fekete élőkép)
+urun env QT_QPA_PLATFORM=offscreen FUSION_UI_RENDER=software timeout 90 fusion-camera --selftest > /tmp/fusion-camera.out 2>&1
 grep '^FUSION-CAMERA:' /tmp/fusion-camera.out | sed 's/^FUSION-CAMERA:/FUSION-J8: CAMERA/'
 grep -q '^FUSION-CAMERA: CAPTURE ok' /tmp/fusion-camera.out || grep -v '^FUSION-CAMERA:' /tmp/fusion-camera.out | tail -n 20 | sed 's/^/FUSION-J8:   camera: /'
 # (a vivid betöltve marad: a modul eltávolítása egy elakadt kamera-folyamat mellett megakadhat)

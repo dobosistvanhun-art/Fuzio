@@ -27,6 +27,19 @@ FWindow {
             win.say(text, isErr)
         }
     }
+    // a legjobb képformátum: a legnagyobb felbontás 1280×720-ig, legalább 15 kép/mp; egyenlőnél a gyorsabb —
+    // a Qt magától gyakran a legkisebbet választja (ZBook, 0.0.41: gyenge minőségű kép)
+    function bestFormat(dev) {
+        var best = null, bestScore = -1
+        var fs = dev ? dev.videoFormats : []
+        for (var i = 0; i < fs.length; i++) {
+            var f = fs[i], w = f.resolution.width, h = f.resolution.height
+            if (w > 1280 || h > 720 || f.maxFrameRate < 15) continue
+            var score = w * h * 1000 + Math.min(f.maxFrameRate, 60)
+            if (score > bestScore) { best = f; bestScore = score }
+        }
+        return best
+    }
     function say(t, err) { msg = t; msgErr = err; msgTimer.restart() }
     // fénykép: az élőkép aktuális képkockája (a Qt Multimedia háttértől független)
     function shoot() {
@@ -38,13 +51,17 @@ FWindow {
     Timer { id: msgTimer; interval: 6000; onTriggered: win.msg = "" }
     // önteszt: néhány másodperc élőkép után egy kép az élőképből, majd kilépés
     Timer { interval: 8000; running: selftestMode && win.hasCam
-            onTriggered: { cam.selftestShot(vo.videoSink); Qt.quit() } }
+            onTriggered: { cam.selftestShot(vo.videoSink, camera.cameraFormat.resolution.width + "x"
+                                           + camera.cameraFormat.resolution.height); Qt.quit() } }
 
     MediaDevices { id: md }
     CaptureSession {
         camera: Camera {
             id: camera
             cameraDevice: win.hasCam ? win.inputs[Math.min(win.camIndex, win.inputs.length - 1)] : md.defaultVideoInput
+            function pickFormat() { var f = win.bestFormat(cameraDevice); if (f) cameraFormat = f }
+            onCameraDeviceChanged: pickFormat()
+            Component.onCompleted: pickFormat()
             active: win.hasCam && win.visible
             onErrorOccurred: (error, errorString) => win.say("Kamerahiba: " + errorString, true)
         }

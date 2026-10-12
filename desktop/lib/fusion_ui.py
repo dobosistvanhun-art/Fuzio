@@ -122,9 +122,10 @@ class Sys(QObject):
 from fusion.ui import RENDER_FILE, render_forced, render_mode  # noqa: E402,F401
 
 
-def create_app(name, title, icon="app"):
-    """QGuiApplication + QML-motor a FusionUI modullal"""
-    if render_mode() == "software":
+def create_app(name, title, icon="app", software_ok=True):
+    """QGuiApplication + QML-motor a FusionUI modullal. software_ok=False: a program mindig OpenGL-lel rajzol
+    (a Qt Quick szoftveres rajzolója a videót — VideoOutput — nem jeleníti meg; ZBook, 0.0.41: fekete kamera-élőkép)"""
+    if render_mode() == "software" and software_ok:
         # mérés (0.0.30): a Qt Quick szoftveres rajzolója OpenGL nélkül — kevesebb memória, több CPU.
         # API-hívás, nem környezeti változó: a Fusion-programokból indított más programokat nem érinti.
         from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
