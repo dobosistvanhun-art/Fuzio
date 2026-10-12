@@ -222,5 +222,79 @@ cmd, _cwd = fpm.command("prusaslicer", [u])
 check("indítás URL-lel: --single-instance-on-url", cmd == ["flatpak", "run", "com.prusa3d.PrusaSlicer", "--single-instance-on-url", u], cmd)
 cmd, _cwd = fpm.command("prusaslicer", [])
 check("indítás URL nélkül: kapcsoló nélkül", cmd == ["flatpak", "run", "com.prusa3d.PrusaSlicer"], cmd)
+
+# --- 0.0.40: kamera, Bluetooth, nyomtatók (hamis sysfs és parancsok) ---
+import stat  # noqa: E402
+fb = os.path.join(T, "fakebin")
+os.makedirs(fb, exist_ok=True)
+
+
+def fake(name, body):
+    f = os.path.join(fb, name)
+    open(f, "w").write("#!/bin/sh\n" + body)
+    os.chmod(f, os.stat(f).st_mode | stat.S_IEXEC)
+
+
+os.environ["PATH"] = fb + os.pathsep + os.environ["PATH"]
+v4l = os.path.join(T, "v4l")
+for n, name, caps in (("video0", "HP HD Webcam", "0x04200001"), ("video1", "HP HD Webcam", "0x04a00000")):
+    os.makedirs(os.path.join(v4l, n), exist_ok=True)
+    open(os.path.join(v4l, n, "name"), "w").write(name + "\n")
+fake("v4l2-ctl", 'case "$2" in *video0) echo "\tDevice Caps      : 0x04200001";; *) echo "\tDevice Caps      : 0x04a00000";; esac\n')
+os.environ["FUSION_V4L_SYS"] = v4l
+from fusion import camera, bluetooth, printers  # noqa: E402
+camera.V4L_DIR = v4l
+cams = camera.cameras()
+check("kamera: csak a képrögzítő csomópont (a metaadat nem)", [c["dev"] for c in cams] == ["/dev/video0"] and cams[0]["name"] == "HP HD Webcam", cams)
+fake("bluetoothctl", r"""case "$1" in
+show) printf 'Controller 00:1B:DC:11:22:33 (public)\n\tName: zbook\n\tAlias: fusionos\n\tPowered: yes\n\tPairable: yes\n\tDiscovering: no\n';;
+devices) printf 'Device AA:BB:CC:00:00:01 JBL\nDevice AA:BB:CC:00:00:02 Egér\n';;
+info) case "$2" in *01) printf '\tName: JBL\n\tIcon: audio-headset\n\tPaired: yes\n\tTrusted: yes\n\tConnected: yes\n\tBattery Percentage: 0x50 (80)\n';;
+      *) printf '\tName: Egér\n\tIcon: input-mouse\n\tPaired: no\n\tConnected: no\n';; esac;;
+*) while read l; do case "$l" in "pair "*) echo "[agent] Confirm passkey 654321 (yes/no):";; yes) echo "Pairing successful";;
+   "trust "*) echo "Changing trust succeeded";; "connect "*) echo "Connection successful";; quit) exit 0;; esac; done;;
+esac
+""")
+bluetooth.CTL = os.path.join(fb, "bluetoothctl")
+bluetooth.RFKILL_DIR = os.path.join(T, "rfkill")
+a = bluetooth.adapter()
+check("bluetooth: adapter", a["present"] and a["powered"] and a["address"] == "00:1B:DC:11:22:33" and a["name"] == "fusionos", a)
+ds = bluetooth.devices()
+check("bluetooth: eszközök (a csatlakozott elöl, fajta, akku)", [d["name"] for d in ds] == ["JBL", "Egér"] and ds[0]["kind"] == "fejhallgató"
+      and ds[0]["battery"] == 80 and ds[0]["connected"] and not ds[1]["paired"] and ds[1]["kind"] == "egér", ds)
+codes = []
+okp, msgp = bluetooth.pair("AA:BB:CC:00:00:02", event=lambda k, c: codes.append((k, c)), timeout=10)
+check("bluetooth: párosítás (megerősítő kód, megbízható, csatlakozás)", okp and codes == [("confirm", "654321")], (okp, msgp, codes))
+try:
+    bluetooth.pair("rossz; rm -rf /")
+    check("bluetooth: érvénytelen cím elutasítva", False)
+except ValueError:
+    check("bluetooth: érvénytelen cím elutasítva", True)
+fake("lpstat", r"""case "$*" in -e) printf 'HP_P1102\nPDF\n';; -d) echo "system default destination: PDF";;
+-o) echo "HP_P1102-7              fusion          4096   Mon 12 Oct 2026";; esac
+""")
+fake("lpoptions", r"""case "$2" in HP*) echo "device-uri=usb://HP/LaserJet?serial=ABC123 printer-info='HP LaserJet' printer-make-and-model='HP LaserJet p1102, hpcups' printer-state=5 printer-state-reasons=media-empty-error,paused printer-is-accepting-jobs=true";;
+*) echo "device-uri=cups-pdf:/ printer-info='PDF' printer-state=3 printer-state-reasons=none";; esac
+""")
+fake("lpinfo", r"""case "$*" in *-v*) printf 'Device: uri = ipp://BRN.local:631/ipp/print\n        class = network\n        info = Brother HL\n        make-and-model = Brother HL-L2350DW\nDevice: uri = usb://HP/LaserJet?serial=ABC123\n        class = direct\n        info = HP LaserJet\n        make-and-model = HP LaserJet p1102\nDevice: uri = socket\n';;
+*) printf 'drv:///sample.drv/generic.ppd Generic PCL\ndrv:///hpcups.drv/hp-laserjet_p1102.ppd HP LaserJet p1102, hpcups 3.23\neverywhere IPP Everywhere\n';; esac
+""")
+fake("lpadmin", 'echo "$@" >> "' + os.path.join(T, "lpadmin.log") + '"\n')
+fake("cupsenable", "exit 0\n")
+fake("cupsaccept", "exit 0\n")
+ps = printers.printers()
+check("nyomtatók: lista, alapértelmezett elöl, állapot és ok magyarul",
+      [p["name"] for p in ps] == ["PDF", "HP_P1102"] and ps[0]["default"] and ps[1]["stateText"] == "leállítva"
+      and ps[1]["reasonsText"] == ["nincs papír", "szüneteltetve"] and ps[1]["connection"] == "USB", ps)
+dv = printers.discover()
+check("nyomtatók: keresés (a már felvett jelölve, driverless elöl)", [d["uri"] for d in dv] == ["ipp://BRN.local:631/ipp/print", "usb://HP/LaserJet?serial=ABC123"]
+      and dv[0]["driverless"] and dv[1]["added"], dv)
+dr = printers.drivers("HP LaserJet p1102")
+check("nyomtatók: a modellhez illő meghajtó elöl (hpcups)", dr and dr[0]["ppd"] == "drv:///hpcups.drv/hp-laserjet_p1102.ppd", dr)
+okd, msgd, named = printers.add("ipp://BRN.local:631/ipp/print", "Brother HL-L2350DW")
+log = open(os.path.join(T, "lpadmin.log")).read()
+check("nyomtatók: driverless felvétel (-m everywhere)", okd and named == "Brother_HL-L2350DW" and "-v ipp://BRN.local:631/ipp/print -m everywhere" in log, (okd, msgd, named, log))
+check("nyomtatók: érvénytelen név / cím elutasítva", printers.remove("x; rm")[0] is False and printers.add("nem uri")[0] is False)
+check("nyomtatók: feladatok", printers.jobs() == [{"id": "HP_P1102-7", "printer": "HP_P1102", "user": "fusion", "size": 4096, "time": "Mon 12 Oct 2026"}], printers.jobs())
 print(f"Eredmény: {ok} sikeres, {fail} hibás")
 sys.exit(1 if fail else 0)

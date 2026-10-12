@@ -156,18 +156,18 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
 echo "  [customize] Fusion Desktop (M6): Fusion Shell, Fájlkezelő, Beállítások"
 DK="$R/usr/lib/fusion/desktop"
 rm -rf "$DK" "$R/usr/lib/fusion/shell"; mkdir -p "$DK"
-for d in lib qml icons shell files settings tasks disks installer laser bin; do
+for d in lib qml icons shell files settings tasks disks installer laser camera bin; do
     cp -r "$FUSION_ROOT/desktop/$d" "$DK/"
 done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
     "$DK/settings/fusion_settings.py" "$DK/bin/fusion" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
-    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/installer/fusion_installer_app.py"
+    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/installer/fusion_installer_app.py"
 chown -R root:root "$DK"
 # Fusion API (M8): a `fusion` Python-csomag minden Python-programnak (Fusion-programok, szkriptek, root-segédek)
 ln -sfn /usr/lib/fusion/desktop/lib/fusion "$R/usr/lib/python3/dist-packages/fusion"
-in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, fusion.notify, fusion.permissions, fusion.schema, fusion.jobs, fusion.cli, fusion.power, fusion.programs; assert fusion.API_VERSION == 1" \
+in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, fusion.notify, fusion.permissions, fusion.schema, fusion.jobs, fusion.cli, fusion.power, fusion.programs, fusion.bluetooth, fusion.printers, fusion.camera; assert fusion.API_VERSION == 1" \
     || { echo "  [customize] HIBA: a Fusion API (python3 -c 'import fusion') nem tölthető be"; exit 1; }
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
@@ -179,6 +179,7 @@ ln -sf /usr/lib/fusion/desktop/bin/fusion-drive "$R/usr/bin/fusion-drive"
 ln -sf /usr/lib/fusion/desktop/tasks/fusion_tasks_app.py "$R/usr/bin/fusion-tasks"
 ln -sf /usr/lib/fusion/desktop/disks/fusion_disks_app.py "$R/usr/bin/fusion-disks"
 ln -sf /usr/lib/fusion/desktop/laser/fusion_laser_app.py "$R/usr/bin/fusion-laser"
+ln -sf /usr/lib/fusion/desktop/camera/fusion_camera_app.py "$R/usr/bin/fusion-camera"
 ln -sf /usr/lib/fusion/desktop/installer/fusion_installer_app.py "$R/usr/bin/fusion-installer"
 ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
@@ -281,7 +282,7 @@ echo "Europe/Budapest" > "$R/etc/timezone"
 in_root setupcon --save-only --force >/dev/null 2>&1 || echo "  [customize] FIGYELEM: setupcon --save-only nem sikerült"
 
 echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
-in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm,klipper fusion
+in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
 # az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell
@@ -293,6 +294,9 @@ echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
     fusion-hardware.service fusion-selftest.service fusion-boot-check.service \
     fusion-klipper.service fusion-moonraker.service nginx.service >/dev/null 2>&1
+# Bluetooth (az adapter megjelenésekor indul), nyomtatás (CUPS, hálózati felderítés: Avahi / mDNS)
+in_root systemctl enable bluetooth.service cups.service cups.socket avahi-daemon.service >/dev/null 2>&1 \
+    || echo "  [customize] FIGYELEM: a bluetooth / cups / avahi szolgáltatás engedélyezése nem sikerült"
 in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.service >/dev/null 2>&1 || true
 # TPM 2.0: a ZBook 15 G2-ben TPM 1.2 van, a FusionOS most nem használ TPM-et
 # (a biztonsági modellben LATER). E nélkül a boot "Failed to start systemd-tpm2-setup" hibát ír.

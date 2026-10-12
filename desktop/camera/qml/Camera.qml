@@ -1,0 +1,106 @@
+// FusionOS — Kamera: élőkép, kameraváltás, fénykép (Qt Multimedia)
+import QtQuick
+import QtQuick.Controls
+import QtMultimedia
+import FusionUI
+
+FWindow {
+    id: win
+    width: 820; height: 600
+    minimumWidth: 480; minimumHeight: 380
+    visible: true
+    title: "Kamera"
+    property string msg: ""
+    property bool msgErr: false
+    property string lastPhoto: ""
+    property int camIndex: 0
+    readonly property var inputs: md.videoInputs
+    readonly property bool hasCam: inputs.length > 0
+
+    Component.onCompleted: { if (!selftestMode) { raise(); requestActivate() } }
+    Shortcut { sequence: "Esc"; onActivated: win.close() }
+    Shortcut { sequence: "Space"; onActivated: win.shoot() }
+    Connections {
+        target: cam
+        function onMessage(text, isErr) {
+            if (text === "__raise__") { win.show(); win.raise(); win.requestActivate(); return }
+            win.say(text, isErr)
+        }
+    }
+    function say(t, err) { msg = t; msgErr = err; msgTimer.restart() }
+    // fénykép: az élőkép aktuális képkockája (a Qt Multimedia háttértől független)
+    function shoot() {
+        if (!hasCam) return
+        var path = cam.saveFrame(vo.videoSink)
+        if (path) { lastPhoto = path; flashAnim.restart(); say("Mentve: " + path, false) }
+        else say("A kép nem készült el — még nincs élőkép.", true)
+    }
+    Timer { id: msgTimer; interval: 6000; onTriggered: win.msg = "" }
+    // önteszt: néhány másodperc élőkép után egy kép az élőképből, majd kilépés
+    Timer { interval: 8000; running: selftestMode && win.hasCam
+            onTriggered: { cam.selftestShot(vo.videoSink); Qt.quit() } }
+
+    MediaDevices { id: md }
+    CaptureSession {
+        camera: Camera {
+            id: camera
+            cameraDevice: win.hasCam ? win.inputs[Math.min(win.camIndex, win.inputs.length - 1)] : md.defaultVideoInput
+            active: win.hasCam && win.visible
+            onErrorOccurred: (error, errorString) => win.say("Kamerahiba: " + errorString, true)
+        }
+        videoOutput: vo
+    }
+
+    Rectangle {
+        id: view
+        anchors { left: parent.left; right: parent.right; top: parent.top; bottom: bar.top; margins: 10 }
+        color: "black"; radius: Theme.radius
+        VideoOutput { id: vo; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit }
+        Column {
+            anchors.centerIn: parent; spacing: 10; visible: !win.hasCam
+            FIcon { name: "camera"; size: 56; anchors.horizontalCenter: parent.horizontalCenter; opacity: 0.6 }
+            FLabel { text: "Nem található kamera"; bold: true; anchors.horizontalCenter: parent.horizontalCenter }
+            FLabel { dim: true; width: 380; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter
+                     text: "A beépített webkamerát egyes gépeken a BIOS-ban vagy egy billentyűvel lehet ki- és bekapcsolni. "
+                           + "USB-kamera: dugja be, és a lista magától frissül." }
+        }
+        // villanás a kép készítésekor
+        Rectangle { id: flash; anchors.fill: parent; color: "white"; opacity: 0; radius: Theme.radius
+                    NumberAnimation on opacity { id: flashAnim; from: 0.7; to: 0; duration: 250; running: false } }
+    }
+
+    Rectangle {
+        id: bar
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+        height: 56; color: Theme.panel
+        Row {
+            anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+            ComboBox {
+                id: sel; width: 260; visible: win.inputs.length > 1
+                model: win.inputs.map(d => d.description)
+                currentIndex: win.camIndex
+                onActivated: (i) => win.camIndex = i
+            }
+            FLabel { visible: win.inputs.length === 1; text: win.hasCam ? win.inputs[0].description : ""; dim: true
+                     anchors.verticalCenter: parent.verticalCenter; width: 260 }
+        }
+        FButton {
+            anchors.centerIn: parent; text: "Fénykép"; icon: "camera"; primary: true
+            enabled: win.hasCam && camera.active; tip: "Szóköz"
+            onClicked: win.shoot()
+        }
+        Row {
+            anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+            FButton { visible: win.lastPhoto !== ""; text: "Mappa"; icon: "folder-open"; flat: true
+                      onClicked: cam.showFile(win.lastPhoto) }
+            FToolButton { icon: "settings"; tip: "Eszközök (Beállítások)"; onClicked: cam.openSettings() }
+        }
+    }
+    Rectangle {
+        visible: win.msg !== ""
+        anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: bar.top; anchors.bottomMargin: 18
+        width: Math.min(mt.implicitWidth + 28, win.width - 40); height: 34; radius: 17
+        color: win.msgErr ? "#5a1d1d" : "#1d2a3a"; border.color: win.msgErr ? Theme.danger : Theme.border
+        FLabel { id: mt; anchors.centerIn: parent; width: parent.width - 28; text: win.msg; horizontalAlignment: Text.AlignHCenter }
+    }
+}

@@ -511,6 +511,9 @@ for m in $(ls -d /run/media/fusion/* 2>/dev/null); do
     echo "FUSION-M6: MEDIA $(basename "$m") fs=$(findmnt -no FSTYPE "$m") uid=$(stat -c %u "$m") file=$(cat "$m/fusion-usb.txt" 2>/dev/null || echo -) write=$(runuser -u fusion -- sh -c "echo ok > '$m/fusion-write.txt' && cat '$m/fusion-write.txt'" 2>/dev/null || echo no)"
 done
 ls -d /run/media/fusion/* >/dev/null 2>&1 || echo "FUSION-M6: MEDIA none"
+# 0.0.40: a Bluetooth-próbához a virtuális vezérlő (btvirt, bluez-test-tools) a teszt-pendrive-ról — a képben nincs
+[ -d /run/media/fusion/FUSIONUSB ] && touch /tmp/fusion-test-stick
+[ -f /run/media/fusion/FUSIONUSB/btvirt ] && install -m 0755 /run/media/fusion/FUSIONUSB/btvirt /tmp/btvirt
 # a GTK / GIO fájlválasztói (a Flatpak-programokban is, pl. PrusaSlicer) a felhasználó nevében eszközként mutatják-e
 # (a GLib csak a /media és a /run/media/<felhasználó> alatti köteteket mutatja — ZBook, 0.0.34: a PrusaSlicer nem látta)
 cat > /tmp/fusion-gioshow.py <<'PY'
@@ -649,6 +652,60 @@ jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/se
 import fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok')" 2>&1 | tail -n 1)
 i=0; while [ $i -lt 300 ] && urun fusion jobs show report --json 2>/dev/null | grep -q '"running": true'; do sleep 2; i=$((i + 2)); done
 echo "FUSION-CLI: JOB start=$jr $(urun fusion jobs show report --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("running=%s rc=%s title=%s" % (j["running"], j["rc"], j["title"]))') file=$([ -f /run/user/1000/fusion/jobs/report.json ] && echo van || echo nincs)"
+# --- 0.0.40: kamera, Bluetooth, nyomtatás ---
+mods=""; for x in uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm; do modinfo -n "$x" >/dev/null 2>&1 && mods="$mods $x"; done
+echo "FUSION-J8: MODULES$mods fw=$(ls /usr/lib/firmware/intel/ibt-hw-37.7* 2>/dev/null | wc -l) groups=$(id -nG fusion | tr ' ' '\n' | grep -cx 'bluetooth\|lpadmin') qtmm=$(python3 -c 'import PyQt6.QtMultimedia; print("ok")' 2>&1 | tail -n 1)"
+# a kamera-, Bluetooth- és nyomtatópróba csak a teszt-pendrive-os futásban (std + SATA) — a többiben az idő kevés
+if [ -f /tmp/fusion-test-stick ]; then
+# kamera: virtuális teszt-kamera (vivid, csak képrögzítő csomópont) — lista a Fusion API-ból, fénykép a Kamera programmal
+modprobe vivid n_devs=1 node_types=0x1 2>/dev/null; udevadm settle --timeout=10
+echo "FUSION-J8: CAMERAS $(urun fusion cameras --json | python3 -c 'import json,sys; c=json.load(sys.stdin); print(len(c), ",".join(x["name"] + ":" + x["bus"] for x in c))' 2>&1 | tail -n 1)"
+urun env QT_QPA_PLATFORM=offscreen GST_DEBUG=2 timeout 90 fusion-camera --selftest > /tmp/fusion-camera.out 2>&1
+grep '^FUSION-CAMERA:' /tmp/fusion-camera.out | sed 's/^FUSION-CAMERA:/FUSION-J8: CAMERA/'
+grep -q '^FUSION-CAMERA: CAPTURE ok' /tmp/fusion-camera.out || grep -v '^FUSION-CAMERA:' /tmp/fusion-camera.out | tail -n 20 | sed 's/^/FUSION-J8:   camera: /'
+# (a vivid betöltve marad: a modul eltávolítása egy elakadt kamera-folyamat mellett megakadhat)
+# Bluetooth: két virtuális vezérlő (btvirt -l2) — keresés, párosítás a saját ügynökkel, eltávolítás; a fusion bluetooth CLI-n át
+if [ -x /tmp/btvirt ]; then
+    modprobe hci_vhci 2>/dev/null
+    /tmp/btvirt -l2 > /tmp/btvirt.log 2>&1 &
+    i=0; while [ $i -lt 30 ] && [ "$(ls /sys/class/bluetooth 2>/dev/null | grep -c '^hci[0-9]*$')" -lt 2 ]; do sleep 1; i=$((i + 1)); done
+    echo "FUSION-J8: BT vhci=$(ls /dev/vhci 2>/dev/null || echo nincs) hci=$(ls /sys/class/bluetooth 2>/dev/null | tr '\n' ' ') btvirt=$(pgrep -x btvirt >/dev/null && echo fut || echo áll) $(tail -n 2 /tmp/btvirt.log | tr '\n' ' ')"
+    systemctl start bluetooth.service 2>/dev/null
+    i=0; while [ $i -lt 30 ] && [ "$(timeout 5 bluetoothctl list 2>/dev/null | grep -c '^Controller')" -lt 2 ]; do sleep 1; i=$((i + 1)); done
+    sleep 3
+    # a másik (nem alapértelmezett) vezérlő a „távoli eszköz”: bekapcsolva, látható, párosítható
+    btd=$(timeout 5 bluetoothctl list | awk '/\[default\]/ {print $2; exit}')
+    bta=$(timeout 5 bluetoothctl list | awk '/^Controller/ && !/\[default\]/ {print $2; exit}')
+    { printf 'select %s\n' "$bta"; sleep 1; for c in "power on" "discoverable on" "pairable on"; do printf '%s\n' "$c"; sleep 1; done
+      printf 'quit\n'; } | timeout 20 bluetoothctl > /tmp/btremote.out 2>&1
+    echo "FUSION-J8: BT remote=${bta:-?} default=${btd:-?} $(grep -c 'succeeded' /tmp/btremote.out) beállítás sikerült"
+    echo "FUSION-J8: BT controllers=$(timeout 5 bluetoothctl list | grep -c '^Controller') wait=${i}s service=$(systemctl is-active bluetooth)"
+    echo "FUSION-J8: BT-POWER $(urun fusion bluetooth on --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"])' 2>&1 | tail -n 1)"
+    urun fusion bluetooth scan 10 --json > /tmp/btscan.json 2>&1
+    echo "FUSION-J8: BT-SCAN $(python3 -c 'import json,sys; j=json.load(open("/tmp/btscan.json")); print(j["ok"], "talalt=%s" % any(d["address"] == sys.argv[1] for d in j["devices"]))' "$bta" 2>&1 | tail -n 1)"
+    echo "FUSION-J8: BT-PAIR $(urun timeout 90 fusion bluetooth pair "$bta" --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"][:80])' 2>&1 | tail -n 1)"
+    echo "FUSION-J8: BT-LIST $(urun fusion bluetooth --json | python3 -c 'import json,sys; j=json.load(sys.stdin); d=[x for x in j["devices"] if x["address"] == sys.argv[1]]; print("powered=%s paired=%s" % (j["adapter"]["powered"], d[0]["paired"] if d else "nincs"))' "$bta" 2>&1 | tail -n 1)"
+    echo "FUSION-J8: BT-REMOVE $(urun fusion bluetooth remove "$bta" --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"][:80])' 2>&1 | tail -n 1)"
+    urun fusion bluetooth off >/dev/null 2>&1
+    pkill -x btvirt 2>/dev/null
+else
+    echo "FUSION-J8: BT nincs btvirt (a teszt-pendrive-on)"
+fi
+# nyomtatás: PDF-nyomtató felvétele, próbaoldal → ~/PDF/*.pdf, alapértelmezett, eltávolítás; keresés (lpinfo)
+systemctl start cups.service 2>/dev/null
+pa=$(urun fusion printers add-pdf --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["name"], j["message"][:80])' 2>&1 | tail -n 1)
+pl=$(urun fusion printers --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(",".join("%s:%s:%s:%s" % (p["name"], p["stateText"], p["connection"], p["default"]) for p in j))' 2>&1 | tail -n 1)
+pt=$(urun fusion printers test PDF --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["job"] != "")' 2>&1 | tail -n 1)
+i=0; while [ $i -lt 90 ] && [ ! -s "$(ls /home/fusion/PDF/*.pdf 2>/dev/null | head -n 1)" ]; do sleep 1; i=$((i + 1)); done
+sleep 2; pf=$(ls /home/fusion/PDF/*.pdf 2>/dev/null | head -n 1)
+echo "FUSION-J8: PRINT add=$pa list=$pl test=$pt pdf=$([ -n "$pf" ] && head -c 5 "$pf") wait=${i}s owner=$([ -n "$pf" ] && stat -c %U "$pf")"
+[ -n "$pf" ] || tail -n 15 /var/log/cups/error_log 2>/dev/null | sed 's/^/FUSION-J8:   cups: /'
+pd=$(urun timeout 150 fusion printers discover --json > /tmp/prdisc.json 2>&1; echo $?)
+[ "$pd" = 0 ] || head -c 300 /tmp/prdisc.json | sed 's/^/FUSION-J8:   discover: /'
+echo "FUSION-J8: PRINT-DISCOVER rc=$pd json=$(python3 -c 'import json; print(type(json.load(open("/tmp/prdisc.json"))).__name__)' 2>&1 | tail -n 1) remove=$(urun fusion printers remove PDF --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["ok"])' 2>&1 | tail -n 1) left=$(urun fusion printers --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+runuser -u fusion -- python3 -c "import runpy; g = runpy.run_path('/usr/lib/fusion/bin/fusion-report', run_name='r'); m = g['Masker'](); print(m.text(chr(10).join(g['bt_camera_printer_section'](m))))" 2>&1 \
+    | sed 's/^/FUSION-J8:   report: /' | head -n 30
+fi
 # 0.0.32: a felület rajzolása a Beállításokból (szoftveres ↔ grafikus kártya), a Shell újraindításával
 shpss() { p=$(pgrep -u fusion -f 'desktop/shell/fusion_shell\.py' | head -n 1); [ -n "$p" ] && awk '/^Pss:/ {print int($2/1024)}' /proc/$p/smaps_rollup 2>/dev/null; }
 rset() {

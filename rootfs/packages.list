@@ -152,3 +152,24 @@ smartmontools
 efibootmgr
 # T3: a DATA mentése (tar + zstd)
 zstd
+
+# 0.0.40: webkamera (UVC) — eszközlista és -képességek a Beállításokban és a hibajelentésben
+v4l-utils
+# a Kamera program élőképe: Qt Multimedia (FFmpeg-háttér, V4L2; a GStreamer-háttér a Qt 6.4-ben Pythonból összeomlott — mérés 0.0.40)
+python3-pyqt6.qtmultimedia
+qml6-module-qtmultimedia
+gstreamer1.0-plugins-good
+# 0.0.40: Bluetooth — BlueZ (bluetoothd, bluetoothctl); a PipeWire Bluetooth-hangja (fejhallgató, hangszóró)
+bluez
+libspa-0.2-bluetooth
+# 0.0.40: nyomtatás — CUPS; driver nélküli nyomtatók (IPP Everywhere / AirPrint, hálózaton és USB-n: ipp-usb),
+# a hálózati nyomtatók felismerése (Avahi), HP- és Gutenprint-meghajtók a régebbi típusokhoz, PDF-„nyomtató”
+cups
+cups-client
+cups-filters
+ipp-usb
+avahi-daemon
+libnss-mdns
+printer-driver-hpcups
+printer-driver-gutenprint
+printer-driver-cups-pdf

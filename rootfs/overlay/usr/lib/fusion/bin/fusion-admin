@@ -13,7 +13,8 @@
 #    eject <lemez>                    a lemez összes kötetének leválasztása (biztonságos eltávolítás)
 #    automount <kernelnév>            (udev/systemd) cserélhető kötet csatolása bedugáskor
 #    autounmount <kernelnév>          (systemd) kihúzáskor
-#    service-restart klipper|moonraker|nginx
+#    service-restart klipper|moonraker|nginx|bluetooth|cups
+#    rfkill-unblock bluetooth|wlan    a rádió szoftveres tiltásának feloldása
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
 #    update-status [--json]           az A/B rendszerfrissítés állapota (csak olvas)
 #    update-apply <fájl.fupd>         rendszerfrissítés az inaktív slotba (fusion-update apply)
@@ -214,8 +215,19 @@ case "$cmd" in
         case "${1:-}" in
             klipper|moonraker) exec systemctl restart "fusion-$1" ;;
             nginx) exec systemctl restart nginx ;;
-            *) fail "használat: service-restart klipper|moonraker|nginx" ;;
+            bluetooth|cups) exec systemctl restart "$1.service" ;;
+            *) fail "használat: service-restart klipper|moonraker|nginx|bluetooth|cups" ;;
         esac ;;
+    rfkill-unblock)
+        # a rádió szoftveres tiltásának feloldása (a kapcsolós / hardveres tiltást nem lehet)
+        case "${1:-}" in bluetooth|wlan) ;; *) fail "használat: rfkill-unblock bluetooth|wlan" ;; esac
+        n=0
+        for d in /sys/class/rfkill/rfkill*; do
+            [ "$(cat "$d/type" 2>/dev/null)" = "$1" ] || continue
+            echo 0 > "$d/soft" && n=$((n + 1))
+        done
+        [ "$n" -gt 0 ] || fail "nincs $1 rádió"
+        say "feloldva: $n $1 rádió" ;;
     devices-assign)
         [ $# -eq 2 ] || fail "használat: devices-assign <szerep> <eszköz>"
         case "$1$2" in *[!a-zA-Z0-9_-]*) fail "érvénytelen paraméter" ;; esac

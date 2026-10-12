@@ -45,6 +45,18 @@ STICK_DEV="usb-storage,drive=stick0,bus=fxhci.0,port=3,removable=on"
 # üres USB-lemez a Lemezkezelő próbájához (formázás, címke, partíciók) — 96 MiB, partíciós tábla nélkül
 SCRATCH_DEV="usb-storage,drive=scratch0,bus=fxhci.0,port=4,removable=on,serial=FUSIONSCRATCH"
 
+# _btvirt: a BlueZ virtuális Bluetooth-vezérlője (bluez-test-tools) a teszthez, a csomagtárolóból (root nélkül)
+_btvirt() {
+    local f="$OUT_DIR/test/btvirt" d
+    [ -x "$f" ] && return 0
+    have apt-get && have dpkg-deb || return 1
+    d=$(mktemp -d)
+    ( cd "$d" && apt-get download -qq bluez-test-tools >/dev/null 2>&1 ) && dpkg-deb -x "$d"/bluez-test-tools_*.deb "$d/x" \
+        && install -m 0755 "$d/x/usr/bin/btvirt" "$f"
+    rm -rf "$d"
+    [ -x "$f" ] || { warn "btvirt nem érhető el (bluez-test-tools) — a Bluetooth-próba kimarad"; return 1; }
+}
+
 # _make_stick <kép>: a partíciókat külön fájlban formázzuk, majd a helyükre másoljuk (root nélkül)
 _make_stick() {
     local img=$1 d parts n=0 off
@@ -54,6 +66,8 @@ _make_stick() {
         | sfdisk -q "$img" >/dev/null
     truncate -s $((120832 * 512)) "$d/p1"; mkfs.vfat -F 32 -n FUSIONUSB "$d/p1" >/dev/null
     printf 'FUSION-USB\n' > "$d/f.txt"; mcopy -i "$d/p1" "$d/f.txt" ::/fusion-usb.txt
+    # a Bluetooth-próba virtuális vezérlője (btvirt) — a képben nincs, csak a teszt hozza
+    _btvirt && mcopy -i "$d/p1" "$OUT_DIR/test/btvirt" ::/btvirt
     dd if="$d/p1" of="$img" bs=512 seek=2048 conv=notrunc status=none
     if command -v mkfs.exfat >/dev/null; then
         truncate -s $((65536 * 512)) "$d/p2"; mkfs.exfat -L FUSIONEXF "$d/p2" >/dev/null
@@ -250,7 +264,7 @@ step_test() {
             QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV"
                         -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV"
                         -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
-            QEMU_HOTPLUG=1; QEMU_TIMEOUT=2400   # a Wine-környezet létrehozása KVM nélkül lassú
+            QEMU_HOTPLUG=1; QEMU_TIMEOUT=3200   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS
         else
             # terhelt gépen (KVM nélkül) a teljes selftest 600 mp fölé is mehet (0.0.31: 586 mp-nél vágta el)
             QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=1200
@@ -310,7 +324,10 @@ step_test() {
             _check "$log" "FUSION-CLI: VALIDATE ok rc-hibas=1" "fusion validate: a receptek és szerepfájlok érvényesek, a hibás leírás 1-es kóddal" || ok_run=0
             _check "$log" "FUSION-CLI: JOB start=ok running=False rc=0 title=Hibajelentés file=van" "feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át" || ok_run=0
             _check "$log" "FUSION-M6: CTRLALTDEL 1 target=masked" "Ctrl+Alt+Del: Feladatkezelő (a konzolon nem indít újra)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,laser,mainsail,files,settings,programs,store,drive,tasks,disks,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,laser,mainsail,files,settings,programs,store,drive,tasks,disks,camera,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
+            # 0.0.40: kamera, Bluetooth, nyomtatás
+            _check "$log" "FUSION-SETTINGS: QML ok" "Beállítások: minden oldal felülete betölthető" || ok_run=0
+            _check "$log" "FUSION-J8: MODULES uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm fw=[1-9][0-9]* groups=2 qtmm=ok" "kamera- és Bluetooth-modulok, Intel BT-firmware, csoportok, Qt Multimedia" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
@@ -341,6 +358,18 @@ step_test() {
             _check "$log" "FUSION-M6: MEDIA none" "a FusionOS saját USB-lemeze nem csatolódik automatikusan" || ok_run=0
         fi
         if [ "$ser" = 1 ]; then
+            # 0.0.40: kamera (vivid), Bluetooth (btvirt a teszt-pendrive-ról), nyomtatás (CUPS, PDF) — csak ebben a futásban
+            _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fusion API listája (V4L2)" || ok_run=0
+            _check "$log" "FUSION-J8: CAMERA FRAMES ok" "Kamera program: élőkép (Qt Multimedia, FFmpeg)" || ok_run=0
+            _check "$log" "FUSION-J8: CAMERA CAPTURE ok" "Kamera program: fénykép az élőképből" || ok_run=0
+            _check "$log" "FUSION-J8: BT controllers=2 .*service=active" "Bluetooth: bluetoothd a (virtuális) vezérlőkkel" || ok_run=0
+            _check "$log" "FUSION-J8: BT-POWER True" "Bluetooth: bekapcsolás" || ok_run=0
+            _check "$log" "FUSION-J8: BT-SCAN True talalt=True" "Bluetooth: eszközkeresés" || ok_run=0
+            _check "$log" "FUSION-J8: BT-PAIR True" "Bluetooth: párosítás a saját ügynökkel" || ok_run=0
+            _check "$log" "FUSION-J8: BT-LIST powered=True paired=True" "Bluetooth: a párosított eszköz a listában" || ok_run=0
+            _check "$log" "FUSION-J8: BT-REMOVE True" "Bluetooth: eltávolítás" || ok_run=0
+            _check "$log" "FUSION-J8: PRINT add=True PDF .*list=PDF:kész:PDF-fájl:True test=True True pdf=%PDF- wait=[0-9]*s owner=fusion" "nyomtatás: PDF-nyomtató, próbaoldal a ~/PDF-be (CUPS)" || ok_run=0
+            _check "$log" "FUSION-J8: PRINT-DISCOVER rc=0 json=list remove=True left=0" "nyomtatás: keresés (lpinfo), eltávolítás" || ok_run=0
             _check "$log" "FUSION-M3: LASER ttyUSB" "/dev/fusion/laser létrejött" || ok_run=0
             _check "$log" "FUSION-M3: OPEN fusion ok" "a fusion felhasználó root nélkül megnyitja" || ok_run=0
             _check "$log" "FUSION-M3: DB laser path:0403:6001:" "hozzárendelés rögzítve (port szerint)" || ok_run=0

@@ -8,6 +8,9 @@ fedi el; csak ott ad saját felületet, ahol a FusionOS-nek saját tudása van.
     fusion.hardware    a Hardware Layer állapota (csak olvas)
     fusion.devices     eszközszerepek (lézer, nyomtató), COM-hozzárendelés
     fusion.notify      értesítések (org.freedesktop.Notifications)
+    fusion.camera      kamerák (V4L2, csak olvas)
+    fusion.bluetooth   Bluetooth-adapter és -eszközök (BlueZ)
+    fusion.printers    papírnyomtatók (CUPS)
     fusion.x11         ablakok (EWMH) — a Shell és a Feladatkezelő közös alapja
     fusion.permissions a jogosultság-ellenőrzés helye (most mindent engedélyez)
 

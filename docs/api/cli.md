@@ -25,6 +25,15 @@ fusion <terület> <művelet> [--json]        fusion help
 | `fusion trash` | objektum | `size` (bájt), `count`, `autoDays` (0 = ki), `autoChoices` |
 | `fusion trash auto <0\|7\|30\|90>` | objektum | `ok`, `autoDays` |
 | `fusion trash purge-old` / `empty` | objektum | `ok`, `removed` |
+| `fusion cameras` | lista | `dev` (pl. `/dev/video0`), `name`, `bus` (`USB` / `virtuális` / `egyéb`), `usb` (vendor:product), `driver`, `index` |
+| `fusion bluetooth` | objektum | `adapter` {`present`, `address`, `name`, `powered`, `discoverable`, `pairable`, `discovering`, `blocked`, `hardBlocked`, `service`}, `devices` [{`address`, `name`, `icon`, `kind`, `paired`, `trusted`, `connected`, `battery`}] |
+| `fusion bluetooth on` / `off` / `scan [mp]` | objektum | `ok`, `message` (a `scan` után: `devices` is) |
+| `fusion bluetooth pair` / `connect` / `disconnect` / `remove <cím>` | objektum | `ok`, `message` — a párosítás saját ügynökkel; a kért kódot szövegesen kiírja |
+| `fusion printers` | lista | `name`, `info`, `model`, `uri`, `connection` (`USB` / `hálózat` / `PDF-fájl`), `state` (3 kész, 4 nyomtat, 5 leállítva), `stateText`, `reasons`, `reasonsText`, `accepting`, `default`, `shared` |
+| `fusion printers discover` | lista | `uri`, `info`, `model`, `connection`, `driverless`, `added`, `class` |
+| `fusion printers add <uri> [modell]` / `add-pdf` | objektum | `ok`, `message`, `name` — driverless (IPP Everywhere), vagy a modellhez illő meghajtó |
+| `fusion printers remove` / `default` / `enable` / `test <név>` | objektum | `ok`, `message` (a `test`: `job` is) |
+| `fusion printers jobs` / `cancel <feladat>` | lista / objektum | `id`, `printer`, `user`, `size`, `time` / `ok`, `message` |
 | `fusion programs list` | lista | `id`, `name`, `type`, `typeName`, `version`, `icon`, `exe`, `prefix`, `open`, `devices` {COMn: szerep}, `folders` {betű: mappa} … (= `fusion-programs list --json`) |
 | `fusion programs info <id>` | objektum | mint a lista egy eleme |
 | `fusion jobs [list]` | lista | `name`, `title`, `app`, `icon`, `running`, `rc` (null, ha még fut), `started`, `finished`, `recent`, `step` {`i`, `n`, `text`}, `progress`, `lines` |

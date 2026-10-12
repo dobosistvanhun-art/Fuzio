@@ -15,9 +15,11 @@ FWindow {
     readonly property var pages: single ? allPages.filter(p => p.id === "programs" || p.id === "store") : allPages
     readonly property var allPages: [
         { id: "wifi", title: "Wi-Fi és hálózat", icon: "wifi", qml: "WifiPage.qml" },
+        { id: "bluetooth", title: "Bluetooth", icon: "bluetooth", qml: "BluetoothPage.qml" },
         { id: "display", title: "Kijelző", icon: "display", qml: "DisplayPage.qml" },
-        { id: "devices", title: "Eszközök", icon: "usb", qml: "DevicesPage.qml" },
-        { id: "printer", title: "Nyomtató (Klipper)", icon: "printer", qml: "PrinterPage.qml" },
+        { id: "devices", title: "Eszközök és kamera", icon: "usb", qml: "DevicesPage.qml" },
+        { id: "printers", title: "Nyomtatók", icon: "print", qml: "PrintersPage.qml" },
+        { id: "printer", title: "3D nyomtató (Klipper)", icon: "printer", qml: "PrinterPage.qml" },
         { id: "drive", title: "Google Drive", icon: "cloud", qml: "DrivePage.qml" },
         { id: "sound", title: "Hang", icon: "volume", qml: "SoundPage.qml" },
         { id: "programs", title: "Programkezelő", icon: "package", qml: "ProgramsPage.qml" },

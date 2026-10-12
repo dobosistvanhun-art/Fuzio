@@ -1,13 +1,13 @@
-// Eszközök: a Fusion eszközréteg szerepei (lézer, 3D nyomtató), soros eszközök, USB-eszközök
+// Eszközök: a Fusion eszközréteg szerepei (lézer, 3D nyomtató), soros eszközök, kamerák, USB-eszközök
 import QtQuick
 import QtQuick.Controls
 import FusionUI
 
 SettingsPage {
     id: p
-    title: "Eszközök"
+    title: "Eszközök és kamera"
     subtitle: "A soros eszközök szerepet kapnak (/dev/fusion/…) — a programok ezen a néven érik el őket"
-    property var d: ({ roles: [], serial: [], usb: [] })
+    property var d: ({ roles: [], serial: [], usb: [], cameras: [] })
     property string msg: ""
     onRefresh: settings.devicesRefresh()
     Component.onCompleted: settings.devicesRefresh()
@@ -52,6 +52,16 @@ SettingsPage {
             }
         }
         Text { visible: p.d.serial.length === 0; padding: 14; text: "Nincs csatlakoztatott soros eszköz"; color: Theme.dim; font.family: Theme.font }
+    }
+    Section {
+        title: "KAMERÁK"
+        Repeater {
+            model: p.d.cameras || []
+            InfoRow { icon: "camera"; label: modelData.dev; value: modelData.name + "  ·  " + modelData.bus + (modelData.usb ? " " + modelData.usb : "")
+                      FButton { text: "Megnyitás"; icon: "camera"; onClicked: settings.cameraOpen() } }
+        }
+        Text { visible: (p.d.cameras || []).length === 0; padding: 14; width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font
+               text: "Nincs kamera. A beépített webkamera egyes gépeken a BIOS-ban kapcsolható ki; USB-kamera: dugja be." }
     }
     Section {
         title: "USB-ESZKÖZÖK"

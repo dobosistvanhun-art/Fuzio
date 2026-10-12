@@ -28,7 +28,8 @@ os.environ["LC_ALL"] = "C.UTF-8"
 os.environ["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 ADMIN = "/usr/lib/fusion/bin/fusion-admin"
 FUSION_UNITS = ["fusion-hardware", "fusion-boot-check", "fusion-klipper", "fusion-moonraker", "nginx", "iwd",
-                "systemd-networkd", "systemd-resolved", "systemd-timesyncd", "systemd-logind", "dbus", "getty@tty1"]
+                "systemd-networkd", "systemd-resolved", "systemd-timesyncd", "systemd-logind", "dbus", "getty@tty1",
+                "bluetooth", "cups", "avahi-daemon"]
 USER_UNITS = ["fusion-drive", "pipewire", "pipewire-pulse", "wireplumber", "xdg-desktop-portal"]
 MAX_LINE = 400
 
@@ -158,7 +159,7 @@ class Masker:
 
     def summary(self):
         names = {"TITOK": "jelszó/kulcs/token", "EMAIL": "e-mail-cím", "MAC": "MAC-cím", "WIFI": "Wi-Fi-hálózatnév",
-                 "SN": "sorozatszám", "IP": "nyilvános IP-cím", "IPv6": "nyilvános IPv6-cím", "GÉP": "gépnév",
+                 "SN": "sorozatszám", "IP": "nyilvános IP-cím", "IPv6": "nyilvános IPv6-cím", "GÉP": "gépnév", "BT-NÉV": "Bluetooth-eszköznév",
                  "FÁJLNÉV": "személyes fájlnév"}
         parts = [f"{names.get(k, k)}: {v}" for k, v in sorted(self.count.items()) if v]
         return ", ".join(parts) if parts else "nem volt maszkolandó adat"
@@ -297,10 +298,18 @@ def wifi_kernel_lines():
     return [l for l in k if WIFI_KERNEL.search(l)]
 
 
+def wifi_iwd_drops():
+    """az iwd megszakadás-eseményei ennél az indításnál (a kernel nem mindig naplózza a kapcsolat elvesztését)"""
+    j = run(["journalctl", "-b", "-u", "iwd", "-q", "--no-pager", "-o", "short-iso", "-g", "Deauthentication event|Disassociation event|disconnect"],
+            timeout=30)
+    return [l for l in j.splitlines() if l.strip() and not l.startswith("-- ")]
+
+
 def wifi_counts():
-    """(kapcsolódások, megszakadás-jellegű üzenetek) ennél az indításnál — a kernel naplójából"""
+    """(kapcsolódások, megszakadások) ennél az indításnál — a kernel és az iwd naplójából"""
     k = wifi_kernel_lines()
-    return len([l for l in k if WIFI_ASSOC.search(l)]), len([l for l in k if WIFI_DROP.search(l)])
+    return len([l for l in k if WIFI_ASSOC.search(l)]), max(len(wifi_iwd_drops()),
+                                                             len([l for l in k if re.search(r"Connection to AP .* lost", l)]))
 
 
 def wifi_section():
@@ -323,7 +332,25 @@ def wifi_section():
     if par:
         L.append("  Modulparaméterek: " + " ".join(par))
     assoc, drops = wifi_counts()
-    L.append(f"  Ennél az indításnál: kapcsolódás {assoc}×, megszakadásra utaló kernelüzenet {drops}×")
+    L.append(f"  Ennél az indításnál: kapcsolódás {assoc}×, megszakadás {drops}×")
+    drops_l = wifi_iwd_drops()
+    if len(drops_l) >= 3:
+        import datetime as _dt
+        ts = []
+        for l in drops_l:
+            try:
+                ts.append(_dt.datetime.fromisoformat(l.split()[0]))
+            except ValueError:
+                pass
+        gaps = [round((b - a).total_seconds() / 60) for a, b in zip(ts, ts[1:])]
+        if gaps:
+            L.append("  Megszakadások közti idő (perc): " + ", ".join(map(str, gaps)))
+    home = os.path.expanduser("~") if os.getuid() else "/home/fusion"
+    fq = [l.strip() for l in read(f"{home}/.local/share/fusion/shell.log").splitlines() if "Wi-Fi: kapcsolódva — frekvencia" in l
+          or "Wi-Fi: rövid megszakadás" in l][-20:]
+    if fq:
+        L.append("  Kapcsolódások csatornája (Fusion Shell):")
+        L += indent("\n".join(fq), 4)
     L.append("  Kernel — Wi-Fi üzenetek (utolsó 60):")
     L += indent("\n".join(wifi_kernel_lines()[-60:]) or "(nincs)", 4)
     L.append("  iwd napló (utolsó 60, a kártya induláskori képességlistája nélkül):")
@@ -333,6 +360,67 @@ def wifi_section():
     L += indent("\n".join(iw[-60:]) or "(nincs)", 4)
     return L
 
+
+
+BT_KERNEL = re.compile(r"(?i)\bbluetooth\b|\bbtusb\b|\bbtintel\b|\bhci\d")
+CAM_KERNEL = re.compile(r"(?i)uvcvideo|\buvc\b|webcam|camera")
+
+
+def bt_camera_printer_section(m):
+    """Bluetooth, kamera, nyomtatók (CUPS) — a Fusion API-n át; a telefonok / számítógépek neve maszkolva"""
+    from fusion import bluetooth as fbt, camera as fcam, printers as fprn
+    L = section("BLUETOOTH")
+    try:
+        soft, hard = fbt.rfkill()
+        a = fbt.adapter()
+        L.append(f"  Adapter: {'van' if a['present'] else 'nincs'}" + (f" ({a['address']}), bekapcsolva: {'igen' if a['powered'] else 'nem'}"
+                                                                     if a["present"] else "")
+                 + f"   ·   rfkill: szoftveres tiltás: {soft}, kapcsoló: {hard}   ·   bluetoothd: {a['service']}")
+        mods = [x for x in ("bluetooth", "btusb", "btintel", "btrtl", "btbcm", "rfcomm", "bnep", "hidp")
+                if os.path.isdir(f"/sys/module/{x}")]
+        L.append("  Betöltött modulok: " + (" ".join(mods) or "nincs"))
+        if a["present"]:
+            for d in fbt.devices():
+                if d["icon"] in ("phone", "computer") and d["name"] != d["address"]:
+                    m.add_literal("BT-NÉV", d["name"])
+                L.append(f"    {d['address']}  {d['name']} ({d['kind']})" + (", párosítva" if d["paired"] else "")
+                         + (", csatlakozva" if d["connected"] else "") + (f", akku {d['battery']}%" if d["battery"] is not None else ""))
+        kl = [l for l in run(["journalctl", "-k", "-b", "-q", "--no-pager", "-o", "short-iso"], timeout=30).splitlines()
+              if BT_KERNEL.search(l)][-12:]
+        if kl:
+            L.append("  Kernel (utolsó sorok):")
+            L += ["    " + l[:MAX_LINE] for l in kl]
+    except Exception as e:
+        L.append(f"  nem olvasható: {e}")
+    L += section("KAMERA")
+    try:
+        cams = fcam.cameras()
+        L += [f"  {c['dev']}  {c['name']}  [{c['bus']} {c['usb']}, {c['driver'] or '?'}]" for c in cams] or ["  nincs kamera"]
+        for c in cams[:2]:
+            fm = run(["v4l2-ctl", "-d", c["dev"], "--list-formats"], timeout=8)
+            L += ["    " + l.strip() for l in fm.splitlines() if re.match(r"\s*\[\d+\]", l)][:6]
+        kl = [l for l in run(["journalctl", "-k", "-b", "-q", "--no-pager", "-o", "short-iso"], timeout=30).splitlines()
+              if CAM_KERNEL.search(l)][-6:]
+        L += ["  kernel: " + l[:MAX_LINE] for l in kl]
+    except Exception as e:
+        L.append(f"  nem olvasható: {e}")
+    L += section("NYOMTATÓK (CUPS)")
+    try:
+        L.append(f"  cups: {fprn.service()}")
+        for pr in fprn.printers():
+            for sn in re.findall(r"serial=([^&\s]+)", pr["uri"]):
+                m.add_literal("SN", sn)
+            L.append(f"  {'*' if pr['default'] else ' '} {pr['name']:<24} {pr['stateText']:<10} {pr['connection']:<8} "
+                     f"{pr['model']}" + (f" [{', '.join(pr['reasons'])}]" if pr["reasons"] else ""))
+            L.append(f"      {pr['uri']}")
+        js = fprn.jobs()
+        L.append(f"  Várakozó feladatok: {len(js)}")
+        err = [l for l in read("/var/log/cups/error_log").splitlines()
+               if l[:1] in ("E", "W") and "ColorManager" not in l][-10:]
+        L += ["  " + l[:MAX_LINE] for l in err]
+    except Exception as e:
+        L.append(f"  nem olvasható: {e}")
+    return L
 
 
 def quick_checks(sysinfo):
@@ -371,7 +459,17 @@ def quick_checks(sysinfo):
     if wifi_devices():
         assoc, drops = wifi_counts()
         add("OK" if assoc <= 1 and drops == 0 else "FIGY",
-            f"Wi-Fi ennél az indításnál: {assoc}× kapcsolódott, {drops} megszakadásra utaló üzenet (részletek: WI-FI)")
+            f"Wi-Fi ennél az indításnál: {assoc}× kapcsolódott, {drops}× szakadt meg (részletek: WI-FI)")
+    try:
+        from fusion import bluetooth as fbt, camera as fcam
+        cams = fcam.cameras()
+        add("OK" if cams else "--", "kamera: " + (", ".join(c["name"] for c in cams) if cams else "nincs"))
+        soft, hard = fbt.rfkill()
+        bta = os.path.isdir("/sys/class/bluetooth") and any(n.startswith("hci") for n in os.listdir("/sys/class/bluetooth"))
+        add("OK" if bta and not soft and not hard else "--", "Bluetooth: " + ("van adapter" if bta else "nincs adapter")
+            + (" — kapcsolóval tiltva" if hard else " — szoftveresen tiltva" if soft else ""))
+    except Exception as e:      # a jelentés ettől még elkészül
+        add("--", f"kamera / Bluetooth: nem ellenőrizhető ({e})")
     defroute = run(["ip", "route", "show", "default"], timeout=5).strip()
     add("OK" if defroute else "--", "hálózat: " + ("van alapértelmezett útvonal" if defroute else "nincs kapcsolat"))
     for role in ("laser", "printer"):
@@ -443,6 +541,8 @@ def build(desc, sysinfo, m):
     L.append("  Soros portok: " + (" ".join(tty) if tty else "nincs"))
     L.append("  Eszközszerepek (Fusion eszközréteg):")
     L += indent(run(["/usr/lib/fusion/devices/fusion-devd", "list"], timeout=10), 4)
+
+    L += bt_camera_printer_section(m)
 
     L += section("LEMEZEK")
     L += indent(run(["lsblk", "-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS,TRAN,MODEL"]), 2)

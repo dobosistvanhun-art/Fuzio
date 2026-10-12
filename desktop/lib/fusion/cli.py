@@ -11,6 +11,14 @@
     fusion trash [--json]                     Lomtár: méret, elemek, automatikus ürítés (napok)
     fusion trash auto <0|7|30|90>             automatikus ürítés beállítása (0 = ki)
     fusion trash purge-old | empty            ürítés a beállítás szerint / teljes ürítés
+    fusion cameras [--json]                   kamerák (V4L2: beépített webkamera, USB-kamera)
+    fusion bluetooth [--json]                 Bluetooth-adapter és eszközök
+    fusion bluetooth on | off | scan [mp]     rádió be / ki, eszközök keresése
+    fusion bluetooth pair | connect | disconnect | remove <cím>
+    fusion printers [--json]                  papírnyomtatók (CUPS): állapot, alapértelmezett
+    fusion printers discover [--json]         csatlakoztatott és hálózati nyomtatók keresése
+    fusion printers add <uri> [modell] | add-pdf | remove | default | test | enable <név>
+    fusion printers jobs [--json] | cancel <feladat>
     fusion programs …                         = fusion-programs … (list --json, info, install, run …)
     fusion notify [-i ikon] [-u sürgősség] [-a program] [-t ms] <cím> [szöveg]
     fusion jobs [list] [--json]               a hosszú műveletek állapota (feladat-protokoll)
@@ -26,7 +34,8 @@ import os
 import shutil
 import sys
 
-from . import API_VERSION, MEDIA, PREFIX, RUN, devices, hardware, jobs, kv, notify, power, schema, trash, ui
+from . import (API_VERSION, MEDIA, PREFIX, RUN, bluetooth, camera, devices, hardware, jobs, kv, notify, power, printers,
+               schema, trash, ui)
 
 
 class UsageError(Exception):
@@ -83,6 +92,80 @@ def volumes():
                     "device": m[0], "fstype": m[2], "size": size, "free": free,
                     "readonly": "ro" in m[3].split(",") if len(m) > 3 else False})
     return out
+
+
+def _result(ok, msg, as_json, extra=None):
+    d = {"ok": bool(ok), "message": msg or ""}
+    d.update(extra or {})
+    _out(d, as_json, msg or ("rendben" if ok else "nem sikerült"))
+    return 0 if ok else 1
+
+
+def _bluetooth(rest, as_json):
+    sub = rest[0] if rest else "list"
+    if sub == "list" and len(rest) <= 1:
+        a = bluetooth.adapter()
+        ds = bluetooth.devices() if a["present"] else []
+        _out({"adapter": a, "devices": ds}, as_json, lambda: "\n".join(
+            [bluetooth.summary()] + [f"  {d['address']}  {d['name']} ({d['kind']})"
+                                     + (" — párosítva" if d["paired"] else "") + (", csatlakozva" if d["connected"] else "")
+                                     + (f", akku {d['battery']}%" if d["battery"] is not None else "") for d in ds]))
+        return 0
+    if sub in ("on", "off") and len(rest) == 1:
+        return _result(*bluetooth.power(sub == "on"), as_json)
+    if sub == "scan" and len(rest) <= 2:
+        ok, msg = bluetooth.scan(int(rest[1]) if len(rest) == 2 and rest[1].isdigit() else 10)
+        return _result(ok, msg, as_json, {"devices": bluetooth.devices()})
+    if sub in ("pair", "connect", "disconnect", "remove", "trust") and len(rest) == 2:
+        fn = getattr(bluetooth, sub)
+        try:
+            if sub == "pair":
+                ok, msg = fn(rest[1], event=None if as_json else
+                             lambda kind, code: print(f"kód: {code}" + (" — gépelje be az eszközön, majd Enter"
+                                                                         if kind == "passkey" else "")))
+            else:
+                ok, msg = fn(rest[1])
+        except ValueError as e:
+            raise UsageError(str(e))
+        return _result(ok, msg, as_json)
+    raise UsageError("fusion bluetooth [on | off | scan [mp] | pair | connect | disconnect | remove <cím>]")
+
+
+def _printers(rest, as_json):
+    sub = rest[0] if rest else "list"
+    if sub == "list" and len(rest) <= 1:
+        ps = printers.printers()
+        _out(ps, as_json, lambda: "\n".join(
+            f"{'*' if p['default'] else ' '} {p['name']:<24} {p['stateText']:<10} {p['connection']:<8} {p['info']}"
+            + (f" [{', '.join(p['reasons'])}]" if p["reasons"] else "") for p in ps) or "nincs felvett nyomtató")
+        return 0
+    if sub == "discover":
+        ds = printers.discover()
+        _out(ds, as_json, lambda: "\n".join(
+            f"{d['connection']:<8} {d['info']}{' (felvéve)' if d['added'] else ''}\n         {d['uri']}" for d in ds)
+            or "nem található nyomtató")
+        return 0
+    if sub == "add" and len(rest) in (2, 3):
+        ok, msg, name = printers.add(rest[1], rest[2] if len(rest) == 3 else "")
+        return _result(ok, msg or (f"felvéve: {name}" if ok else ""), as_json, {"name": name})
+    if sub == "add-pdf" and len(rest) == 1:
+        ok, msg, name = printers.add_pdf()
+        return _result(ok, msg or (f"felvéve: {name}" if ok else ""), as_json, {"name": name})
+    if sub in ("remove", "default", "enable") and len(rest) == 2:
+        fn = {"remove": printers.remove, "default": printers.set_default, "enable": printers.enable}[sub]
+        return _result(*fn(rest[1]), as_json)
+    if sub == "test" and len(rest) == 2:
+        ok, msg, job = printers.test_page(rest[1])
+        return _result(ok, msg or (f"elküldve: {job}" if ok else ""), as_json, {"job": job})
+    if sub == "jobs" and len(rest) == 1:
+        js = printers.jobs()
+        _out(js, as_json, lambda: "\n".join(f"{j['id']:<20} {j['user']:<10} {j['size']:>9} B  {j['time']}" for j in js)
+             or "nincs várakozó feladat")
+        return 0
+    if sub == "cancel" and len(rest) == 2:
+        return _result(*printers.cancel(rest[1]), as_json)
+    raise UsageError("fusion printers [discover | add <uri> [modell] | add-pdf | remove | default | test | enable <név>"
+                     " | jobs | cancel <feladat>]")
 
 
 def _gb(n):
@@ -155,6 +238,15 @@ def main(argv=None):
                 _out({"ok": True, "removed": n}, as_json, f"törölve: {n} elem")
                 return 0
             raise UsageError("fusion trash [auto <0|7|30|90> | purge-old | empty]")
+        if cmd == "cameras":
+            c = camera.cameras()
+            _out(c, as_json, lambda: "\n".join(f"{x['dev']:<12} {x['name']} [{x['bus']}{' ' + x['usb'] if x['usb'] else ''}]"
+                                               for x in c) or "nincs kamera")
+            return 0
+        if cmd == "bluetooth":
+            return _bluetooth(rest, as_json)
+        if cmd == "printers":
+            return _printers(rest, as_json)
         if cmd == "programs":
             exe = shutil.which("fusion-programs") or os.path.join(PREFIX, "programs", "fusion-programs")
             os.execv(sys.executable, [sys.executable, exe] + rest + (["--json"] if as_json else []))
@@ -204,7 +296,7 @@ def main(argv=None):
         else:
             print(f"fusion: {e}", file=sys.stderr)
         return 2
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, RuntimeError) as e:
         if as_json:
             print(json.dumps({"error": str(e)}, ensure_ascii=False))
         else:

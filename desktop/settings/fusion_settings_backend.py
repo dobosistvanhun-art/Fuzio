@@ -1,6 +1,7 @@
 """FusionOS — Beállítások: háttérrész
 
-Oldalak: Wi-Fi, Kijelző, Eszközök, Nyomtató (Klipper), Programkezelő, Asztal, Rendszer.
+Oldalak: Wi-Fi, Bluetooth, Kijelző, Eszközök (kamera is), Nyomtatók (CUPS), 3D nyomtató (Klipper), Programkezelő,
+Asztal, Rendszer.
 A lassú lekérdezések és műveletek (Wi-Fi-keresés, kapcsolódás, szolgáltatás-újraindítás) külön
 szálon futnak; az eredmény a „result” jelzéssel jön vissza (címke + adat), a felület nem akad meg.
 Rendszerjogot igénylő művelet csak a szűk jogú fusion-admin segéden át történik.
@@ -27,6 +28,9 @@ import fusion
 from fusion import devices as fdev
 from fusion import jobs as fjobs
 from fusion import trash as ftrash
+from fusion import bluetooth as fbt
+from fusion import printers as fprn
+from fusion import camera as fcam
 
 MOONRAKER = "http://127.0.0.1:7125"
 BG_FILE = os.path.join(ui.CONFIG, "background")
@@ -96,7 +100,7 @@ def devices():
         m = re.match(r"Bus (\d+) Device (\d+): ID (\S+)\s*(.*)", line)
         if m and not m.group(4).lower().startswith("linux foundation"):
             usb.append({"id": m.group(3), "name": m.group(4) or "(ismeretlen)", "bus": f"{m.group(1)}/{m.group(2)}"})
-    return {"roles": roles, "serial": serial, "usb": usb}
+    return {"roles": roles, "serial": serial, "usb": usb, "cameras": fcam.cameras()}
 
 
 # --- Nyomtató (Klipper) ---
@@ -456,6 +460,119 @@ class Settings(QObject):
     @pyqtSlot(str)
     def deviceForget(self, role):
         self._async("devices-action", lambda: dict(zip(("rc", "msg"), fdev.forget(role))))
+
+    @pyqtSlot()
+    def cameraOpen(self):
+        ui.spawn(["fusion-camera"])
+
+    # --- Bluetooth ---
+    @pyqtSlot()
+    def btRefresh(self):
+        def f():
+            a = fbt.adapter()
+            return {"adapter": a, "devices": fbt.devices() if a["present"] else []}
+        self._async("bt", f)
+
+    def _bt(self, tag, fn, *a):
+        def f():
+            ok, msg = fn(*a)
+            return {"ok": ok, "msg": msg}
+        self._async(tag, f)
+
+    @pyqtSlot(bool)
+    def btPower(self, on):
+        self._bt("bt-action", fbt.power, on)
+
+    @pyqtSlot()
+    def btScan(self):
+        self._bt("bt-scan", fbt.scan, 12)
+
+    @pyqtSlot(str)
+    def btPair(self, addr):
+        def ev(kind, code):
+            self.result.emit("bt-code", {"kind": kind, "code": code, "address": addr})
+        self._bt("bt-pair", fbt.pair, addr, ev)
+
+    @pyqtSlot(str)
+    def btConnect(self, addr):
+        self._bt("bt-action", fbt.connect, addr)
+
+    @pyqtSlot(str)
+    def btDisconnect(self, addr):
+        self._bt("bt-action", fbt.disconnect, addr)
+
+    @pyqtSlot(str)
+    def btRemove(self, addr):
+        self._bt("bt-action", fbt.remove, addr)
+
+    # --- Nyomtatók (CUPS) ---
+    @pyqtSlot()
+    def prnRefresh(self):
+        self._async("prn", lambda: {"service": fprn.service(), "printers": fprn.printers(), "jobs": fprn.jobs()})
+
+    @pyqtSlot()
+    def prnDiscover(self):
+        self._async("prn-discover", lambda: {"devices": fprn.discover()})
+
+    @pyqtSlot(str)
+    def prnDrivers(self, model):
+        self._async("prn-drivers", lambda: {"model": model, "drivers": fprn.drivers(model)})
+
+    @pyqtSlot(str, str, str, str)
+    def prnAdd(self, uri, model, info, ppd):
+        def f():
+            ok, msg, name = fprn.add(uri, model, ppd=ppd, info=info)
+            return {"ok": ok, "msg": msg, "name": name, "uri": uri, "model": model}
+        self._async("prn-add", f)
+
+    @pyqtSlot()
+    def prnAddPdf(self):
+        def f():
+            ok, msg, name = fprn.add_pdf()
+            return {"ok": ok, "msg": msg, "name": name}
+        self._async("prn-add", f)
+
+    def _prn(self, fn, *a):
+        def f():
+            r = fn(*a)
+            return {"ok": r[0], "msg": r[1]}
+        self._async("prn-action", f)
+
+    @pyqtSlot(str)
+    def prnRemove(self, name):
+        self._prn(fprn.remove, name)
+
+    @pyqtSlot(str)
+    def prnDefault(self, name):
+        self._prn(fprn.set_default, name)
+
+    @pyqtSlot(str)
+    def prnEnable(self, name):
+        self._prn(fprn.enable, name)
+
+    @pyqtSlot(str)
+    def prnTest(self, name):
+        def f():
+            ok, msg, job = fprn.test_page(name)
+            return {"ok": ok, "msg": msg if not ok else f"Próbaoldal elküldve ({job}).", "test": True}
+        self._async("prn-action", f)
+
+    @pyqtSlot(str)
+    def prnCancel(self, job):
+        self._prn(fprn.cancel, job)
+
+    @pyqtSlot(str)
+    def prnCancelAll(self, name):
+        self._prn(fprn.cancel_all, name)
+
+    @pyqtSlot()
+    def prnWeb(self):
+        ui.spawn(["xdg-open", "http://localhost:631/"])
+
+    @pyqtSlot(str)
+    def serviceRestart(self, name):
+        if name in ("bluetooth", "cups"):
+            self._async("service-restart", lambda: dict(zip(("rc", "msg"), ui.admin("service-restart", name))))
 
     # --- Nyomtató ---
     @pyqtSlot()

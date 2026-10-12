@@ -2,7 +2,7 @@
 """FusionOS — Beállítások (fusion-settings)
 
     fusion-settings [oldal] [paraméter]
-        oldal: wifi | display | devices | printer | drive | sound | programs | store | desktop | system
+        oldal: wifi | bluetooth | display | devices | printers | printer | drive | sound | programs | store | desktop | system
         store search:<szó>: a Programbolt ezzel a kereséssel nyílik
         programs <fájl>: a Programkezelő ezzel a telepítővel / programfájllal nyílik
     fusion-settings --selftest      az oldalak adatainak lekérdezése felület nélkül (FUSION-SETTINGS sorok)
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "display", "devices", "printer", "drive", "sound", "programs", "store", "desktop", "update", "backup", "report", "system"]
+PAGES = ["wifi", "bluetooth", "display", "devices", "printers", "printer", "drive", "sound", "programs", "store", "desktop", "update", "backup", "report", "system"]
 
 
 def selftest():
@@ -58,9 +58,29 @@ def selftest():
           + (",".join(f"{e['slot']}:{e['state']}{'*' if e['running'] else ''}" for e in u["entries"]) or "-")
           + f" files={len(u['files'])} error={u['error'] or '-'}", flush=True)
     b = sb.backup_state()
-    print(f"FUSION-SETTINGS: BACKUP error={b['error'] or '-'} data={b['dataUsedText']} targets={len(b['targets'])} backups={len(b['backups'])}", flush=True)
+    print(f"FUSION-SETTINGS: BACKUP error={b['error'] or '-'} data={b.get('dataUsedText', '-')} targets={len(b.get('targets', []))} backups={len(b.get('backups', []))}", flush=True)
     r = sb.report_files()
     print(f"FUSION-SETTINGS: REPORT dir={sb.report_dir()} files={len(r)}", flush=True)
+    # 0.0.40: Bluetooth, nyomtatók (CUPS), kamera — a Fusion API-n át
+    from fusion import bluetooth as fbt, camera as fcam, printers as fprn
+    a = fbt.adapter()
+    print(f"FUSION-SETTINGS: BLUETOOTH present={a['present']} powered={a.get('powered')} service={a['service']} "
+          f"blocked={a['blocked']}", flush=True)
+    print(f"FUSION-SETTINGS: PRINTERS service={fprn.service()} printers={len(fprn.printers())} cameras={len(fcam.cameras())}",
+          flush=True)
+    # az oldalak felülete: minden oldal QML-je betölthető (a háttérrel, ablak nélkül)
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtQml import QQmlComponent
+    app, engine = ui.create_app("fusion-settings-selftest", "Beállítások", "settings")
+    be = sb.Settings()
+    engine.rootContext().setContextProperty("settings", be)
+    engine.rootContext().setContextProperty("appMode", "")
+    bad = []
+    for page in sorted(f for f in os.listdir(os.path.join(HERE, "qml")) if f.endswith("Page.qml") and f != "SettingsPage.qml"):
+        c = QQmlComponent(engine, QUrl.fromLocalFile(os.path.join(HERE, "qml", page)))
+        if c.status() != QQmlComponent.Status.Ready:
+            bad.append(page + ": " + "; ".join(e.toString() for e in c.errors())[:300])
+    print("FUSION-SETTINGS: QML " + ("ok" if not bad else "HIBA " + " | ".join(bad)), flush=True)
     all_apps = fusion_apps.load()
     print("FUSION-SETTINGS: APPS " + ",".join(a["id"] for a in all_apps if not a["search_only"]), flush=True)
     return 0

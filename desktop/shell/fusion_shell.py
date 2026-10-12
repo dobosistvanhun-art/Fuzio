@@ -116,6 +116,9 @@ class NotifyAdaptor(QDBusAbstractAdaptor):
         msg.setDelayedReply(True)
         QDBusConnection.sessionBus().send(msg.createReply(["Fusion Shell", "FusionOS", "1.0", "1.2"]))
 
+# Wi-Fi: ennyi másodpercen belüli visszakapcsolódásról nincs értesítés (csak napló) — 0.0.40
+WIFI_DROP_GRACE = 30
+
 
 class NotifyObject(QObject):
     pass
@@ -650,14 +653,30 @@ class Shell(QObject):
                     w["level"] = n["level"]
                     break
         old = self._wifi
+        now = time.monotonic()
         if w != old:
             self._wifi = w
             self.wifiChanged.emit()
             if not self._first and old.get("state") != w["state"]:
                 if w["state"] == "connected":
-                    self.local_note("wifi", "Wi-Fi: kapcsolódva", w["ssid"] + (f"  ({w['ip']})" if w["ip"] else ""))
+                    lost = getattr(self, "_wifi_lost", None)
+                    self._wifi_lost = None
+                    # a csatorna a naplóba (a hibajelentés WI-FI része mutatja: vált-e a router csatornát)
+                    rc, link = ui.run(["iw", "dev", w["device"] or "wlan0", "link"], timeout=3)
+                    fq = next((l.split(":", 1)[1].strip() for l in link.splitlines() if l.strip().startswith("freq:")), "?")
+                    print(f"fusion-shell: Wi-Fi: kapcsolódva — frekvencia: {fq} MHz", flush=True)
+                    if lost and not lost.get("notified"):
+                        # rövid kiesés (pl. a router csatornát vált): csak a naplóba — nincs értesítés (0.0.40)
+                        print(f"fusion-shell: Wi-Fi: rövid megszakadás ({now - lost['t']:.0f} mp), visszakapcsolódott: {w['ssid']}",
+                              flush=True)
+                    else:
+                        self.local_note("wifi", "Wi-Fi: kapcsolódva", w["ssid"] + (f"  ({w['ip']})" if w["ip"] else ""))
                 elif old.get("state") == "connected":
-                    self.local_note("wifi", "Wi-Fi: a kapcsolat megszakadt", old.get("ssid", ""), "fusion-settings wifi")
+                    self._wifi_lost = {"t": now, "ssid": old.get("ssid", ""), "notified": False}
+        lost = getattr(self, "_wifi_lost", None)
+        if lost and not lost["notified"] and w["state"] != "connected" and now - lost["t"] >= WIFI_DROP_GRACE:
+            lost["notified"] = True
+            self.local_note("wifi", "Wi-Fi: a kapcsolat megszakadt", lost["ssid"], "fusion-settings wifi")
 
     def tick_lid(self, devs):
         """fedél: ha lecsukták, de a gép ébren marad (lézer / nyomtató csatlakozik → fusion-keepawake),
