@@ -38,9 +38,16 @@ a szélein lévő szóközök nélkül. Ellenőrzés: `fusion validate <fájl>�
 | `port.COMn` |  | role | win64 | soros port → eszközszerep (port.COM3 = laser) |
 | `drive.X` |  | dir | win64 | meghajtóbetű → mappa (abszolút, vagy a saját mappához képest) |
 | `match` |  | text | win64 (csak recept) | recept: a telepítőfájl nevének mintája (LightBurn*.exe) |
+| `allow.files` |  | folders | mind | Linux-programok mappái meghajtóbetű nélkül, szóközzel; `:ro` = csak olvasható (M9) |
+| `allow.net` |  | enum (yes, no) | mind | hálózat; alapértelmezés: yes (M9) |
+| `sandbox` |  | enum (yes, no) | mind | a futtató homokozója; alapértelmezés: no (M9) |
 | `appid` |  | appid | flatpak | Flatpak-azonosító (com.prusa3d.PrusaSlicer) |
 | `installation` |  | enum (user, system) | flatpak | Flatpak-telepítés helye |
 | `exec` |  | relpath | appimage, native | az indítófájl a program mappájához képest |
+
+Jogosultságok (M9, 0.0.41): a `port.*` (eszköz) és a `drive.*` (mappa) kulcs egyben jog is; Linux-programoknál a
+mappákat az `allow.files` adja. A kényszerítés a futtatóé: Flatpak — a Flatpak homokozója; a többi — `sandbox = yes`
+esetén homokozó (a következő lépésben), különben a felhasználó jogaival fut. Lekérdezés: `fusion permissions`.
 
 A `scheme` és az `url_args` kulcs (0.0.39): a program által kezelt URL-sémák (`prusaslicer`) és az URL-es indítás kapcsolói (`--single-instance-on-url`); az XDG-bejegyzésbe `x-scheme-handler/<séma>` kerül.
 
@@ -53,7 +60,7 @@ Ha `places = standard` (alapértelmezés), a Fusion helyei: D: Adatok, E: pendri
 
 1. Telepítéskor és újratelepítéskor a Programkezelő a recept kulcsait a leírásba írja (`recipe = <fájlnév>`).
    A recept `match` kulcsa nem kerül át.
-2. A felhasználó beállításai — `port.*`, `drive.*`, `places` — a leírásból maradnak, ha ott már van ilyen családú
+2. A felhasználó beállításai — `port.*`, `drive.*`, `places`, `allow.files`, `allow.net`, `sandbox` — a leírásból maradnak, ha ott már van ilyen családú
    kulcs. Például a Beállításokban átállított COM-port egy újratelepítés után is megmarad.
 3. Futáskor a leírás önmagában teljes: az `fwr` és a Programkezelő csak a leírást olvassa.
    Recept nélküli (általános) Windows-programnál csak a leírás van.

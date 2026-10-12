@@ -58,6 +58,11 @@ PROGRAM_FIELDS = {
     "recipe":      _f("text", "a recept fájlneve, amelyből a leírás készült"),
     "scheme":      _f("schemes", "URL-sémák, amelyeket a program kezel, szóközzel (prusaslicer) — a böngésző linkjei ide jutnak"),
     "url_args":    _f("args", "kapcsolók URL-es indításhoz (--single-instance-on-url)"),
+    # jogosultságok (M9) — a win64 port.* / drive.* kulcsai is jogok: eszköz, mappa
+    "allow.files": _f("folders", "mappák meghajtóbetű nélkül, szóközzel; „:ro” = csak olvasható (Projektek Letöltések:ro)"),
+    "allow.net":   _f("enum", "hálózat (internet, helyi háló); alapértelmezés: yes", values=("yes", "no")),
+    "sandbox":     _f("enum", "a futtató homokozója (csak a leírásban megadott eszközök és mappák látszanak); "
+                      "alapértelmezés: no", values=("yes", "no")),
     # win64
     "exe":         _f("winpath", "a program Windows-útja (C:\\…\\x.exe)", types=["win64"]),
     "windows":     _f("enum", "a jelentett Windows-verzió", values=WINDOWS_VERSIONS, types=["win64"]),
@@ -125,6 +130,9 @@ def _check_value(kind, v, values=()):
     if kind == "args":
         bad = [e for e in v.split() if not re.match(r"^--?[A-Za-z0-9][A-Za-z0-9_=.-]*$", e)]
         return None if not bad else "csak kapcsolók (--valami)"
+    if kind == "folders":
+        bad = [e for e in v.split() if not re.match(r"^[^\s:]+(:ro)?$", e) or ".." in e.split("/")]
+        return None if v.split() and not bad else "mappanevek szóközzel, opcionálisan :ro (Projektek Letöltések:ro)"
     if kind == "com":
         return None if COM_RE.match(v) else "COM1 … COM9"
     if kind == "appid":
@@ -199,8 +207,8 @@ def validate_file(path):
     return res
 
 
-# a felhasználó beállításai (Beállítások → Programkezelő: eszközök, mappák) — ezekben a program leírója dönt
-USER_KEY_FAMILIES = ("port.", "drive.", "places")
+# a felhasználó beállításai (Beállítások → Programkezelő: eszközök, mappák, jogok) — ezekben a program leírója dönt
+USER_KEY_FAMILIES = ("port.", "drive.", "places", "allow.files", "allow.net", "sandbox")
 
 
 def _family(k):

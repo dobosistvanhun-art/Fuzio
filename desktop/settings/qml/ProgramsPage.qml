@@ -130,6 +130,10 @@ SettingsPage {
                     InfoRow { visible: Object.keys(row.m.folders).length > 0; label: "Látott mappák"
                               value: Object.keys(row.m.folders).map(k => k + ":  ~/" + row.m.folders[k]).join("\n"); mono: true }
                     InfoRow { label: "Telepítve"; value: [row.m.installed, row.m.source].filter(x => x).join("  ·  ") }
+                    InfoRow { icon: "lock"; label: "Védelem"; value: (row.m.protection || "")
+                                  + (row.m.allowFiles ? "\nMappák: " + row.m.allowFiles : "")
+                                  + (row.m.net === false ? "\nHálózat: tiltva" : "")
+                              valueColor: row.m.sandbox || row.m.type === "flatpak" ? Theme.ok : Theme.dim }
                     // eszköz-hozzáférés (Windows-programok soros portjai)
                     Repeater {
                         model: row.m.type === "win64" ? p.roles : []

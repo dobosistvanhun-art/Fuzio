@@ -327,6 +327,10 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,laser,mainsail,files,settings,programs,store,drive,tasks,disks,camera,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             # 0.0.40: kamera, Bluetooth, nyomtatás
             _check "$log" "FUSION-SETTINGS: QML ok" "Beállítások: minden oldal felülete betölthető" || ok_run=0
+            # M9: jogosultságok
+            _check "$log" "FUSION-M9: XINPUT added=[1-9][0-9]* failed=0 input-group=0" "bemeneti eszközök az input csoport nélkül (Xorg)" || ok_run=0
+            _check "$log" "FUSION-M9: PERMISSIONS jogproba:sandbox:net=False:folders=Projektek,Letöltések:ro validate=ok" "fusion permissions: a programok jogai" || ok_run=0
+            _check "$log" "FUSION-M9: CHECK True False" "jogosultság-kapu: saját program igen, ismeretlen nem" || ok_run=0
             _check "$log" "FUSION-J8: MODULES uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm fw=[1-9][0-9]* groups=2 qtmm=ok" "kamera- és Bluetooth-modulok, Intel BT-firmware, csoportok, Qt Multimedia" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0

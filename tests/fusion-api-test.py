@@ -66,7 +66,7 @@ check("devices.present", [x["role"] for x in devices.present() if x["present"]] 
 # értesítés: a parancssor ellenőrzi a paramétereket (Shell nélkül a küldés nem sikerül, de nem száll el)
 check("notify.main paraméter nélkül → 2", notify.main([]) == 2)
 check("notify.send Shell nélkül → False", notify.send("x") in (False, True))
-check("permissions.check (most mindig engedélyez)", permissions.check("x", "device:laser"))
+check("permissions.check: a FusionOS saját hívója engedélyezett", permissions.check("fusion", "device:laser"))
 # --- M8b: sémák, elsőbbségi szabály, feladat-protokoll, parancssor ---
 from fusion import cli, jobs, schema, ui  # noqa: E402
 import contextlib  # noqa: E402
@@ -296,5 +296,27 @@ log = open(os.path.join(T, "lpadmin.log")).read()
 check("nyomtatók: driverless felvétel (-m everywhere)", okd and named == "Brother_HL-L2350DW" and "-v ipp://BRN.local:631/ipp/print -m everywhere" in log, (okd, msgd, named, log))
 check("nyomtatók: érvénytelen név / cím elutasítva", printers.remove("x; rm")[0] is False and printers.add("nem uri")[0] is False)
 check("nyomtatók: feladatok", printers.jobs() == [{"id": "HP_P1102-7", "printer": "HP_P1102", "user": "fusion", "size": 4096, "time": "Mon 12 Oct 2026"}], printers.jobs())
+
+# --- M9: jogosultságok a leíróból ---
+from fusion import permissions as perm, schema as fschema  # noqa: E402
+pdir = os.path.join(os.environ["FUSION_PROGRAMS_DIR"], "jogproba")
+os.makedirs(pdir, exist_ok=True)
+open(os.path.join(pdir, "program.fusion"), "w").write(
+    "id = jogproba\nname = Jog próba\ntype = win64\nexe = C:\\x.exe\nport.COM3 = laser\ndrive.P = Projektek\n"
+    "allow.files = Letöltések:ro\nallow.net = no\nsandbox = yes\n")
+pr = fschema.validate_program(kv.parse(open(os.path.join(pdir, "program.fusion")).read()))
+check("séma: allow.files / allow.net / sandbox érvényes", not pr, pr)
+check("séma: hibás allow.files", any(x[1] == "allow.files" for x in fschema.validate_program(
+    {"id": "x", "name": "x", "type": "flatpak", "appid": "a.b.c", "allow.files": "../etc"})))
+sm = perm.summary("jogproba")
+check("jogok: összefoglaló", sm and sm["devices"] == ["laser"] and sm["enforcement"] == "sandbox" and not sm["net"]
+      and [f["path"] for f in sm["folders"]] == ["Projektek", "Letöltések"] and sm["folders"][1]["readonly"], sm)
+check("check: saját program / szkript mindent", perm.check("fusion", "system:bluetooth") and perm.check("fusion", "device:x"))
+check("check: a leírás szerinti eszköz", perm.check("jogproba", "device:laser") and not perm.check("jogproba", "device:printer"))
+check("check: mappa és almappa", perm.check("jogproba", "files:Letöltések/a.svg") and not perm.check("jogproba", "files:Képek"))
+check("check: hálózat tiltva, rendszerművelet nem", not perm.check("jogproba", "net") and not perm.check("jogproba", "system:printers"))
+check("check: ismeretlen program semmit", not perm.check("nincsilyen", "device:laser"))
+rcp = fschema.apply_recipe({"exe": "C:\\y.exe", "sandbox": "no", "allow.net": "yes"}, {"sandbox": "yes", "allow.net": "no"})
+check("recept: a felhasználó joga marad (sandbox, allow.net)", rcp["sandbox"] == "yes" and rcp["allow.net"] == "no", rcp)
 print(f"Eredmény: {ok} sikeres, {fail} hibás")
 sys.exit(1 if fail else 0)

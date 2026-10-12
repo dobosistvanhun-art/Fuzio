@@ -19,6 +19,7 @@
     fusion printers discover [--json]         csatlakoztatott és hálózati nyomtatók keresése
     fusion printers add <uri> [modell] | add-pdf | remove | default | test | enable <név>
     fusion printers jobs [--json] | cancel <feladat>
+    fusion permissions [id] [--json]          a programok jogai: eszközök, mappák, hálózat, homokozó (M9)
     fusion programs …                         = fusion-programs … (list --json, info, install, run …)
     fusion notify [-i ikon] [-u sürgősség] [-a program] [-t ms] <cím> [szöveg]
     fusion jobs [list] [--json]               a hosszú műveletek állapota (feladat-protokoll)
@@ -34,8 +35,8 @@ import os
 import shutil
 import sys
 
-from . import (API_VERSION, MEDIA, PREFIX, RUN, bluetooth, camera, devices, hardware, jobs, kv, notify, power, printers,
-               schema, trash, ui)
+from . import (API_VERSION, MEDIA, PREFIX, RUN, bluetooth, camera, devices, hardware, jobs, kv, notify, permissions,
+               power, printers, programs, schema, trash, ui)
 
 
 class UsageError(Exception):
@@ -245,6 +246,25 @@ def main(argv=None):
             return 0
         if cmd == "bluetooth":
             return _bluetooth(rest, as_json)
+        if cmd == "permissions":
+            if len(rest) > 1:
+                raise UsageError("fusion permissions [id]")
+            ids = rest or [p["id"] for p in programs.list_programs()]
+            res = [x for x in (permissions.summary(i, with_flatpak=True) for i in ids) if x]
+            if rest and not res:
+                raise ValueError(f"nincs ilyen program: {rest[0]}")
+
+            def txt(p):
+                fl = ", ".join((f["letter"] + ": " if f["letter"] else "") + f["path"] + (" (csak olvas)" if f["readonly"] else "")
+                               for f in p["folders"]) or "—"
+                lines = [f"{p['name']} [{p['id']}, {p['type']}]", f"  védelem:  {p['protection']}",
+                         f"  eszközök: " + (", ".join(f"{c} → {r}" for c, r in sorted(p['ports'].items())) or "—"),
+                         f"  mappák:   {fl}", f"  hálózat:  {'igen' if p['net'] else 'nem'}"]
+                if p.get("flatpak"):
+                    lines.append("  Flatpak:  " + "; ".join(f"{k}={','.join(v)}" for k, v in sorted(p["flatpak"].items())))
+                return "\n".join(lines)
+            _out(res if not rest else res[0], as_json, lambda: "\n".join(txt(p) for p in res) or "nincs telepített program")
+            return 0
         if cmd == "printers":
             return _printers(rest, as_json)
         if cmd == "programs":

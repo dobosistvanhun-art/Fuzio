@@ -17,7 +17,7 @@
 | `fusion.notify` | `send(cím, szöveg, ikon, program, sürgősség, ms)` — `org.freedesktop.Notifications` |
 | `fusion.ui` | `render_mode()`, `render_forced()`, `RENDER_FILE` — a felület rajzolása (Qt nélkül) |
 | `fusion.x11` | `X11` — ablakok (EWMH); a Shell és a Feladatkezelő közös alapja |
-| `fusion.permissions` | `check(program, képesség)` — a jogosultság-ellenőrzés helye (most mindent engedélyez) |
+| `fusion.permissions` | `check(program, képesség)` a leírás szerint (a FusionOS saját hívója mindent; ismeretlen program semmit), `of(leírás)`, `summary(id)`, `caller()` — M9 |
 | `fusion.cli` | a `fusion` parancs — [cli.md](cli.md) |
 
 Egy hely, egy igazság:

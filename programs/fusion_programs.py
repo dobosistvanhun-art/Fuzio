@@ -17,12 +17,12 @@ flatpak: appid.  appimage / native: exec (a program mappájához képest).
 Minden művelet a fusion felhasználóként, root nélkül fut (spec 17.).
 """
 try:
-    from fusion import kv as _fkv, schema as _fschema
+    from fusion import kv as _fkv, schema as _fschema, permissions as _fperm
 except ImportError:      # fejlesztői fa: <repo>/desktop/lib
     import sys as _sys
     import os as _os
     _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.realpath(__file__))), "desktop", "lib"))
-    from fusion import kv as _fkv, schema as _fschema
+    from fusion import kv as _fkv, schema as _fschema, permissions as _fperm
 import configparser
 import fnmatch
 import glob
@@ -1227,7 +1227,9 @@ def info(m):
             "exe": m.get("exe", ""), "prefix": m.get("prefix", ""), "open": m.get("open", ""),
             "devices": {k[5:]: v for k, v in m.items() if k.startswith("port.")},
             "folders": {k[6:].upper(): v for k, v in m.items() if k.startswith("drive.")},
-            "canUpdate": m.get("type") == "flatpak"}
+            "canUpdate": m.get("type") == "flatpak",
+            "protection": _fperm.of(m)["protection"], "sandbox": m.get("sandbox", "no") == "yes",
+            "net": m.get("allow.net", "yes") != "no", "allowFiles": m.get("allow.files", "")}
 
 
 def set_device(pid, com, role):

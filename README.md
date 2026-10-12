@@ -41,6 +41,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **0.0.38 (j6)**: a Programkezelő külön ablakban (fülek: Programkezelő, Programbolt); a Lomtár automatikus ürítése (Beállítások → Rendszer: ki / 7 / 30 / 90 nap), `fusion trash` — `docs/J6-programkezelo-lomtar.md`
 - **0.0.39 (j7)**: Terminál: Ctrl+V / Ctrl+Shift+V beillesztés, Ctrl+Shift+C másolás, többsoros beillesztés; Printables „Open in PrusaSlicer” a Firefoxból (URL-séma, Linux-receptek) — `docs/J7-terminal-printables.md`
 - **0.0.40 (j8)**: beépített kamera (Kamera program, Eszközök és kamera), Bluetooth (Beállítások → Bluetooth: párosítás, fejhallgató, egér, billentyűzet), papírnyomtatók (Beállítások → Nyomtatók: CUPS, driverless, PDF-nyomtató); `fusion cameras | bluetooth | printers` — `docs/J8-kamera-bluetooth-nyomtato.md`
+- **0.0.41 (m9a)**: jogosultságok első lépése — `input` csoport ki, hibajelentés: JOGOSULTSÁGOK, Programkezelő: Védelem, leíró: `allow.files` / `allow.net` / `sandbox`, `fusion permissions` (Klipper és LightBurn változatlan) — `docs/M9a-jogosultsagok.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem
   alszik el (a fedél lecsukására sem), és az USB-juk nem altatható. Ellenőrzés: `docs/M6i-drive-ebrenlet.md`

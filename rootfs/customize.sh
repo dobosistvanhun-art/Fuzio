@@ -282,7 +282,9 @@ echo "Europe/Budapest" > "$R/etc/timezone"
 in_root setupcon --save-only --force >/dev/null 2>&1 || echo "  [customize] FIGYELEM: setupcon --save-only nem sikerült"
 
 echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
-in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,input,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
+# M9: az `input` csoport nincs (a nyers billentyűzet- és egéreseményekhez minden program hozzáférne); az Xorg a
+# bemeneti eszközöket a logind-on át kapja (root nélküli Xorg), vagy rootként nyitja meg
+in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
 # az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell

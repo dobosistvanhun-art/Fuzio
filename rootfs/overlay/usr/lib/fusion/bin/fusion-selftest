@@ -706,6 +706,15 @@ echo "FUSION-J8: PRINT-DISCOVER rc=$pd json=$(python3 -c 'import json; print(typ
 runuser -u fusion -- python3 -c "import runpy; g = runpy.run_path('/usr/lib/fusion/bin/fusion-report', run_name='r'); m = g['Masker'](); print(m.text(chr(10).join(g['bt_camera_printer_section'](m))))" 2>&1 \
     | sed 's/^/FUSION-J8:   report: /' | head -n 30
 fi
+# --- M9: jogosultságok ---
+# az `input` csoport nélkül is megnyílnak-e az Xorg bemeneti eszközei (billentyűzet, egér)
+xl=/home/fusion/.local/share/xorg/Xorg.0.log; [ -s "$xl" ] || xl=/var/log/Xorg.0.log
+echo "FUSION-M9: XINPUT added=$(grep -c "Using input driver 'libinput'" "$xl" 2>/dev/null) failed=$(grep -ci 'libinput.*\(failed\|permission denied\)\|systemd-logind: failed to take device' "$xl" 2>/dev/null) input-group=$(id -nG fusion | tr ' ' '\n' | grep -cx input) log=$(basename "$(dirname "$xl")")"
+# próba-leírás (a Programkezelő próbái addigra eltávolították a programokat)
+urun sh -c 'mkdir -p /data/programs/jogproba && printf "id = jogproba\nname = Jog próba\ntype = native\nexec = app/x\nallow.files = Projektek Letöltések:ro\nallow.net = no\nsandbox = yes\n" > /data/programs/jogproba/program.fusion'
+echo "FUSION-M9: PERMISSIONS $(urun fusion permissions jogproba --json | python3 -c 'import json,sys; p=json.load(sys.stdin); print("%s:%s:net=%s:folders=%s" % (p["id"], p["enforcement"], p["net"], ",".join(f["path"] + (":ro" if f["readonly"] else "") for f in p["folders"])))' 2>&1 | tail -n 1) validate=$(urun fusion validate /data/programs/jogproba/program.fusion >/dev/null 2>&1 && echo ok || echo HIBA)"
+rm -rf /data/programs/jogproba
+echo "FUSION-M9: CHECK $(urun python3 -c 'from fusion import permissions as p; print(p.check("fusion", "system:printers"), p.check("nincsilyen", "device:laser"))' 2>&1 | tail -n 1)"
 # 0.0.32: a felület rajzolása a Beállításokból (szoftveres ↔ grafikus kártya), a Shell újraindításával
 shpss() { p=$(pgrep -u fusion -f 'desktop/shell/fusion_shell\.py' | head -n 1); [ -n "$p" ] && awk '/^Pss:/ {print int($2/1024)}' /proc/$p/smaps_rollup 2>/dev/null; }
 rset() {

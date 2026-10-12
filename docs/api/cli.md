@@ -34,6 +34,7 @@ fusion <terület> <művelet> [--json]        fusion help
 | `fusion printers add <uri> [modell]` / `add-pdf` | objektum | `ok`, `message`, `name` — driverless (IPP Everywhere), vagy a modellhez illő meghajtó |
 | `fusion printers remove` / `default` / `enable` / `test <név>` | objektum | `ok`, `message` (a `test`: `job` is) |
 | `fusion printers jobs` / `cancel <feladat>` | lista / objektum | `id`, `printer`, `user`, `size`, `time` / `ok`, `message` |
+| `fusion permissions [id]` | lista / objektum | `id`, `name`, `type`, `devices`, `ports` {COMn: szerep}, `folders` [{`path`, `letter`, `readonly`}], `net`, `sandbox`, `enforcement` (`flatpak` / `sandbox` / `win64` / `full`), `protection` (szöveg), `flatpak` (a csomag kért jogai) |
 | `fusion programs list` | lista | `id`, `name`, `type`, `typeName`, `version`, `icon`, `exe`, `prefix`, `open`, `devices` {COMn: szerep}, `folders` {betű: mappa} … (= `fusion-programs list --json`) |
 | `fusion programs info <id>` | objektum | mint a lista egy eleme |
 | `fusion jobs [list]` | lista | `name`, `title`, `app`, `icon`, `running`, `rc` (null, ha még fut), `started`, `finished`, `recent`, `step` {`i`, `n`, `text`}, `progress`, `lines` |

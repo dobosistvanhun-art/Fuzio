@@ -423,6 +423,38 @@ def bt_camera_printer_section(m):
     return L
 
 
+def permissions_section():
+    """M9: ki mit érhet el — figyelő portok, csoportok, homokozó, a programok jogai"""
+    L = section("JOGOSULTSÁGOK")
+    import grp
+    try:
+        name = pwd.getpwuid(os.getuid()).pw_name
+        groups = sorted({g.gr_name for g in grp.getgrall() if name in g.gr_mem})
+        L.append(f"  Felhasználó: {name}, csoportok: {' '.join(groups) or '-'}")
+    except (KeyError, OSError):
+        pass
+    L.append("  Felhasználói névterek (homokozó): apparmor_restrict_unprivileged_userns="
+             + (read("/proc/sys/kernel/apparmor_restrict_unprivileged_userns") or "-"))
+    L.append("  Figyelő portok (nem csak helyi):")
+    for line in run(["ss", "-H", "-tuln"], timeout=10).splitlines():
+        f = line.split()
+        if len(f) >= 5 and not re.match(r"^(127\.|\[::1\]|::1)", f[4]):
+            L.append(f"    {f[0]:<4} {f[4]}")
+    try:
+        from fusion import permissions as fperm, programs as fprog
+        for p in fprog.list_programs():
+            s = fperm.summary(p["id"])
+            if not s:
+                continue
+            fl = ", ".join((f["letter"] + ":" if f["letter"] else "") + f["path"] + (":ro" if f["readonly"] else "")
+                           for f in s["folders"]) or "-"
+            L.append(f"  {s['id']:<20} {s['type']:<9} védelem: {s['enforcement']:<8} eszköz: {','.join(s['devices']) or '-'}"
+                     f"  mappák: {fl}  hálózat: {'igen' if s['net'] else 'nem'}")
+    except Exception as e:
+        L.append(f"  a programok jogai nem olvashatók: {e}")
+    return L
+
+
 def quick_checks(sysinfo):
     """gyors, determinisztikus ellenőrzések: [OK] / [FIGY] / [HIBA] / [--]"""
     res = []
@@ -543,6 +575,7 @@ def build(desc, sysinfo, m):
     L += indent(run(["/usr/lib/fusion/devices/fusion-devd", "list"], timeout=10), 4)
 
     L += bt_camera_printer_section(m)
+    L += permissions_section()
 
     L += section("LEMEZEK")
     L += indent(run(["lsblk", "-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS,TRAN,MODEL"]), 2)
