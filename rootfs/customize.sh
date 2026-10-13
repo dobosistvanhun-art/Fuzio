@@ -156,14 +156,14 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
 echo "  [customize] Fusion Desktop (M6): Fusion Shell, Fájlkezelő, Beállítások"
 DK="$R/usr/lib/fusion/desktop"
 rm -rf "$DK" "$R/usr/lib/fusion/shell"; mkdir -p "$DK"
-for d in lib qml icons shell files settings tasks disks installer laser camera bin; do
+for d in lib qml icons shell files settings tasks disks installer laser camera games bin; do
     cp -r "$FUSION_ROOT/desktop/$d" "$DK/"
 done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
     "$DK/settings/fusion_settings.py" "$DK/bin/fusion" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
-    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/installer/fusion_installer_app.py"
+    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/games/vaskrom/fusion_vaskrom.py" "$DK/installer/fusion_installer_app.py"
 chown -R root:root "$DK"
 # Fusion API (M8): a `fusion` Python-csomag minden Python-programnak (Fusion-programok, szkriptek, root-segédek)
 ln -sfn /usr/lib/fusion/desktop/lib/fusion "$R/usr/lib/python3/dist-packages/fusion"
@@ -180,6 +180,7 @@ ln -sf /usr/lib/fusion/desktop/tasks/fusion_tasks_app.py "$R/usr/bin/fusion-task
 ln -sf /usr/lib/fusion/desktop/disks/fusion_disks_app.py "$R/usr/bin/fusion-disks"
 ln -sf /usr/lib/fusion/desktop/laser/fusion_laser_app.py "$R/usr/bin/fusion-laser"
 ln -sf /usr/lib/fusion/desktop/camera/fusion_camera_app.py "$R/usr/bin/fusion-camera"
+ln -sf /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py "$R/usr/bin/fusion-vaskrom"
 ln -sf /usr/lib/fusion/desktop/installer/fusion_installer_app.py "$R/usr/bin/fusion-installer"
 ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak

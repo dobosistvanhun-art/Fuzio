@@ -43,6 +43,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **0.0.40 (j8)**: beépített kamera (Kamera program, Eszközök és kamera), Bluetooth (Beállítások → Bluetooth: párosítás, fejhallgató, egér, billentyűzet), papírnyomtatók (Beállítások → Nyomtatók: CUPS, driverless, PDF-nyomtató); `fusion cameras | bluetooth | printers` — `docs/J8-kamera-bluetooth-nyomtato.md`
 - **0.0.41 (m9a)**: jogosultságok első lépése — `input` csoport ki, hibajelentés: JOGOSULTSÁGOK, Programkezelő: Védelem, leíró: `allow.files` / `allow.net` / `sandbox`, `fusion permissions` (Klipper és LightBurn változatlan) — `docs/M9a-jogosultsagok.md`
 - **0.0.42 (j9)**: Kamera: élőkép szoftveres felületnél is (a Kamera mindig OpenGL-lel rajzol), jobb képminőség (a legjobb formátum 1280×720-ig) — `docs/J8-kamera-bluetooth-nyomtato.md`
+- **0.0.44 (g1)**: Vas & Króm — beépített motoros játék (garázs, Moto Apró, katalógus, bontó, kocsma, drag-verseny 402 m-en, a Király); Start menü → Játékok — `docs/G1-vas-es-krom.md`
 - **0.0.43 (j10)**: Kamera: videófelvétel hanggal (MP4); Beállítások → Felhasználók (új felhasználó, jelszó, rendszergazda, automatikus belépés — fusion/fusion marad); apt: nem kell — `docs/J10-video-felhasznalok.md`
 - **Google Drive** (Start → Google Drive): rclone-csatolás a `~/GoogleDrive` mappába, a Fájlkezelőben kötetként;
   bejelentkezés a böngészőben (`fusion-drive`). **Ébren tartás**: amíg lézer / nyomtató csatlakozik, a gép nem

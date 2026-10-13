@@ -652,6 +652,11 @@ jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/se
 import fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok')" 2>&1 | tail -n 1)
 i=0; while [ $i -lt 300 ] && urun fusion jobs show report --json 2>/dev/null | grep -q '"running": true'; do sleep 2; i=$((i + 2)); done
 echo "FUSION-CLI: JOB start=$jr $(urun fusion jobs show report --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("running=%s rc=%s title=%s" % (j["running"], j["rc"], j["title"]))') file=$([ -f /run/user/1000/fusion/jobs/report.json ] && echo van || echo nincs)"
+# --- 0.0.44: Vas & Króm (beépített játék): modell, rajz, minden oldal és egy próbafutam, ablak nélkül ---
+urun env QT_QPA_PLATFORM=offscreen timeout 120 fusion-vaskrom --selftest > /tmp/fusion-vaskrom.out 2>&1
+grep '^VASKROM:' /tmp/fusion-vaskrom.out | sed 's/^VASKROM:/FUSION-G1: VASKROM/'
+grep -q '^VASKROM: QML ok' /tmp/fusion-vaskrom.out || grep -v '^VASKROM:' /tmp/fusion-vaskrom.out | tail -n 15 | sed 's/^/FUSION-G1:   vaskrom: /'
+echo "FUSION-G1: VASKROM-LINK $(readlink -f /usr/bin/fusion-vaskrom) menu=$(python3 -c 'import json; print(any(a["id"] == "vaskrom" and a["group"] == "jatek" for a in json.load(open("/usr/lib/fusion/desktop/apps.json"))))')"
 # --- 0.0.40: kamera, Bluetooth, nyomtatás ---
 mods=""; for x in uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm; do modinfo -n "$x" >/dev/null 2>&1 && mods="$mods $x"; done
 echo "FUSION-J8: MODULES$mods fw=$(ls /usr/lib/firmware/intel/ibt-hw-37.7* 2>/dev/null | wc -l) groups=$(id -nG fusion | tr ' ' '\n' | grep -cx 'bluetooth\|lpadmin') qtmm=$(python3 -c 'import PyQt6.QtMultimedia; print("ok")' 2>&1 | tail -n 1)"

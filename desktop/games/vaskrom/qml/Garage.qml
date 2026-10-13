@@ -1,0 +1,213 @@
+// Garázs: a kiválasztott motor nagyban, alkatrészek (állapot, javítás), raktár (beszerelés), fényezés, eladás, próbafutam
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+Item {
+    id: gp
+    property var st: win.st
+    property var cur: st.cur
+
+    // háttér: tégla fal, szerszámfal, beton padló
+    Canvas {
+        anchors.fill: parent
+        onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
+        onPaint: {
+            var c = getContext("2d"), w = width, h = height, fy = h * 0.70
+            var g = c.createLinearGradient(0, 0, 0, fy)
+            g.addColorStop(0, "#2b2420"); g.addColorStop(1, "#3a2e26"); c.fillStyle = g; c.fillRect(0, 0, w, fy)
+            c.strokeStyle = "rgba(0,0,0,0.35)"; c.lineWidth = 2
+            for (var y = 0; y < fy; y += 26) {
+                c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke()
+                for (var x = (y / 26) % 2 ? 0 : 40; x < w; x += 80) { c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 26); c.stroke() }
+            }
+            // szerszámfal
+            c.fillStyle = "#5c4a35"; c.fillRect(30, 30, 300, 170)
+            c.fillStyle = "#2a2018"
+            for (var py = 42; py < 195; py += 14) for (var px = 42; px < 325; px += 14) { c.beginPath(); c.arc(px, py, 2, 0, 6.3); c.fill() }
+            c.strokeStyle = "#9aa0a6"; c.lineWidth = 5
+            c.beginPath(); c.moveTo(70, 60); c.lineTo(70, 150); c.stroke()
+            c.beginPath(); c.moveTo(110, 60); c.lineTo(110, 130); c.stroke()
+            c.beginPath(); c.arc(190, 110, 30, 0, 6.3); c.stroke()
+            c.lineWidth = 4; c.beginPath(); c.moveTo(250, 60); c.lineTo(290, 160); c.stroke()
+            // padló
+            g = c.createLinearGradient(0, fy, 0, h); g.addColorStop(0, "#4a4b4d"); g.addColorStop(1, "#232426")
+            c.fillStyle = g; c.fillRect(0, fy, w, h - fy)
+            c.fillStyle = "rgba(0,0,0,0.25)"
+            for (var i = 0; i < 6; i++) { c.beginPath(); c.ellipse(80 + i * 170, fy + 40 + (i % 3) * 30, 70, 14); c.fill() }
+            c.fillStyle = "#c79a1e"; c.fillRect(0, fy - 4, w, 4)
+        }
+    }
+
+    // üres garázs
+    Column {
+        visible: !gp.cur; anchors.centerIn: parent; spacing: 18
+        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Üres a garázs"; color: "#ffd54a"; font.pixelSize: 40; font.bold: true
+               style: Text.Outline; styleColor: "#000" }
+        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Vegyél egy használt motort a Moto Apróból — " + win.money(gp.st.money || 0) + " van nálad."
+               color: "white"; font.pixelSize: 18 }
+        Btn { anchors.horizontalCenter: parent.horizontalCenter; text: "MOTO APRÓ ▸"; kind: "red"; fs: 18; height: 46; onClicked: win.page = "news" }
+    }
+
+    // bal: motorválasztó, a motor, adatok, műveletek
+    Item {
+        visible: !!gp.cur
+        x: 16; y: 12; width: parent.width - 520 - 48; height: parent.height - 24
+        Row {
+            id: picker; spacing: 10
+            Repeater {
+                model: gp.st.bikes || []
+                Rectangle {
+                    width: 150; height: 80; radius: 5
+                    color: modelData.uid === gp.st.current ? "#3a1a10" : "#1b1d21"
+                    border.color: modelData.uid === gp.st.current ? "#ffcf3a" : "#5b4632"; border.width: 2
+                    BikeView { art: modelData.art; s: 0.19; x: 10; y: -4 }
+                    Text { x: 6; anchors.bottom: parent.bottom; anchors.bottomMargin: 3; width: parent.width - 12; elide: Text.ElideRight
+                           text: modelData.name; color: "#e8e8e8"; font.pixelSize: 11; font.bold: true }
+                    Text { visible: modelData.selling > 0; anchors.right: parent.right; anchors.rightMargin: 5; y: 4; text: "ELADÓ"
+                           color: "#ffd54a"; font.pixelSize: 10; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: game.select(modelData.uid) }
+                }
+            }
+            Repeater {
+                model: Math.max(0, (gp.st.garageSlots || 3) - (gp.st.bikes || []).length)
+                Rectangle { width: 150; height: 80; radius: 5; color: "#14151880"; border.color: "#3a3d42"; border.width: 2
+                            Text { anchors.centerIn: parent; text: "üres hely"; color: "#6e757c"; font.pixelSize: 13 } }
+            }
+        }
+        // a motor
+        BikeView {
+            id: big; art: gp.cur ? gp.cur.art : null
+            s: Math.min(1.05, parent.width / 680)
+            anchors.horizontalCenter: parent.horizontalCenter; y: picker.height + 4
+        }
+        Column {
+            anchors.left: parent.left; anchors.top: big.bottom; anchors.topMargin: -6; spacing: 4
+            Text { text: gp.cur ? gp.cur.name : ""; color: "#ffd54a"; font.pixelSize: 26; font.bold: true; style: Text.Outline; styleColor: "#000" }
+            Text { text: gp.cur ? gp.cur.typeName + " · " + gp.cur.cc + " cm³ · " + gp.cur.gears + " fokozat · " + gp.cur.tire + " mm hátsó gumi" : ""
+                   color: "#cfd3d8"; font.pixelSize: 14 }
+            Row {
+                spacing: 22; topPadding: 6
+                Repeater {
+                    model: gp.cur ? [["TELJESÍTMÉNY", gp.cur.hp + " LE"], ["NYOMATÉK", gp.cur.nm + " Nm"], ["TÖMEG", gp.cur.mass + " kg"],
+                                     ["402 M (BECSLÉS)", Number(gp.cur.est).toFixed(2) + " s"], ["ÉRTÉK", win.money(gp.cur.value)]] : []
+                    Column {
+                        Text { text: modelData[0]; color: "#9aa0a6"; font.pixelSize: 11; font.bold: true }
+                        Text { text: modelData[1]; color: "white"; font.pixelSize: 21; font.bold: true }
+                    }
+                }
+            }
+            Text { visible: gp.cur && gp.cur.mods.length > 0; text: gp.cur ? "Tuning: " + gp.cur.mods.join(", ") : ""; color: "#ffb347"; font.pixelSize: 13
+                   width: big.width; wrapMode: Text.Wrap }
+        }
+        Row {
+            anchors.bottom: parent.bottom; spacing: 10
+            Btn { text: "PRÓBAFUTAM"; kind: "red"; fs: 15; height: 42; onClicked: win.startRace(game.practice()) }
+            Btn { text: "FÉNYEZÉS"; fs: 15; height: 42; onClicked: paintPop.open() }
+            Btn { text: gp.cur && gp.st.bikes.find(function (b) { return b.uid === gp.cur.uid }).selling > 0 ? "ELADÁS VISSZAVONÁSA" : "ELADÁS"
+                  fs: 15; height: 42
+                  onClicked: {
+                      var b = gp.st.bikes.find(function (x) { return x.uid === gp.cur.uid })
+                      if (b.selling > 0) game.cancelSale(b.uid); else { priceField.text = String(gp.cur.value); sellPop.open() }
+                  } }
+            Btn { text: "TELJES JAVÍTÁS  " + (gp.cur ? win.money(gp.cur.repairAll) : ""); fs: 15; height: 42
+                  enabled: gp.cur && gp.cur.repairAll > 0; onClicked: game.repair("") }
+        }
+    }
+
+    // jobb: alkatrészek és raktár
+    Column {
+        visible: !!gp.cur
+        anchors.right: parent.right; anchors.rightMargin: 16; y: 12; width: 520; spacing: 10
+        Panel {
+            title: "ALKATRÉSZEK"; width: parent.width; height: 36 + 14 + 10 * 34 + 6
+            Column {
+                anchors.fill: parent; spacing: 2
+                Repeater {
+                    model: gp.cur ? gp.cur.parts : []
+                    Item {
+                        width: parent.width; height: 32
+                        Rectangle { anchors.fill: parent; color: index % 2 ? "#202227" : "transparent"; radius: 3 }
+                        Text { x: 6; y: 2; width: 92; text: modelData.slotName; color: "#9aa0a6"; font.pixelSize: 12; font.bold: true; elide: Text.ElideRight }
+                        Text { x: 100; y: 1; width: 196; text: modelData.name; color: "#e8e8e8"; font.pixelSize: 13; elide: Text.ElideRight }
+                        Text { x: 100; y: 17; width: 196; text: modelData.desc; color: "#7d848b"; font.pixelSize: 10; elide: Text.ElideRight }
+                        CondBar { x: 302; anchors.verticalCenter: parent.verticalCenter; width: 60; value: modelData.cond }
+                        Text { x: 366; anchors.verticalCenter: parent.verticalCenter; text: modelData.cond + "%"; color: "#cfd3d8"; font.pixelSize: 11 }
+                        Btn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 24; fs: 11
+                              visible: modelData.repair > 0; text: "JAVÍT " + win.money(modelData.repair)
+                              onClicked: game.repair(modelData.slot) }
+                    }
+                }
+            }
+        }
+        Panel {
+            title: "RAKTÁR  (" + (gp.st.stock || []).length + ")"; width: parent.width; height: gp.height - 24 - 10 - (36 + 14 + 10 * 34 + 6)
+            Text { visible: !(gp.st.stock || []).length; text: "Üres. Alkatrész a Katalógusból (új) vagy a Bontóból (használt)."
+                   color: "#7d848b"; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
+            ListView {
+                anchors.fill: parent; clip: true; spacing: 2; model: gp.st.stock || []
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Item {
+                    width: ListView.view.width - 10; height: 36
+                    Rectangle { anchors.fill: parent; color: index % 2 ? "#202227" : "transparent"; radius: 3 }
+                    Text { x: 6; y: 2; width: 250; text: modelData.name; color: modelData.fits ? "#e8e8e8" : "#7d848b"; font.pixelSize: 13; elide: Text.ElideRight }
+                    Text { x: 6; y: 19; width: 250; text: modelData.slotName + (modelData.fits ? "" : " · nem illik ebbe"); color: "#7d848b"; font.pixelSize: 10 }
+                    CondBar { x: 262; anchors.verticalCenter: parent.verticalCenter; width: 50; value: modelData.cond }
+                    Row {
+                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                        Btn { height: 26; fs: 11; text: "BESZEREL"; kind: "red"; enabled: modelData.fits; onClicked: game.install(modelData.idx) }
+                        Btn { height: 26; fs: 11; text: "ELAD " + win.money(modelData.value); onClicked: game.sellPart(modelData.idx) }
+                    }
+                }
+            }
+        }
+    }
+
+    // fényezés
+    Popup {
+        id: paintPop; anchors.centerIn: parent; width: 520; height: 300; modal: true
+        property string col: gp.cur ? gp.cur.color : ""
+        property bool fl: gp.cur ? gp.cur.flames : false
+        onOpened: { col = gp.cur.color; fl = gp.cur.flames }
+        background: Panel { title: "FÉNYEZÉS — " + win.money(gp.st.paintPrice || 0) + (paintPop.fl && !(gp.cur && gp.cur.flames) ? " + lángok " + win.money(gp.st.flamesPrice || 0) : "") }
+        contentItem: Item {
+            Grid {
+                x: 18; y: 48; columns: 5; spacing: 12
+                Repeater {
+                    model: gp.st.colors || []
+                    Rectangle {
+                        width: 80; height: 48; radius: 6; color: modelData.hex
+                        border.color: paintPop.col === modelData.hex ? "#ffcf3a" : "#000"; border.width: paintPop.col === modelData.hex ? 4 : 1
+                        Text { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; text: modelData.name
+                               color: "white"; style: Text.Outline; styleColor: "black"; font.pixelSize: 10 }
+                        MouseArea { anchors.fill: parent; onClicked: paintPop.col = modelData.hex }
+                    }
+                }
+            }
+            Btn { x: 18; y: 186; height: 36; active: paintPop.fl; onClicked: paintPop.fl = !paintPop.fl
+                  text: (paintPop.fl ? "✔ " : "") + "LÁNGNYELVEK" + (gp.cur && gp.cur.flames ? "" : "  +" + win.money(gp.st.flamesPrice || 0)) }
+            Row {
+                anchors.right: parent.right; anchors.rightMargin: 18; y: 236; spacing: 10
+                Btn { text: "MÉGSE"; onClicked: paintPop.close() }
+                Btn { text: "FÉNYEZD"; kind: "red"; onClicked: { if (game.paint(paintPop.col, paintPop.fl)) paintPop.close() } }
+            }
+        }
+    }
+
+    // eladás
+    Popup {
+        id: sellPop; anchors.centerIn: parent; width: 440; height: 220; modal: true
+        background: Panel { title: "ELADÁS — HIRDETÉS A MOTO APRÓBAN" }
+        contentItem: Item {
+            Text { x: 18; y: 50; width: 400; wrapMode: Text.Wrap; color: "#cfd3d8"; font.pixelSize: 14
+                   text: "Becsült érték: " + (gp.cur ? win.money(gp.cur.value) : "") + ". Minél drágábban kínálod, annál ritkábban jön vevő. A vevők a nap végén jelentkeznek telefonon." }
+            Text { x: 18; y: 120; text: "Ár: $"; color: "white"; font.pixelSize: 18 }
+            TextField { id: priceField; x: 80; y: 112; width: 140; font.pixelSize: 18; validator: IntValidator { bottom: 50; top: 999999 } }
+            Row {
+                anchors.right: parent.right; anchors.rightMargin: 18; y: 160; spacing: 10
+                Btn { text: "MÉGSE"; onClicked: sellPop.close() }
+                Btn { text: "MEGHIRDETEM"; kind: "red"; onClicked: { if (game.listForSale(gp.cur.uid, parseInt(priceField.text) || 0)) sellPop.close() } }
+            }
+        }
+    }
+}
