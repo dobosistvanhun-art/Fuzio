@@ -11,6 +11,7 @@ fedi el; csak ott ad saját felületet, ahol a FusionOS-nek saját tudása van.
     fusion.camera      kamerák (V4L2, csak olvas)
     fusion.bluetooth   Bluetooth-adapter és -eszközök (BlueZ)
     fusion.printers    papírnyomtatók (CUPS)
+    fusion.users       felhasználók (a fusion-users rootrésszel)
     fusion.x11         ablakok (EWMH) — a Shell és a Feladatkezelő közös alapja
     fusion.permissions a jogosultság-ellenőrzés helye (most mindent engedélyez)
 

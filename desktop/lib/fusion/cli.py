@@ -19,6 +19,7 @@
     fusion printers discover [--json]         csatlakoztatott és hálózati nyomtatók keresése
     fusion printers add <uri> [modell] | add-pdf | remove | default | test | enable <név>
     fusion printers jobs [--json] | cancel <feladat>
+    fusion users [--json]                     felhasználók (név, rendszergazda, automatikus belépés)
     fusion permissions [id] [--json]          a programok jogai: eszközök, mappák, hálózat, homokozó (M9)
     fusion programs …                         = fusion-programs … (list --json, info, install, run …)
     fusion notify [-i ikon] [-u sürgősség] [-a program] [-t ms] <cím> [szöveg]
@@ -36,7 +37,7 @@ import shutil
 import sys
 
 from . import (API_VERSION, MEDIA, PREFIX, RUN, bluetooth, camera, devices, hardware, jobs, kv, notify, permissions,
-               power, printers, programs, schema, trash, ui)
+               power, printers, programs, schema, trash, ui, users)
 
 
 class UsageError(Exception):
@@ -246,6 +247,14 @@ def main(argv=None):
             return 0
         if cmd == "bluetooth":
             return _bluetooth(rest, as_json)
+        if cmd == "users" and not rest:
+            st = users.state()
+            if st.get("error"):
+                raise ValueError(st["error"])
+            _out(st, as_json, lambda: "\n".join(
+                f"{u['name']:<16} {'rendszergazda' if u['admin'] else 'felhasználó':<14}"
+                f"{'automatikus belépés  ' if u['autologin'] else ''}{u['fullname']}" for u in st["users"]))
+            return 0
         if cmd == "permissions":
             if len(rest) > 1:
                 raise UsageError("fusion permissions [id]")

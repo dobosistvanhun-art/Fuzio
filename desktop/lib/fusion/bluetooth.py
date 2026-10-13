@@ -298,6 +298,18 @@ def pair(addr, event=None, timeout=60, program="fusion"):
             p.wait(timeout=3)
         except subprocess.TimeoutExpired:
             p.kill()
+    if not ok:
+        # a bluetoothctl üzenetei néha elmaradnak (QEMU: párosítva lett, de a „Pairing successful” nem jött) —
+        # a mérce a BlueZ állapota: ha párosítva van, a megbízhatóság és a csatlakozás külön parancsokkal
+        inf = info(addr)
+        if inf["paired"]:
+            if not inf["trusted"]:
+                _ctl("trust", addr, timeout=15)
+            if not inf["connected"]:
+                rc, out = _ctl("connect", addr, timeout=20)
+                if "Connection successful" not in out:
+                    return True, "párosítva, de a csatlakozás nem sikerült"
+            return True, ""
     return ok, msg
 
 

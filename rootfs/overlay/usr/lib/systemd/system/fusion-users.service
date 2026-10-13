@@ -1,0 +1,13 @@
+[Unit]
+Description=FusionOS — a Beállításokban felvett felhasználók visszaállítása (rendszerfrissítés után is)
+After=local-fs.target systemd-sysusers.service
+Before=systemd-user-sessions.service getty@tty1.service display-manager.service
+RequiresMountsFor=/data
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/fusion/bin/fusion-users apply
+
+[Install]
+WantedBy=multi-user.target

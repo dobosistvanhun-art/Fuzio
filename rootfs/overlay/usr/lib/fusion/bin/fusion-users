@@ -1,0 +1,355 @@
+#!/usr/bin/python3
+"""FusionOS — felhasználókezelés (root; a fusion-admin `users` parancsa hívja, a hívó: SUDO_USER)
+
+    fusion-users list [--json]                     felhasználók (uid ≥ 1000): név, teljes név, rendszergazda, automatikus belépés
+    fusion-users add <név> <teljes név> <0|1>      új felhasználó (a jelszó a bemenet első sora); 1 = rendszergazda
+    fusion-users passwd <név>                      jelszócsere — bemenet: régi jelszó, új jelszó (két sor); a saját
+                                                   jelszóhoz a régi kell, rendszergazda más jelszavát régi nélkül cseréli
+    fusion-users delete <név> [--remove-home]      törlés (rendszergazda; a fusion és a saját fiók nem törölhető)
+    fusion-users admin <név> <0|1>                 rendszergazda-jog (rendszergazda)
+    fusion-users autologin <név|none>              automatikus belépés a tty1-en (rendszergazda; none = jelszóval)
+    fusion-users apply                             indításkor: a tárolt felhasználók visszaállítása
+
+A FusionOS alapfelhasználója (fusion / fusion) a rendszerkép része: nem törölhető, a jelszava és a jogai nem
+módosíthatók innen (István, 2026-10-13: „a fusion/fusion maradjon mint eddig”).
+
+Tartósság: a felhasználó-adatbázis (/etc/passwd, group, shadow) a rendszerfrissítéskor a rendszerképé lesz (az
+initramfs a régit félreteszi). Ezért az itt felvett felhasználók a DATA-n is tárolódnak (/data/system/users.json,
+csak root olvassa, a jelszó csak hash-ként), és a fusion-users.service minden indításkor visszaállítja őket —
+ugyanazzal az azonosítóval (uid), így a saját mappájuk (a DATA-n) az övék marad.
+"""
+import json
+import os
+import pwd
+import grp
+import re
+import subprocess
+import sys
+import warnings
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    import crypt
+
+STORE = os.environ.get("FUSION_USERS_STORE", "/data/system/users.json")
+BASE_USER = "fusion"
+DESKTOP_GROUP = "fusion-desktop"
+GROUPS_STD = [DESKTOP_GROUP, "dialout", "plugdev", "video", "audio", "bluetooth"]
+GROUPS_ADMIN = ["sudo", "lpadmin", "klipper", "systemd-journal", "adm"]
+NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+RESERVED = {"root", "fusion", "klipper", "admin", "nobody", "daemon", "sys", "bin", "lp", "mail", "news", "www-data",
+            "backup", "list", "irc", "proxy", "games", "man", "sync", "messagebus", "systemd-network"}
+AUTOLOGIN_DROPIN = "/etc/systemd/system/getty@tty1.service.d/zz-fusion-users.conf"
+GETTY = "ExecStart=-/sbin/agetty -o '-p -f -- \\\\u' --noclear{auto} - $TERM"
+
+
+class Fail(Exception):
+    pass
+
+
+def run(*cmd, inp=None):
+    r = subprocess.run(list(cmd), capture_output=True, text=True, input=inp)
+    if r.returncode != 0:
+        raise Fail((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout).strip() else f"{cmd[0]}: {r.returncode}")
+    return r.stdout
+
+
+def load():
+    try:
+        with open(STORE, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    d.setdefault("users", {})
+    d.setdefault("autologin", BASE_USER)
+    return d
+
+
+def save(d):
+    os.makedirs(os.path.dirname(STORE), mode=0o700, exist_ok=True)
+    tmp = STORE + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, STORE)
+
+
+def shadow_hash(name):
+    with open("/etc/shadow", encoding="utf-8") as f:
+        for line in f:
+            p = line.rstrip("\n").split(":")
+            if p[0] == name:
+                return p[1]
+    return ""
+
+
+def make_hash(pw):
+    return crypt.crypt(pw, crypt.mksalt(crypt.METHOD_SHA512))
+
+
+def check_password(pw):
+    if len(pw) < 4:
+        raise Fail("a jelszó legalább 4 karakter legyen")
+    if "\n" in pw or ":" in pw:
+        raise Fail("a jelszóban nem lehet sortörés vagy kettőspont")
+
+
+def in_group(name, group):
+    try:
+        g = grp.getgrnam(group)
+    except KeyError:
+        return False
+    try:
+        primary = pwd.getpwnam(name).pw_gid == g.gr_gid
+    except KeyError:
+        primary = False
+    return primary or name in g.gr_mem
+
+
+def is_admin(name):
+    return name == "root" or in_group(name, "sudo")
+
+
+def caller():
+    return os.environ.get("FUSION_CALLER") or os.environ.get("SUDO_USER") or "root"
+
+
+def need_admin():
+    if not is_admin(caller()):
+        raise Fail("ehhez rendszergazdai jog kell")
+
+
+def existing_groups(names):
+    out = []
+    for g in names:
+        try:
+            grp.getgrnam(g)
+            out.append(g)
+        except KeyError:
+            pass
+    return out
+
+
+def ensure_desktop_group():
+    try:
+        grp.getgrnam(DESKTOP_GROUP)
+    except KeyError:
+        run("groupadd", "--system", DESKTOP_GROUP)
+
+
+def users():
+    d = load()
+    res = []
+    for p in sorted(pwd.getpwall(), key=lambda p: p.pw_uid):
+        if p.pw_uid < 1000 or p.pw_uid >= 60000 or p.pw_shell.endswith(("nologin", "false")):
+            continue
+        res.append({"name": p.pw_name, "uid": p.pw_uid, "fullname": p.pw_gecos.split(",")[0],
+                    "admin": is_admin(p.pw_name), "base": p.pw_name == BASE_USER,
+                    "autologin": d["autologin"] == p.pw_name, "home": p.pw_dir})
+    return res
+
+
+def write_autologin(name):
+    """a tty1 automatikus belépése; a meglévő fusion-autologin.conf után (névsorrend) érvényes"""
+    auto = f" --autologin {name}" if name and name != "none" else ""
+    text = ("# FusionOS — fusion-users (Beállítások → Felhasználók): a tty1 automatikus belépése\n"
+            "[Service]\nExecStart=\n" + GETTY.format(auto=auto) + "\n")
+    try:
+        with open(AUTOLOGIN_DROPIN, encoding="utf-8") as f:
+            if f.read() == text:
+                return False
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(AUTOLOGIN_DROPIN), exist_ok=True)
+    with open(AUTOLOGIN_DROPIN, "w", encoding="utf-8") as f:
+        f.write(text)
+    return True
+
+
+def apply_user(name, u):
+    """egy tárolt felhasználó visszaállítása (létrehozás ugyanazzal az uid-del, jelszó, csoportok)"""
+    groups = existing_groups(GROUPS_STD + (GROUPS_ADMIN if u.get("admin") else []))
+    try:
+        pwd.getpwnam(name)
+    except KeyError:
+        home = f"/home/{name}"
+        args = ["useradd", "-u", str(u["uid"]), "-s", "/bin/bash", "-c", u.get("fullname", ""), "-G", ",".join(groups)]
+        args += ["-d", home] + (["-M"] if os.path.isdir(home) else ["-m"])
+        run(*args, name)
+    else:
+        run("usermod", "-c", u.get("fullname", ""), "-G", ",".join(groups), name)
+    if u.get("hash") and shadow_hash(name) != u["hash"]:
+        run("usermod", "-p", u["hash"], name)
+
+
+def cmd_list(as_json):
+    us = users()
+    if as_json:
+        print(json.dumps({"users": us, "caller": caller(), "callerAdmin": is_admin(caller()),
+                          "autologin": load()["autologin"]}, ensure_ascii=False))
+    else:
+        for u in us:
+            print(f"{u['name']:<16} {u['uid']:>6}  {'rendszergazda' if u['admin'] else 'felhasználó':<14}"
+                  f"{' automatikus belépés' if u['autologin'] else ''}  {u['fullname']}")
+
+
+def cmd_add(name, fullname, admin):
+    need_admin()
+    if not NAME_RE.match(name) or name in RESERVED:
+        raise Fail("érvénytelen vagy foglalt név (kisbetű, szám, _ -; betűvel kezdődik)")
+    try:
+        pwd.getpwnam(name)
+        raise Fail(f"már van ilyen felhasználó: {name}")
+    except KeyError:
+        pass
+    if ":" in fullname or "\n" in fullname:
+        raise Fail("érvénytelen teljes név")
+    pw = sys.stdin.readline().rstrip("\n")
+    check_password(pw)
+    ensure_desktop_group()
+    groups = existing_groups(GROUPS_STD + (GROUPS_ADMIN if admin else []))
+    run("useradd", "-m", "-s", "/bin/bash", "-c", fullname, "-G", ",".join(groups), name)
+    h = make_hash(pw)
+    run("usermod", "-p", h, name)
+    d = load()
+    d["users"][name] = {"uid": pwd.getpwnam(name).pw_uid, "fullname": fullname, "admin": bool(admin), "hash": h}
+    save(d)
+    print(f"felvéve: {name}")
+
+
+def cmd_passwd(name):
+    if name == BASE_USER:
+        raise Fail("a fusion felhasználó jelszava rögzített (fusion) — nem módosítható")
+    try:
+        pwd.getpwnam(name)
+    except KeyError:
+        raise Fail(f"nincs ilyen felhasználó: {name}")
+    old = sys.stdin.readline().rstrip("\n")
+    new = sys.stdin.readline().rstrip("\n")
+    me = caller()
+    if me == name:
+        h = shadow_hash(name)
+        if not h or crypt.crypt(old, h) != h:
+            raise Fail("a jelenlegi jelszó nem egyezik")
+    elif not is_admin(me):
+        raise Fail("más jelszavát csak rendszergazda módosíthatja")
+    check_password(new)
+    h = make_hash(new)
+    run("usermod", "-p", h, name)
+    d = load()
+    if name in d["users"]:
+        d["users"][name]["hash"] = h
+        save(d)
+    print("a jelszó megváltozott")
+
+
+def cmd_delete(name, remove_home):
+    need_admin()
+    if name == BASE_USER:
+        raise Fail("a fusion felhasználó nem törölhető")
+    if name == caller():
+        raise Fail("a saját fiók nem törölhető")
+    try:
+        p = pwd.getpwnam(name)
+    except KeyError:
+        raise Fail(f"nincs ilyen felhasználó: {name}")
+    if p.pw_uid < 1000:
+        raise Fail("rendszerfelhasználó nem törölhető")
+    subprocess.run(["pkill", "-KILL", "-u", name], capture_output=True)
+    run("userdel", *(["-r"] if remove_home else []), name)
+    d = load()
+    d["users"].pop(name, None)
+    if d["autologin"] == name:
+        d["autologin"] = BASE_USER
+        write_autologin(BASE_USER)
+    save(d)
+    print(f"törölve: {name}")
+
+
+def cmd_admin(name, on):
+    need_admin()
+    if name == BASE_USER:
+        raise Fail("a fusion felhasználó jogai rögzítettek")
+    if name == caller() and not on:
+        raise Fail("a saját rendszergazda-jog nem vehető el")
+    d = load()
+    if name not in d["users"]:
+        raise Fail(f"nem a Beállításokban felvett felhasználó: {name}")
+    d["users"][name]["admin"] = bool(on)
+    apply_user(name, d["users"][name])
+    if not on:
+        for g in GROUPS_ADMIN:
+            subprocess.run(["gpasswd", "-d", name, g], capture_output=True)
+    save(d)
+    print("rendben")
+
+
+def cmd_autologin(name):
+    need_admin()
+    if name != "none":
+        try:
+            pwd.getpwnam(name)
+        except KeyError:
+            raise Fail(f"nincs ilyen felhasználó: {name}")
+    d = load()
+    d["autologin"] = name
+    save(d)
+    if write_autologin(name):
+        subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+    print("a következő indítástól érvényes")
+
+
+def cmd_apply():
+    ensure_desktop_group()
+    try:
+        run("usermod", "-aG", DESKTOP_GROUP, BASE_USER)
+    except Fail:
+        pass
+    d = load()
+    errs = 0
+    for name, u in sorted(d["users"].items()):
+        try:
+            apply_user(name, u)
+        except Fail as e:
+            errs += 1
+            print(f"fusion-users: {name}: {e}", file=sys.stderr)
+    if d["autologin"] != BASE_USER or os.path.exists(AUTOLOGIN_DROPIN):
+        if write_autologin(d["autologin"]):
+            subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+    print(f"fusion-users: {len(d['users'])} felhasználó, automatikus belépés: {d['autologin']}")
+    return 1 if errs else 0
+
+
+def main(argv):
+    as_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if os.getuid() != 0:
+        raise Fail("rootként kell futnia (fusion-admin users …)")
+    cmd = args[0] if args else "list"
+    rest = args[1:]
+    if cmd == "list" and not rest:
+        cmd_list(as_json)
+    elif cmd == "add" and len(rest) == 3 and rest[2] in ("0", "1"):
+        cmd_add(rest[0], rest[1], rest[2] == "1")
+    elif cmd == "passwd" and len(rest) == 1:
+        cmd_passwd(rest[0])
+    elif cmd == "delete" and len(rest) in (1, 2) and rest[1:] in ([], ["--remove-home"]):
+        cmd_delete(rest[0], len(rest) == 2)
+    elif cmd == "admin" and len(rest) == 2 and rest[1] in ("0", "1"):
+        cmd_admin(rest[0], rest[1] == "1")
+    elif cmd == "autologin" and len(rest) == 1:
+        cmd_autologin(rest[0])
+    elif cmd == "apply" and not rest:
+        return cmd_apply()
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Fail as e:
+        print(f"fusion-users: {e}", file=sys.stderr)
+        sys.exit(1)

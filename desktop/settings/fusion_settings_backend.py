@@ -31,6 +31,7 @@ from fusion import trash as ftrash
 from fusion import bluetooth as fbt
 from fusion import printers as fprn
 from fusion import camera as fcam
+from fusion import users as fusers
 
 MOONRAKER = "http://127.0.0.1:7125"
 BG_FILE = os.path.join(ui.CONFIG, "background")
@@ -504,6 +505,37 @@ class Settings(QObject):
     @pyqtSlot(str)
     def btRemove(self, addr):
         self._bt("bt-action", fbt.remove, addr)
+
+    # --- Felhasználók ---
+    @pyqtSlot()
+    def usersRefresh(self):
+        self._async("users", fusers.state)
+
+    def _usr(self, fn, *a):
+        def f():
+            ok, msg = fn(*a)
+            return {"ok": ok, "msg": msg}
+        self._async("users-action", f)
+
+    @pyqtSlot(str, str, str, bool)
+    def userAdd(self, name, fullname, password, admin):
+        self._usr(fusers.add, name, fullname, password, admin)
+
+    @pyqtSlot(str, str, str)
+    def userPasswd(self, name, old, new):
+        self._usr(fusers.passwd, name, old, new)
+
+    @pyqtSlot(str, bool)
+    def userDelete(self, name, remove_home):
+        self._usr(fusers.delete, name, remove_home)
+
+    @pyqtSlot(str, bool)
+    def userAdmin(self, name, on):
+        self._usr(fusers.set_admin, name, on)
+
+    @pyqtSlot(str)
+    def userAutologin(self, name):
+        self._usr(fusers.autologin, name)
 
     # --- Nyomtatók (CUPS) ---
     @pyqtSlot()

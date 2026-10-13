@@ -15,6 +15,7 @@
 #    autounmount <kernelnév>          (systemd) kihúzáskor
 #    service-restart klipper|moonraker|nginx|bluetooth|cups
 #    rfkill-unblock bluetooth|wlan    a rádió szoftveres tiltásának feloldása
+#    users list|add|passwd|delete|admin|autologin …   felhasználókezelés (fusion-users)
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
 #    update-status [--json]           az A/B rendszerfrissítés állapota (csak olvas)
 #    update-apply <fájl.fupd>         rendszerfrissítés az inaktív slotba (fusion-update apply)
@@ -202,6 +203,13 @@ do_automount() {
 }
 
 cmd=${1:-}; [ $# -gt 0 ] && shift
+# nem rendszergazda hívó (a Beállításokban felvett, korlátozott felhasználó): csak a mindennapi műveletek
+if [ -n "${SUDO_USER:-}" ] && ! id -nG "$SUDO_USER" 2>/dev/null | tr ' ' '\n' | grep -qx sudo; then
+    case "$cmd" in
+        power|mount|unmount|eject|automount|autounmount|report|rfkill-unblock|users) ;;
+        *) fail "ehhez rendszergazdai jog kell ($cmd)" ;;
+    esac
+fi
 case "$cmd" in
     power)
         case "${1:-}" in poweroff|reboot) exec systemctl "$1" ;; *) fail "használat: power poweroff|reboot" ;; esac ;;
@@ -218,6 +226,10 @@ case "$cmd" in
             bluetooth|cups) exec systemctl restart "$1.service" ;;
             *) fail "használat: service-restart klipper|moonraker|nginx|bluetooth|cups" ;;
         esac ;;
+    users)
+        # felhasználókezelés (fusion-users; a jogosultságot a hívó — SUDO_USER — szerint az dönti el)
+        case "${1:-}" in list|add|passwd|delete|admin|autologin) ;; *) fail "használat: users list|add|passwd|delete|admin|autologin …" ;; esac
+        FUSION_CALLER="${SUDO_USER:-root}" exec /usr/lib/fusion/bin/fusion-users "$@" ;;
     rfkill-unblock)
         # a rádió szoftveres tiltásának feloldása (a kapcsolós / hardveres tiltást nem lehet)
         case "${1:-}" in bluetooth|wlan) ;; *) fail "használat: rfkill-unblock bluetooth|wlan" ;; esac

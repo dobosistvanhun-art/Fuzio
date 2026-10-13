@@ -159,6 +159,8 @@ v4l-utils
 python3-pyqt6.qtmultimedia
 qml6-module-qtmultimedia
 gstreamer1.0-plugins-good
+# 0.0.43: a Kamera videófelvétele (a képkockák ffmpeg-gel H.264 / AAC MP4-be; a Qt 6.4 FFmpeg-rögzítője üres fájlt ír)
+ffmpeg
 # 0.0.40: Bluetooth — BlueZ (bluetoothd, bluetoothctl); a PipeWire Bluetooth-hangja (fejhallgató, hangszóró)
 bluez
 libspa-0.2-bluetooth

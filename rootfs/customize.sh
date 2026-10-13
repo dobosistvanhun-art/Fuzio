@@ -284,7 +284,9 @@ in_root setupcon --save-only --force >/dev/null 2>&1 || echo "  [customize] FIGY
 echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
 # M9: az `input` csoport nincs (a nyers billentyűzet- és egéreseményekhez minden program hozzáférne); az Xorg a
 # bemeneti eszközöket a logind-on át kapja (root nélküli Xorg), vagy rootként nyitja meg
-in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,dialout,plugdev,video,audio,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
+# fusion-desktop: minden asztali felhasználó (a fusion-admin sudo-szabálya, a pendrive-ok helye) — fusion-users
+in_root groupadd --system fusion-desktop
+in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,fusion-desktop,dialout,plugdev,video,audio,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
 # az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell
@@ -295,7 +297,7 @@ rm -f "$R/var/lib/dbus/machine-id"
 echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
     fusion-hardware.service fusion-selftest.service fusion-boot-check.service \
-    fusion-klipper.service fusion-moonraker.service nginx.service >/dev/null 2>&1
+    fusion-klipper.service fusion-moonraker.service nginx.service fusion-users.service >/dev/null 2>&1
 # Bluetooth (az adapter megjelenésekor indul), nyomtatás (CUPS, hálózati felderítés: Avahi / mDNS)
 in_root systemctl enable bluetooth.service cups.service cups.socket avahi-daemon.service >/dev/null 2>&1 \
     || echo "  [customize] FIGYELEM: a bluetooth / cups / avahi szolgáltatás engedélyezése nem sikerült"

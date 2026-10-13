@@ -1,4 +1,4 @@
-// FusionOS — Kamera: élőkép, kameraváltás, fénykép (Qt Multimedia)
+// FusionOS — Kamera: élőkép, kameraváltás, fénykép, videófelvétel (Qt Multimedia + ffmpeg)
 import QtQuick
 import QtQuick.Controls
 import QtMultimedia
@@ -20,6 +20,23 @@ FWindow {
     Component.onCompleted: { if (!selftestMode) { raise(); requestActivate() } }
     Shortcut { sequence: "Esc"; onActivated: win.close() }
     Shortcut { sequence: "Space"; onActivated: win.shoot() }
+    Shortcut { sequence: "R"; onActivated: win.toggleRecord() }
+    property string recTime: ""
+    property bool withSound: true
+    // bezáráskor a futó felvétel lezárul (különben a fájl befejezetlen maradna)
+    onClosing: if (cam.recording) cam.stopRecording()
+    function toggleRecord() {
+        if (!hasCam) return
+        if (cam.recording) {
+            var r = cam.stopRecording()
+            if (r.ok) { lastPhoto = r.path; say("Videó mentve: " + r.path, false) }
+            else say("A videó nem készült el: " + r.message, true)
+        } else {
+            var e = cam.startRecording(vo.videoSink, withSound)
+            if (e) say("A felvétel nem indult: " + e, true)
+        }
+    }
+    Timer { interval: 500; repeat: true; running: cam.recording; onTriggered: win.recTime = cam.recordingTime() }
     Connections {
         target: cam
         function onMessage(text, isErr) {
@@ -52,7 +69,7 @@ FWindow {
     // önteszt: néhány másodperc élőkép után egy kép az élőképből, majd kilépés
     Timer { interval: 8000; running: selftestMode && win.hasCam
             onTriggered: { cam.selftestShot(vo.videoSink, camera.cameraFormat.resolution.width + "x"
-                                           + camera.cameraFormat.resolution.height); Qt.quit() } }
+                                           + camera.cameraFormat.resolution.height) } }
 
     MediaDevices { id: md }
     CaptureSession {
@@ -81,6 +98,11 @@ FWindow {
                      text: "A beépített webkamerát egyes gépeken a BIOS-ban vagy egy billentyűvel lehet ki- és bekapcsolni. "
                            + "USB-kamera: dugja be, és a lista magától frissül." }
         }
+        Rectangle {
+            visible: cam.recording; x: 12; y: 12; height: 28; width: rl.implicitWidth + 30; radius: 14; color: "#b62324"
+            Rectangle { x: 10; anchors.verticalCenter: parent.verticalCenter; width: 10; height: 10; radius: 5; color: "white" }
+            FLabel { id: rl; x: 26; anchors.verticalCenter: parent.verticalCenter; text: "FELVÉTEL  " + win.recTime; bold: true; color: "white" }
+        }
         // villanás a kép készítésekor
         Rectangle { id: flash; anchors.fill: parent; color: "white"; opacity: 0; radius: Theme.radius
                     NumberAnimation on opacity { id: flashAnim; from: 0.7; to: 0; duration: 250; running: false } }
@@ -101,10 +123,20 @@ FWindow {
             FLabel { visible: win.inputs.length === 1; text: win.hasCam ? win.inputs[0].description : ""; dim: true
                      anchors.verticalCenter: parent.verticalCenter; width: 260 }
         }
-        FButton {
-            anchors.centerIn: parent; text: "Fénykép"; icon: "camera"; primary: true
-            enabled: win.hasCam && camera.active; tip: "Szóköz"
-            onClicked: win.shoot()
+        Row {
+            anchors.centerIn: parent; spacing: 10
+            FButton {
+                text: "Fénykép"; icon: "camera"; primary: true
+                enabled: win.hasCam && camera.active; tip: "Szóköz"
+                onClicked: win.shoot()
+            }
+            FButton {
+                text: cam.recording ? "Leállítás  " + win.recTime : "Videó"; icon: cam.recording ? "close" : "dot"
+                danger: cam.recording; enabled: win.hasCam && camera.active; tip: "R"
+                onClicked: win.toggleRecord()
+            }
+            FCheck { text: "hanggal"; checked: win.withSound; enabled: !cam.recording
+                     onToggled: win.withSound = checked; anchors.verticalCenter: parent.verticalCenter }
         }
         Row {
             anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8

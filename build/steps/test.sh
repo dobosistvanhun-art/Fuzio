@@ -266,8 +266,8 @@ step_test() {
                         -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
             QEMU_HOTPLUG=1; QEMU_TIMEOUT=3200   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS
         else
-            # terhelt gépen (KVM nélkül) a teljes selftest 600 mp fölé is mehet (0.0.31: 586 mp-nél vágta el)
-            QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=1200
+            # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el)
+            QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=1800
         fi
         step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
@@ -327,6 +327,10 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: APPS prog-lightburn,printer,laser,mainsail,files,settings,programs,store,drive,tasks,disks,camera,terminal" "Start menü programlistája (Programkezelő-bejegyzéssel)" || ok_run=0
             # 0.0.40: kamera, Bluetooth, nyomtatás
             _check "$log" "FUSION-SETTINGS: QML ok" "Beállítások: minden oldal felülete betölthető" || ok_run=0
+            # felhasználókezelés
+            _check "$log" "FUSION-USERS: ADD felvéve: proba | LIST fusion:admin,proba:user auto=fusion" "felhasználó felvétele (Beállítások → Felhasználók)" || ok_run=0
+            _check "$log" "FUSION-USERS: OWN-PASSWD a jelszó megváltozott | WRONG-OLD .*nem egyezik | NONADMIN-DISK .*rendszergazdai jog kell .*| BASE .*rögzített" "jelszócsere, korlátozott felhasználó, a fusion/fusion védett" || ok_run=0
+            _check "$log" "FUSION-USERS: PERSIST uid=\([0-9]*\)/\1 hash=ok AUTOLOGIN 11 DELETED igen home=törölve" "a felhasználó a rendszerfrissítés után is megmarad; automatikus belépés; törlés" || ok_run=0
             # M9: jogosultságok
             _check "$log" "FUSION-M9: XINPUT added=[1-9][0-9]* failed=0 input-group=0" "bemeneti eszközök az input csoport nélkül (Xorg)" || ok_run=0
             _check "$log" "FUSION-M9: PERMISSIONS jogproba:sandbox:net=False:folders=Projektek,Letöltések:ro validate=ok" "fusion permissions: a programok jogai" || ok_run=0
@@ -366,6 +370,7 @@ step_test() {
             _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fusion API listája (V4L2)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA FRAMES ok" "Kamera program: élőkép (Qt Multimedia, FFmpeg)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA CAPTURE ok" "Kamera program: fénykép az élőképből" || ok_run=0
+            _check "$log" "FUSION-J8: CAMERA VIDEO ok .*h264" "Kamera: videófelvétel (H.264, MP4)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA RENDER ok .*(felület: software) formátum: 1280x720" "Kamera: szoftveres felületnél is OpenGL (élőkép), 1280×720" || ok_run=0
             _check "$log" "FUSION-J8: BT controllers=2 .*service=active" "Bluetooth: bluetoothd a (virtuális) vezérlőkkel" || ok_run=0
             _check "$log" "FUSION-J8: BT-POWER True" "Bluetooth: bekapcsolás" || ok_run=0

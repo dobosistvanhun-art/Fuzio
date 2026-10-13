@@ -684,7 +684,7 @@ if [ -x /tmp/btvirt ]; then
     echo "FUSION-J8: BT-POWER $(urun fusion bluetooth on --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"])' 2>&1 | tail -n 1)"
     urun fusion bluetooth scan 10 --json > /tmp/btscan.json 2>&1
     echo "FUSION-J8: BT-SCAN $(python3 -c 'import json,sys; j=json.load(open("/tmp/btscan.json")); print(j["ok"], "talalt=%s" % any(d["address"] == sys.argv[1] for d in j["devices"]))' "$bta" 2>&1 | tail -n 1)"
-    echo "FUSION-J8: BT-PAIR $(urun timeout 90 fusion bluetooth pair "$bta" --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"][:80])' 2>&1 | tail -n 1)"
+    echo "FUSION-J8: BT-PAIR $(urun timeout 150 fusion bluetooth pair "$bta" --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"][:80])' 2>&1 | tail -n 1)"
     echo "FUSION-J8: BT-LIST $(urun fusion bluetooth --json | python3 -c 'import json,sys; j=json.load(sys.stdin); d=[x for x in j["devices"] if x["address"] == sys.argv[1]]; print("powered=%s paired=%s" % (j["adapter"]["powered"], d[0]["paired"] if d else "nincs"))' "$bta" 2>&1 | tail -n 1)"
     echo "FUSION-J8: BT-REMOVE $(urun fusion bluetooth remove "$bta" --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["ok"], j["message"][:80])' 2>&1 | tail -n 1)"
     urun fusion bluetooth off >/dev/null 2>&1
@@ -716,6 +716,26 @@ urun sh -c 'mkdir -p /data/programs/jogproba && printf "id = jogproba\nname = Jo
 echo "FUSION-M9: PERMISSIONS $(urun fusion permissions jogproba --json | python3 -c 'import json,sys; p=json.load(sys.stdin); print("%s:%s:net=%s:folders=%s" % (p["id"], p["enforcement"], p["net"], ",".join(f["path"] + (":ro" if f["readonly"] else "") for f in p["folders"])))' 2>&1 | tail -n 1) validate=$(urun fusion validate /data/programs/jogproba/program.fusion >/dev/null 2>&1 && echo ok || echo HIBA)"
 rm -rf /data/programs/jogproba
 echo "FUSION-M9: CHECK $(urun python3 -c 'from fusion import permissions as p; print(p.check("fusion", "system:printers"), p.check("nincsilyen", "device:laser"))' 2>&1 | tail -n 1)"
+# --- felhasználókezelés (fusion-users, a fusion-admin kapun át) ---
+FA=/usr/lib/fusion/bin/fusion-admin
+ua=$(printf 'proba123\n' | urun sudo -n $FA users add proba "Próba Béla" 0 2>&1 | tail -n 1)
+ul=$(urun fusion users --json 2>&1 | python3 -c 'import json,sys; j=json.load(sys.stdin); print(",".join("%s:%s" % (u["name"], "admin" if u["admin"] else "user") for u in j["users"]), "auto=" + j["autologin"])' 2>&1 | tail -n 1)
+up=$(printf 'proba123\nuj45678\n' | runuser -u proba -- sudo -n $FA users passwd proba 2>&1 | tail -n 1)
+ux=$(printf 'rossz\nmas45678\n' | runuser -u proba -- sudo -n $FA users passwd proba 2>&1 | tail -n 1)
+ud=$(runuser -u proba -- sudo -n $FA disk list 2>&1 | tail -n 1)
+uf=$(printf 'fusion\nx12345\n' | urun sudo -n $FA users passwd fusion 2>&1 | tail -n 1)
+uid1=$(id -u proba)
+userdel proba 2>/dev/null; /usr/lib/fusion/bin/fusion-users apply >/dev/null 2>&1      # a frissítéskori adatbázis-csere utánzása
+uid2=$(id -u proba 2>/dev/null || echo -)
+uh=$(python3 -W ignore -c 'import crypt; h=[l.split(":")[1] for l in open("/etc/shadow") if l.startswith("proba:")]; print("ok" if h and crypt.crypt("uj45678", h[0]) == h[0] else "HIBA")' 2>&1)
+urun sudo -n $FA users autologin proba >/dev/null 2>&1
+ua2=$(grep -c -- '--autologin proba' /etc/systemd/system/getty@tty1.service.d/zz-fusion-users.conf 2>/dev/null)
+urun sudo -n $FA users autologin fusion >/dev/null 2>&1
+ua3=$(grep -c -- '--autologin fusion' /etc/systemd/system/getty@tty1.service.d/zz-fusion-users.conf 2>/dev/null)
+urun sudo -n $FA users delete proba --remove-home >/dev/null 2>&1
+echo "FUSION-USERS: ADD $ua | LIST $ul"
+echo "FUSION-USERS: OWN-PASSWD $up | WRONG-OLD $ux | NONADMIN-DISK $ud | BASE $uf"
+echo "FUSION-USERS: PERSIST uid=$uid1/$uid2 hash=$uh AUTOLOGIN $ua2$ua3 DELETED $(id proba >/dev/null 2>&1 && echo nem || echo igen) home=$([ -d /home/proba ] && echo marad || echo törölve)"
 # 0.0.32: a felület rajzolása a Beállításokból (szoftveres ↔ grafikus kártya), a Shell újraindításával
 shpss() { p=$(pgrep -u fusion -f 'desktop/shell/fusion_shell\.py' | head -n 1); [ -n "$p" ] && awk '/^Pss:/ {print int($2/1024)}' /proc/$p/smaps_rollup 2>/dev/null; }
 rset() {
