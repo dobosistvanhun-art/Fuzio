@@ -337,9 +337,6 @@ step_test() {
             _check "$log" "FUSION-M9: CHECK True False" "jogosultság-kapu: saját program igen, ismeretlen nem" || ok_run=0
             _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=van cur-deletable=False orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
             _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: .* | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
-            _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
-            _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9.]* git=[0-9.]* home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
-            _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SIM ok" "Vas & Króm: a gyorsulási modell" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM ART ok" "Vas & Króm: a motor rajza (SVG)" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SOUND ok" "Vas & Króm: motorhang (V2, V8), kipörgés, jelzőhangok — kiszámolva" || ok_run=0
@@ -376,6 +373,9 @@ step_test() {
             _check "$log" "FUSION-M6: MEDIA none" "a FusionOS saját USB-lemeze nem csatolódik automatikusan" || ok_run=0
         fi
         if [ "$ser" = 1 ]; then
+            _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9.]* git=[0-9.]* home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0
             # 0.0.40: kamera (vivid), Bluetooth (btvirt a teszt-pendrive-ról), nyomtatás (CUPS, PDF) — csak ebben a futásban
             _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fusion API listája (V4L2)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA FRAMES ok" "Kamera program: élőkép (Qt Multimedia, FFmpeg)" || ok_run=0
