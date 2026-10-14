@@ -1,0 +1,300 @@
+#!/usr/bin/python3
+"""FusionOS — Fejlesztődoboz (root; a felhasználó a `fusion-dev box …` → `fusion-admin devbox …` úton éri el)
+
+Egy Ubuntu 24.04 (noble) alaprendszer a DATA-n (/data/dev/box), benne apt — a fejlesztéshez kellő eszközök
+(pl. a FusionOS buildje: mmdebstrap, fordítók, QEMU) ide kerülnek, nem a csak olvasható rendszerképbe.
+A doboz a systemd-nspawn-nal indul: saját fájlrendszer, közös hálózat (npm, wrangler login, apt), a felhasználó
+saját mappája közös, a /dev/kvm átadva (QEMU-tesztek). A FusionOS frissítése nem érinti; törölhető.
+
+    fusion-devbox status [--json]
+    fusion-devbox create                      létrehozás (debootstrap, internet kell; ~5–10 perc)
+    fusion-devbox run <felhasználó> [--cwd <mappa>] [-- <parancs…>]   parancs / bejelentkező héj a dobozban
+    fusion-devbox remove doboz                törlés (a megerősítő szó: „doboz”)
+"""
+import json
+import os
+import pwd
+import grp
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+DEV = os.environ.get("FUSION_DEV_DIR", "/data/dev")
+BOX = os.path.join(DEV, "box")
+TMP = os.path.join(DEV, "box.new")
+MARK = ".fusion-box.json"
+SUITE = "noble"
+MIRROR = os.environ.get("FUSION_DEVBOX_MIRROR", "http://archive.ubuntu.com/ubuntu")
+SECURITY = os.environ.get("FUSION_DEVBOX_SECURITY", "http://security.ubuntu.com/ubuntu")
+INCLUDE = "sudo,ca-certificates,curl,git,nano,less,xz-utils,gnupg,locales,bash-completion"
+MIN_FREE = 3 << 30
+NAME = "fejleszto"
+
+
+class BoxError(Exception):
+    pass
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def marker():
+    try:
+        with open(os.path.join(BOX, MARK)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def running():
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            cmd = open(f"/proc/{p}/cmdline", "rb").read().split(b"\0")
+        except OSError:
+            continue
+        if cmd and os.path.basename(cmd[0]) == b"systemd-nspawn" and BOX.encode() in cmd:
+            return True
+    return False
+
+
+def du(path):
+    try:
+        out = subprocess.run(["du", "-sxb", path], capture_output=True, text=True, timeout=120).stdout
+        return int(out.split()[0])
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return 0
+
+
+def free(path):
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize
+
+
+def status(as_json):
+    m = marker()
+    d = {"exists": bool(m), "incomplete": not m and (os.path.isdir(BOX) or os.path.isdir(TMP)), "path": BOX,
+         "created": (m or {}).get("created", ""), "suite": (m or {}).get("suite", ""),
+         "running": running(), "kvm": os.path.exists("/dev/kvm"),
+         "tools": bool(shutil.which("debootstrap") and shutil.which("systemd-nspawn")),
+         "free": free(DEV if os.path.isdir(DEV) else "/data"), "size": du(BOX) if m else 0}
+    if as_json:
+        print(json.dumps(d))
+    else:
+        say(f"Fejlesztődoboz: {'kész' if d['exists'] else 'félbemaradt' if d['incomplete'] else 'nincs'}"
+            + (f" — Ubuntu {d['suite']}, {d['size'] >> 20} MiB, létrehozva {d['created']}" if d['exists'] else ""))
+        say(f"  fut: {'igen' if d['running'] else 'nem'} · KVM: {'van' if d['kvm'] else 'nincs'} · "
+            f"szabad hely: {d['free'] >> 30} GiB")
+
+
+def write(path, text, mode=0o644):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(text)
+    os.chmod(path, mode)
+
+
+def configure(root):
+    """az alaprendszer beállítása a debootstrap után (a dobozon belül, chroot nélkül — csak fájlok)"""
+    try:
+        os.unlink(os.path.join(root, "etc/apt/sources.list"))
+    except OSError:
+        pass
+    write(os.path.join(root, "etc/apt/sources.list.d/ubuntu.sources"),
+          f"Types: deb\nURIs: {MIRROR}\nSuites: {SUITE} {SUITE}-updates {SUITE}-backports\n"
+          "Components: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\n"
+          f"Types: deb\nURIs: {SECURITY}\nSuites: {SUITE}-security\n"
+          "Components: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n")
+    write(os.path.join(root, "etc/hostname"), NAME + "\n")
+    write(os.path.join(root, "etc/hosts"), f"127.0.0.1 localhost\n127.0.1.1 {NAME}\n::1 localhost ip6-localhost\n")
+    # a dobozon belül a rendszergazda (a FusionOS sudo csoportja) jelszó nélkül sudo-zhat: a doboz az övé
+    write(os.path.join(root, "etc/sudoers.d/fusion-doboz"), "%sudo ALL=(ALL:ALL) NOPASSWD: ALL\n", 0o440)
+    write(os.path.join(root, "etc/profile.d/fusion-doboz.sh"),
+          '# FusionOS Fejlesztődoboz\nexport FUSION_BOX=1\ncase "$-" in *i*) PS1="(doboz) $PS1" ;; esac\n'
+          '[ -n "$FUSION_BOX_HELLO" ] && { echo "FusionOS Fejlesztődoboz — Ubuntu 24.04, apt: sudo apt install …; '
+          'kilépés: exit"; unset FUSION_BOX_HELLO; }\n')
+    write(os.path.join(root, "etc/default/locale"), "LANG=C.UTF-8\n")
+
+
+def create():
+    if marker():
+        raise BoxError("a Fejlesztődoboz már létezik (" + BOX + ")")
+    for t in ("debootstrap", "systemd-nspawn"):
+        if not shutil.which(t):
+            raise BoxError(f"hiányzik: {t} (régebbi FusionOS?)")
+    os.makedirs(DEV, exist_ok=True)
+    for p in (TMP, BOX):                       # egy félbemaradt próbálkozás maradéka
+        if os.path.isdir(p) and not (p == BOX and marker()):
+            say("a félbemaradt doboz törlése…")
+            subprocess.run(["rm", "-rf", "--one-file-system", p], check=False)
+    if free(DEV) < MIN_FREE:
+        raise BoxError(f"kevés a szabad hely a DATA-n ({free(DEV) >> 30} GiB; legalább {MIN_FREE >> 30} GiB kell)")
+    t0 = time.time()
+    say(f"1/3 Ubuntu {SUITE} alaprendszer letöltése és kibontása ({MIRROR}) — néhány perc…")
+    p = subprocess.Popen(["debootstrap", "--variant=minbase", f"--include={INCLUDE}",
+                          "--components=main,universe", SUITE, TMP, MIRROR],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    n = 0
+    for ln in p.stdout:
+        ln = ln.strip()
+        m = re.match(r"^I: (Retrieving|Validating|Extracting|Unpacking|Configuring|Installing|Base system) ?(\S*)", ln)
+        if m:
+            n += 1
+            if m.group(1) in ("Retrieving",) and n % 15:
+                continue
+            if m.group(1) in ("Extracting", "Unpacking", "Configuring", "Validating") and n % 25:
+                continue
+            say("  " + {"Retrieving": "letöltés", "Validating": "ellenőrzés", "Extracting": "kibontás",
+                        "Unpacking": "kicsomagolás", "Configuring": "beállítás", "Installing": "telepítés",
+                        "Base system": "alaprendszer"}[m.group(1)] + " " + m.group(2))
+        elif ln.startswith("E:") or ln.startswith("W: Failure"):
+            say("  " + ln)
+    if p.wait() != 0:
+        raise BoxError("a debootstrap hibával állt le (internet? szabad hely?) — próbálja újra")
+    say("2/3 beállítás (apt-források, felhasználók, sudo)…")
+    configure(TMP)
+    os.rename(TMP, BOX)
+    say("3/3 ellenőrzés a dobozban: apt-get update…")
+    rc = run_box("root", None, ["apt-get", "-q", "update"], quiet=True)
+    if rc != 0:
+        say("  figyelmeztetés: az apt-get update nem sikerült (később a dobozban: sudo apt update)")
+    with open(os.path.join(BOX, MARK), "w") as f:
+        json.dump({"created": time.strftime("%Y-%m-%d %H:%M"), "suite": SUITE, "mirror": MIRROR, "version": 1}, f)
+    say(f"KÉSZ: Fejlesztődoboz {du(BOX) >> 20} MiB, {int(time.time() - t0)} mp — megnyitás: fusion-dev box")
+
+
+def sync_users(root):
+    """a FusionOS felhasználói (uid ≥ 1000) ugyanazzal az uid/gid-del a dobozban is; a rendszergazdák a sudo csoportban"""
+    def read(name):
+        try:
+            return [ln.rstrip("\n").split(":") for ln in open(os.path.join(root, "etc", name)) if ln.strip()]
+        except OSError:
+            return []
+
+    def save(name, rows, mode):
+        path = os.path.join(root, "etc", name)
+        with open(path + ".tmp", "w") as f:
+            f.write("".join(":".join(r) + "\n" for r in rows))
+        os.chmod(path + ".tmp", mode)
+        os.replace(path + ".tmp", path)
+    pw, gr, sh = read("passwd"), read("group"), read("shadow")
+    names = {r[0] for r in pw}
+    admins = set(grp.getgrnam("sudo").gr_mem) if "sudo" in {g.gr_name for g in grp.getgrall()} else set()
+    changed = False
+    for u in pwd.getpwall():
+        if u.pw_uid < 1000 or u.pw_uid >= 60000:
+            continue
+        if u.pw_name not in names:
+            g = grp.getgrgid(u.pw_gid)
+            if not any(r[0] == g.gr_name for r in gr):
+                gr.append([g.gr_name, "x", str(g.gr_gid), ""])
+            pw.append([u.pw_name, "x", str(u.pw_uid), str(u.pw_gid), u.pw_gecos, u.pw_dir, "/bin/bash"])
+            sh.append([u.pw_name, "!", "19000", "0", "99999", "7", "", "", ""])
+            changed = True
+        for r in gr:
+            if r[0] == "sudo":
+                mem = [m for m in r[3].split(",") if m]
+                want = u.pw_name in admins
+                if want and u.pw_name not in mem:
+                    mem.append(u.pw_name)
+                    changed = True
+                if not want and u.pw_name in mem:
+                    mem.remove(u.pw_name)
+                    changed = True
+                r[3] = ",".join(mem)
+    if changed:
+        save("passwd", pw, 0o644)
+        save("group", gr, 0o644)
+        save("shadow", sh, 0o640)
+
+
+def run_box(user, cwd, cmd, quiet=False):
+    root = BOX if os.path.isdir(BOX) else TMP
+    if running():
+        raise BoxError("a Fejlesztődoboz már fut egy másik ablakban — ott dolgozzon, vagy lépjen ki belőle (exit)")
+    sync_users(root)
+    args = ["systemd-nspawn", "-q", "-D", root, "--register=no", "--keep-unit", f"--machine={NAME}",
+            "--resolv-conf=replace-host", "--timezone=auto", "--setenv=LANG=C.UTF-8"]
+    if user != "root":
+        u = pwd.getpwnam(user)
+        args += [f"--bind={u.pw_dir}", f"--user={user}", f"--setenv=HOME={u.pw_dir}", "--setenv=FUSION_BOX_HELLO=1"]
+        xauth = os.path.join(u.pw_dir, ".Xauthority")
+        if os.path.exists(xauth):
+            args.append(f"--setenv=XAUTHORITY={xauth}")
+        rdir = f"/run/user/{u.pw_uid}"
+        if os.path.isdir(rdir):
+            args += [f"--bind={rdir}", f"--setenv=XDG_RUNTIME_DIR={rdir}"]
+        if cwd:
+            cwd = os.path.realpath(cwd)
+            if cwd == u.pw_dir or cwd.startswith(u.pw_dir.rstrip("/") + "/"):
+                args.append(f"--chdir={cwd}")
+    if os.path.isdir("/tmp/.X11-unix"):
+        args += ["--bind-ro=/tmp/.X11-unix", f"--setenv=DISPLAY={os.environ.get('DISPLAY', ':0')}"]
+    if os.path.exists("/dev/kvm"):
+        args.append("--bind=/dev/kvm")
+    if os.environ.get("TERM"):
+        args.append(f"--setenv=TERM={os.environ['TERM']}")
+    args.append("--console=" + ("interactive" if sys.stdin.isatty() and sys.stdout.isatty() else "pipe"))
+    args += ["--"] + (cmd or ["/bin/bash", "-l"])
+    if quiet:
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        tail = r.stdout.strip().splitlines()[-3:]
+        for ln in tail:
+            say("  " + ln)
+        return r.returncode
+    return subprocess.call(args)
+
+
+def remove(confirm):
+    if confirm != "doboz":
+        raise BoxError("a törléshez a megerősítő szó: doboz")
+    if running():
+        raise BoxError("a doboz fut — előbb lépjen ki belőle")
+    for p in (BOX, TMP):
+        if os.path.isdir(p):
+            # --one-file-system: a doboz alá csatolt mappákba (ha valami mégis csatolva maradt) nem megy át
+            subprocess.run(["rm", "-rf", "--one-file-system", p], check=False)
+    if os.path.exists(BOX):
+        raise BoxError("a doboz nem törölhető teljesen (valami még használja?)")
+    say("KÉSZ: a Fejlesztődoboz törölve")
+
+
+def main(a):
+    if os.geteuid() != 0:
+        raise BoxError("rootként kell futnia (fusion-dev box …)")
+    cmd = a[0] if a else "status"
+    if cmd == "status":
+        status("--json" in a)
+    elif cmd == "create":
+        create()
+    elif cmd == "run":
+        if len(a) < 2:
+            raise BoxError("használat: run <felhasználó> [--cwd <mappa>] [-- <parancs…>]")
+        if not marker():
+            raise BoxError("nincs Fejlesztődoboz — létrehozás: fusion-dev box create")
+        user, rest, cwd = a[1], a[2:], None
+        if rest[:1] == ["--cwd"] and len(rest) >= 2:
+            cwd, rest = rest[1], rest[2:]
+        if rest[:1] == ["--"]:
+            rest = rest[1:]
+        return run_box(user, cwd, rest)
+    elif cmd == "remove":
+        remove(a[1] if len(a) > 1 else "")
+    else:
+        say(__doc__.strip())
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]) or 0)
+    except BoxError as e:
+        print("fusion-devbox: " + str(e), file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

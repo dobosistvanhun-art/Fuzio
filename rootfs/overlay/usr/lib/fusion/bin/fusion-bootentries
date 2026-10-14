@@ -1,0 +1,203 @@
+#!/usr/bin/python3
+"""FusionOS — UEFI indítási bejegyzések (root; a Beállítások → Indítás a `fusion-admin boot …`-on át hívja)
+
+    fusion-bootentries list [--json]          a bejegyzések: mire mutatnak, létezik-e még a fájl, melyik indult most
+    fusion-bootentries first <szám>           a sorrend elejére (ez indul alapértelmezésként)
+    fusion-bootentries next <szám>            csak a következő indításkor ez (BootNext)
+    fusion-bootentries delete <szám> <név>    törlés — megerősítés: a bejegyzés pontos neve
+
+Védelem: a most futó rendszer bejegyzése és a lemez nélküli (firmware-) bejegyzések nem törölhetők; a
+„Fusion meres - …” bejegyzéseket a FusionOS maga tartja karban (minden induláskor), azokat itt nem kell kezelni.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+FW_PREFIX = "Fusion meres - "
+
+
+class BootError(Exception):
+    pass
+
+
+def run(cmd, check=True):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    if check and r.returncode != 0:
+        raise BootError(f"{' '.join(cmd[:2])}: {(r.stderr or r.stdout).strip()[:300]}")
+    return r
+
+
+def efi():
+    if not os.path.isdir("/sys/firmware/efi"):
+        raise BootError("a gép nem UEFI-módban indult — nincsenek UEFI-bejegyzések")
+    return run(["efibootmgr", "-v"]).stdout
+
+
+def partitions():
+    """PARTUUID → {dev, disk, model, fstype, mounts}"""
+    out = run(["lsblk", "-J", "-o", "NAME,PATH,PARTUUID,PKNAME,FSTYPE,LABEL,MOUNTPOINTS,MODEL,TYPE,TRAN"]).stdout
+    res = {}
+
+    def walk(nodes, parent=None):
+        for n in nodes:
+            if n.get("type") == "part" and n.get("partuuid"):
+                res[n["partuuid"].lower()] = {"dev": n["path"], "disk": (parent or {}).get("name", n.get("pkname") or ""),
+                                              "model": ((parent or {}).get("model") or "").strip(),
+                                              "tran": (parent or {}).get("tran") or "",
+                                              "fstype": n.get("fstype") or "", "label": n.get("label") or "",
+                                              "mounts": [m for m in (n.get("mountpoints") or []) if m]}
+            walk(n.get("children") or [], n if n.get("type") == "disk" else parent)
+    walk(json.loads(out).get("blockdevices", []))
+    return res
+
+
+def file_exists(part, path):
+    """a bejegyzés fájlja megvan-e az ESP-n (ha nincs csatolva, rövid időre csak olvashatóan csatoljuk)"""
+    rel = path.replace("\\", "/").lstrip("/")
+    for m in part["mounts"]:
+        return _exists_ci(m, rel)
+    if part["fstype"] != "vfat":
+        return None
+    d = tempfile.mkdtemp(prefix="fusion-esp-", dir="/run")
+    try:
+        if run(["mount", "-o", "ro,noexec,nosuid,nodev", "-t", "vfat", part["dev"], d], check=False).returncode != 0:
+            return None
+        try:
+            return _exists_ci(d, rel)
+        finally:
+            run(["umount", d], check=False)
+    finally:
+        try:
+            os.rmdir(d)
+        except OSError:
+            pass
+
+
+def _exists_ci(root, rel):
+    """FAT: kis- és nagybetű nem számít"""
+    cur = root
+    for part in [p for p in rel.split("/") if p]:
+        try:
+            names = os.listdir(cur)
+        except OSError:
+            return False
+        hit = next((n for n in names if n.lower() == part.lower()), None)
+        if hit is None:
+            return False
+        cur = os.path.join(cur, hit)
+    return os.path.isfile(cur)
+
+
+def current_esp():
+    """a futó FusionOS ESP-jének PARTUUID-je"""
+    r = run(["blkid", "-t", "PARTLABEL=FUSION_ESP", "-o", "device"], check=False)
+    devs = r.stdout.split()
+    boot = ""
+    try:
+        boot = open("/run/fusion/boot-disk").read().strip()
+    except OSError:
+        pass
+    if boot and not boot.startswith("/dev/"):
+        boot = "/dev/" + boot
+    for d in devs:
+        if not boot or d.startswith(boot):
+            return run(["lsblk", "-no", "PARTUUID", d], check=False).stdout.strip().lower()
+    return ""
+
+
+def entries():
+    txt = efi()
+    cur = (re.search(r"^BootCurrent:\s*([0-9A-Fa-f]{4})", txt, re.M) or [None, ""])[1].upper()
+    nxt = (re.search(r"^BootNext:\s*([0-9A-Fa-f]{4})", txt, re.M) or [None, ""])[1].upper()
+    order = [o.upper() for o in ((re.search(r"^BootOrder:\s*(\S+)", txt, re.M) or [None, ""])[1].split(",")) if o]
+    parts = partitions()
+    myesp = current_esp()
+    out = []
+    for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})(\*?)\s+([^\t\n]*?)\s*(?:\t([^\n]*))?$", txt, re.M):
+        num, active, label, dp = m.group(1).upper(), m.group(2) == "*", m.group(3).strip(), m.group(4) or ""
+        hd = re.search(r"HD\(\d+,GPT,([0-9a-fA-F-]{36})", dp)
+        fp = re.search(r"File\(([^)]*)\)", dp)
+        e = {"num": num, "label": label, "active": active, "current": num == cur, "next": num == nxt,
+             "pos": order.index(num) if num in order else -1, "path": fp.group(1) if fp else "",
+             "partuuid": hd.group(1).lower() if hd else "", "disk": "", "model": "", "exists": None,
+             "kind": "firmware", "managed": label.startswith(FW_PREFIX)}
+        if hd:
+            p = parts.get(e["partuuid"])
+            if p:
+                e["disk"], e["model"], e["dev"] = p["disk"], p["model"], p["dev"]
+                e["exists"] = file_exists(p, e["path"]) if e["path"] else None
+            else:
+                e["exists"] = False                       # a lemez nincs meg (pl. kihúzott pendrive, törölt lemez)
+            e["kind"] = "fusion" if e["partuuid"] == myesp else ("usb" if p and p.get("tran") == "usb" else "disk")
+            if p and p.get("label") == "FUSION_IESP":
+                e["kind"] = "installer"
+        e["orphan"] = bool(hd) and e["exists"] is False
+        e["deletable"] = bool(hd) and not e["current"] and not e["managed"]
+        out.append(e)
+    out.sort(key=lambda x: (x["pos"] < 0, x["pos"], x["num"]))
+    return {"current": cur, "next": nxt, "order": order, "entries": out,
+            "timeout": int((re.search(r"^Timeout:\s*(\d+)", txt, re.M) or [None, "0"])[1])}
+
+
+def find(num):
+    num = num.upper()
+    if not re.match(r"^[0-9A-F]{4}$", num):
+        raise BootError("érvénytelen bejegyzésszám: " + num)
+    d = entries()
+    e = next((x for x in d["entries"] if x["num"] == num), None)
+    if not e:
+        raise BootError("nincs ilyen bejegyzés: Boot" + num)
+    return d, e
+
+
+def main(a):
+    if os.geteuid() != 0:
+        raise BootError("rootként kell futnia")
+    cmd = a[0] if a else "list"
+    if cmd == "list":
+        d = entries()
+        if "--json" in a:
+            print(json.dumps(d))
+        else:
+            for e in d["entries"]:
+                flags = ("▶ " if e["current"] else "  ") + ("1." if e["pos"] == 0 else "  ")
+                state = {True: "", False: "  [ELÁRVULT]", None: ""}[e["exists"]]
+                print(f"{flags} Boot{e['num']}  {e['label']:<40} {e['disk'] or '-':<6} {e['path']}{state}")
+        return 0
+    if cmd == "first" and len(a) == 2:
+        d, e = find(a[1])
+        order = [e["num"]] + [o for o in d["order"] if o != e["num"]]
+        run(["efibootmgr", "-q", "-o", ",".join(order)])
+        print(f"KÉSZ: alapértelmezett: {e['label']}")
+        return 0
+    if cmd == "next" and len(a) == 2:
+        d, e = find(a[1])
+        run(["efibootmgr", "-q", "-n", e["num"]])
+        print(f"KÉSZ: a következő indításkor: {e['label']}")
+        return 0
+    if cmd == "delete" and len(a) == 3:
+        d, e = find(a[1])
+        if a[2] != e["label"]:
+            raise BootError("a megerősítés nem egyezik a bejegyzés nevével")
+        if e["current"]:
+            raise BootError("a most futó rendszer bejegyzése nem törölhető")
+        if e["managed"]:
+            raise BootError("ezt a bejegyzést a FusionOS kezeli (mérési bejegyzés) — induláskor újra létrejönne")
+        if not e["partuuid"]:
+            raise BootError("lemez nélküli (firmware-) bejegyzés — a BIOS-beállításokban kezelhető")
+        run(["efibootmgr", "-q", "-b", e["num"], "-B"])
+        print(f"KÉSZ: törölve: {e['label']}")
+        return 0
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BootError as e:
+        print("fusion-bootentries: " + str(e), file=sys.stderr)
+        sys.exit(1)

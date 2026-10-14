@@ -175,3 +175,8 @@ libnss-mdns
 printer-driver-hpcups
 printer-driver-gutenprint
 printer-driver-cups-pdf
+# 0.0.46: Fejlesztődoboz (Ubuntu 24.04 a DATA-n, systemd-nspawn) — a FusionOS buildje Mint nélkül
+debootstrap
+systemd-container
+ubuntu-keyring
+wget

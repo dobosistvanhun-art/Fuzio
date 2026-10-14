@@ -29,6 +29,10 @@
 #    installer-media <fájl.fupd> <lemez> <megerősítés>
 #                                     telepítő pendrive készítése egy .fupd-ből (a futó FusionOS-ből is)
 #    backup list | create <kötet>     a DATA mentése egy csatolt külső kötetre (fusion-backup)
+#    devbox status|create|remove doboz | run [--cwd <mappa>] [-- <parancs…>]
+#                                     Fejlesztődoboz (fusion-devbox): Ubuntu 24.04 a DATA-n, systemd-nspawn
+#    boot list | first <szám> | next <szám> | delete <szám> <megerősítés>
+#                                     UEFI indítási bejegyzések (fusion-bootentries)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -288,8 +292,29 @@ case "$cmd" in
             *) fail "használat: backup list | create <kötet>" ;;
         esac
         exec /usr/lib/fusion/bin/fusion-backup "$@" ;;
+    boot)
+        case "${1:-}" in
+            list) [ $# -le 2 ] || fail "használat: boot list [--json]" ;;
+            first|next) [ $# -eq 2 ] || fail "használat: boot first|next <szám>" ;;
+            delete) [ $# -eq 3 ] || fail "használat: boot delete <szám> <név>" ;;
+            *) fail "használat: boot list|first|next|delete …" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-bootentries "$@" ;;
+    devbox)
+        # Fejlesztődoboz (fusion-devbox): csak rendszergazdának (a nem rendszergazda hívót fent elutasítja);
+        # a dobozban a hívó saját felhasználójaként fut, a saját mappája közös
+        case "${1:-}" in
+            status) [ $# -le 2 ] || fail "használat: devbox status [--json]" ;;
+            create) [ $# -eq 1 ] || fail "használat: devbox create" ;;
+            remove) [ $# -eq 2 ] || fail "használat: devbox remove doboz" ;;
+            run) shift
+                 u="${SUDO_USER:-}"; [ -n "$u" ] || fail "a devbox run a sudo-n át hívható (fusion-dev box)"
+                 exec /usr/lib/fusion/bin/fusion-devbox run "$u" "$@" ;;
+            *) fail "használat: devbox status|create|run|remove" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-devbox "$@" ;;
     report)
         [ $# -eq 0 ] || fail "használat: report"
         exec /usr/lib/fusion/bin/fusion-report --system ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install, installer-media, backup" ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install, installer-media, backup, devbox, boot" ;;
 esac

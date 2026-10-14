@@ -242,6 +242,18 @@ def update_state():
             "stamp": stamp}
 
 
+# --- Indítás (UEFI-bejegyzések) ---
+def boot_state():
+    rc, out = ui.admin("boot", "list", "--json", timeout=60)
+    try:
+        d = json.loads(out[out.index("{"):])
+    except ValueError:
+        return {"error": (out.strip().splitlines() or ["ismeretlen hiba"])[-1].replace("fusion-admin: ", "")
+                .replace("fusion-bootentries: ", ""), "entries": []}
+    d["error"] = ""
+    return d
+
+
 # --- Mentés (T3) és telepítő pendrive ---
 def backup_state():
     rc, out = ui.admin("backup", "list", timeout=60)
@@ -800,10 +812,49 @@ class Settings(QObject):
         def f():
             rc, out = ui.run(["fusion-dev", "--json"], timeout=90)
             try:
-                return json.loads(out.strip().splitlines()[-1])
+                d = json.loads(out.strip().splitlines()[-1])
             except (ValueError, IndexError):
-                return {"node": "", "npm": "", "wrangler": "", "error": out.strip()[-200:]}
+                d = {"node": "", "npm": "", "wrangler": "", "error": out.strip()[-200:]}
+            d.setdefault("box", {})
+            d["boxJob"] = self._job_state("devbox")
+            return d
         self._async("dev", f)
+
+    # --- Fejlesztődoboz (Ubuntu 24.04 a DATA-n, systemd-nspawn; fusion-devbox) ---
+    @pyqtSlot(result=str)
+    def devboxCreate(self):
+        return self._job("Fejlesztődoboz létrehozása", [], kind="devbox", cmd=("sudo", "-n", ui.ADMIN, "devbox", "create"),
+                         app="Programkezelő", icon="terminal", okpat="^KÉSZ:")
+
+    @pyqtSlot()
+    def devboxJobWatch(self):
+        if self._job_state("devbox")["running"]:
+            self._job_watch("devbox")
+
+    @pyqtSlot()
+    def devboxRemove(self):
+        self._async("devbox-action", lambda: dict(zip(("rc", "msg"), ui.admin("devbox", "remove", "doboz", timeout=900))))
+
+    @pyqtSlot()
+    def devboxShell(self):
+        ui.spawn(["xterm", "-title", "Fejlesztődoboz", "-e", "sh", "-c",
+                  "cd \"$HOME\" && fusion-dev box || { echo; echo '(Enter: bezárás)'; read x; }"])
+
+    # --- Indítás: UEFI-bejegyzések (fusion-bootentries) ---
+    @pyqtSlot()
+    def bootRefresh(self):
+        self._async("boot", boot_state)
+
+    @pyqtSlot(str, str, str)
+    def bootAction(self, action, num, confirm):
+        if action not in ("first", "next", "delete") or not re.match(r"^[0-9A-Fa-f]{4}$", num):
+            return
+        args = ["boot", action, num] + ([confirm] if action == "delete" else [])
+
+        def f():
+            rc, out = ui.admin(*args, timeout=60)
+            return {"ok": rc == 0, "msg": (out.strip().splitlines() or [""])[-1].replace("fusion-bootentries: ", "").replace("KÉSZ: ", "")}
+        self._async("boot-action", f)
 
     # --- Hang ---
     @pyqtSlot()

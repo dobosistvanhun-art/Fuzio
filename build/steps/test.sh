@@ -264,7 +264,7 @@ step_test() {
             QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV"
                         -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV"
                         -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
-            QEMU_HOTPLUG=1; QEMU_TIMEOUT=3200   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS
+            QEMU_HOTPLUG=1; QEMU_TIMEOUT=5400   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS; 0.0.46: + Fejlesztődoboz (debootstrap)
         else
             # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el)
             QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=1800
@@ -335,6 +335,11 @@ step_test() {
             _check "$log" "FUSION-M9: XINPUT added=[1-9][0-9]* failed=0 input-group=0" "bemeneti eszközök az input csoport nélkül (Xorg)" || ok_run=0
             _check "$log" "FUSION-M9: PERMISSIONS jogproba:sandbox:net=False:folders=Projektek,Letöltések:ro validate=ok" "fusion permissions: a programok jogai" || ok_run=0
             _check "$log" "FUSION-M9: CHECK True False" "jogosultság-kapu: saját program igen, ismeretlen nem" || ok_run=0
+            _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=FusionOS kind=fusion orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
+            _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: FusionOS | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9] git=[0-9] home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SIM ok" "Vas & Króm: a gyorsulási modell" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM ART ok" "Vas & Króm: a motor rajza (SVG)" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SOUND ok" "Vas & Króm: motorhang (V2, V8), kipörgés, jelzőhangok — kiszámolva" || ok_run=0

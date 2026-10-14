@@ -8,8 +8,12 @@
     fusion-dev install wrangler   Cloudflare Wrangler (npm, a felhasználó mappájába: ~/.local)
     fusion-dev update wrangler
     fusion-dev remove wrangler
+    fusion-dev box                Fejlesztődoboz: bejelentkezés (Ubuntu 24.04 a DATA-n, apt-tal; a saját mappa közös)
+    fusion-dev box status|create|remove
+    fusion-dev box run <parancs…> egy parancs a dobozban (az aktuális mappában, ha a saját mappán belül van)
 
-A rendszerkép nem változik (csak olvasható): minden a DATA-n van, root nélkül. A parancsok a munkamenetben
+A rendszerkép nem változik (csak olvasható): minden a DATA-n van, root nélkül. Ami apt-tal települ (pl. a FusionOS
+buildjének eszközei), az a Fejlesztődobozba kerül (rendszergazdai fiók kell). A parancsok a munkamenetben
 (Terminál) a PATH-on vannak: /data/dev/node/bin és ~/.local/bin. Bejelentkezés a Cloudflare-be:
 `wrangler login` (a böngészőben).
 """
@@ -143,6 +147,15 @@ def install_node(update=False):
     say(f"Telepítve: Node.js {node_version()} (npm: {npm_version()}) → {NODE_LINK}")
 
 
+def box_status():
+    """a Fejlesztődoboz állapota (rendszergazda nélkül: csak a jelölőfájlból)"""
+    try:
+        r = subprocess.run(ADMIN + ["status", "--json"], capture_output=True, text=True, timeout=150)
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return {"exists": os.path.exists(os.path.join(DEV, "box", ".fusion-box.json")), "admin": False}
+
+
 def npm_version():
     try:
         return subprocess.run(["npm", "--version"], capture_output=True, text=True, timeout=30, env=env()).stdout.strip()
@@ -168,9 +181,33 @@ def npm(*args):
         raise DevError(f"az npm hibával állt le ({rc})")
 
 
+ADMIN = ["sudo", "-n", os.environ.get("FUSION_ADMIN", "/usr/lib/fusion/bin/fusion-admin"), "devbox"]
+
+
+def box(a):
+    sub = a[0] if a else "shell"
+    if sub in ("status", "create"):
+        return subprocess.call(ADMIN + [sub] + a[1:])
+    if sub == "remove":
+        ok = a[1:] == ["doboz"] or input("A Fejlesztődoboz törlése (a saját mappája megmarad). Írja be: doboz > ").strip() == "doboz"
+        if not ok:
+            say("megszakítva")
+            return 1
+        return subprocess.call(ADMIN + ["remove", "doboz"])
+    cwd = os.getcwd()
+    if sub == "shell":
+        return subprocess.call(ADMIN + ["run", "--cwd", cwd])
+    if sub == "run" and len(a) > 1:
+        return subprocess.call(ADMIN + ["run", "--cwd", cwd, "--"] + a[1:])
+    say(__doc__.strip())
+    return 2
+
+
 def main(a):
     cmd = a[0] if a else "status"
     what = a[1] if len(a) > 1 else ""
+    if cmd == "box":
+        return box(a[1:])
     if cmd in ("-h", "--help", "help"):
         say(__doc__.strip())
         return 0
@@ -178,9 +215,12 @@ def main(a):
         n, w = node_version(), wrangler_version()
         say(f"Node.js:  {n or 'nincs telepítve (fusion-dev install node)'}" + (f"  (npm {npm_version()})" if n else ""))
         say(f"Wrangler: {w or 'nincs telepítve (fusion-dev install wrangler)'}")
+        box_st = box_status()
+        say("Doboz:    " + ("kész (fusion-dev box)" if box_st.get("exists") else "nincs (fusion-dev box create)"))
         return 0
     if cmd == "--json":
-        print(json.dumps({"node": node_version(), "npm": npm_version() if node_version() else "", "wrangler": wrangler_version()}))
+        print(json.dumps({"node": node_version(), "npm": npm_version() if node_version() else "", "wrangler": wrangler_version(),
+                          "box": box_status()}))
         return 0
     if (cmd, what) in (("install", "node"), ("update", "node")):
         install_node(update=cmd == "update")

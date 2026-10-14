@@ -28,6 +28,7 @@ FWindow {
         { id: "users", title: "Felhasználók", icon: "user", qml: "UsersPage.qml" },
         { id: "update", title: "Rendszerfrissítés", icon: "update", qml: "UpdatePage.qml" },
         { id: "backup", title: "Mentés", icon: "archive-in", qml: "BackupPage.qml" },
+        { id: "boot", title: "Indítás", icon: "power", qml: "BootPage.qml" },
         { id: "report", title: "Hibajelentés", icon: "report", qml: "ReportPage.qml" },
         { id: "system", title: "Rendszer", icon: "chip", qml: "SystemPage.qml" }
     ]
@@ -72,7 +73,7 @@ FWindow {
             Repeater {
                 model: win.pages
                 Rectangle {
-                    x: 8; width: side.width - 16; height: 38; radius: Theme.radius
+                    x: 8; width: side.width - 16; height: 35; radius: Theme.radius
                     color: index === win.cur ? Theme.selected : (sma.containsMouse ? Theme.hover : "transparent")
                     Rectangle { visible: index === win.cur; width: 3; height: 20; anchors.verticalCenter: parent.verticalCenter; color: Theme.accent }
                     FIcon { x: 14; anchors.verticalCenter: parent.verticalCenter; name: modelData.icon; size: 18 }

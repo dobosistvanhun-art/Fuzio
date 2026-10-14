@@ -23,9 +23,13 @@ SettingsPage {
     property string chosen: ""
     busy: job.running || searching
     onRefresh: settings.programsRefresh()
-    Component.onCompleted: { if (win.param) chooseFile(win.param); settings.programsRefresh(); settings.programJobWatch(); settings.devRefresh() }
-    property var dev: ({ node: "", npm: "", wrangler: "" })
+    Component.onCompleted: { if (win.param) chooseFile(win.param); settings.programsRefresh(); settings.programJobWatch(); settings.devRefresh(); settings.devboxJobWatch() }
+    property var dev: ({ node: "", npm: "", wrangler: "", box: {} })
     property bool devLoaded: false
+    property var boxJob: ({ running: false, lines: [], rc: null, title: "" })
+    property string boxConfirm: ""
+    readonly property var box: p.dev.box || ({})
+    property string boxMsg: ""
     // a terminálban futó telepítés után az állapot frissül, amikor az ablak újra előtérbe kerül
     Connections { target: win; function onActiveChanged() { if (win.active && p.visible) settings.devRefresh() } }
     Connections {
@@ -37,7 +41,9 @@ SettingsPage {
     Connections {
         target: settings
         function onResult(tag, r) {
-            if (tag === "dev") { p.dev = r; p.devLoaded = true; return }
+            if (tag === "dev") { p.dev = r; p.devLoaded = true; if (r.boxJob && !p.boxJob.running) p.boxJob = r.boxJob; return }
+            if (tag === "devbox-job") { var was = p.boxJob.running; p.boxJob = r; if (was && !r.running) settings.devRefresh(); return }
+            if (tag === "devbox-action") { p.boxMsg = r.rc === 0 ? "" : (r.msg || "").trim(); settings.devRefresh(); return }
             if (tag === "programs" && r.programs) {
                 p.progs = r.programs; p.roles = r.roles; p.recipes = r.recipes; p.job = r.job
                 if (r.installers !== undefined) { p.inst = r.installers; settings.programSizes() }
@@ -230,6 +236,37 @@ SettingsPage {
             FButton { visible: !!p.dev.wrangler; text: "Frissítés"; onClicked: settings.openTerminal("dev-update-wrangler") }
             FButton { visible: !!p.dev.wrangler; text: "Eltávolítás"; flat: true; onClicked: settings.openTerminal("dev-remove-wrangler") }
         }
+    }
+    // --- Fejlesztődoboz ---
+    Section {
+        title: "FEJLESZTŐDOBOZ (Ubuntu 24.04 a DATA-n, apt-tal — pl. a FusionOS buildjéhez)"
+        InfoRow {
+            icon: "terminal"; label: "Fejlesztődoboz"
+            value: !p.devLoaded ? "…" : p.box.exists ? ("kész — Ubuntu " + p.box.suite + ", " + Math.round((p.box.size || 0) / 1048576) + " MiB, létrehozva " + p.box.created
+                                                  + (p.box.running ? "   ·   fut" : "") + (p.box.kvm ? "   ·   KVM: van" : ""))
+                   : p.box.incomplete ? "félbemaradt — Létrehozás újra" : p.box.admin === false ? "rendszergazdai fiók kell"
+                   : "nincs — egy külön Ubuntu-rendszer a DATA-n (~1 GB, internet kell, 5–10 perc); a rendszerképhez nem nyúl"
+            valueColor: p.box.exists ? Theme.ok : Theme.dim
+            FButton { visible: !p.box.exists; enabled: !p.boxJob.running; text: "Létrehozás"; primary: true
+                      onClicked: { var e = settings.devboxCreate(); if (e) p.boxMsg = "hiba: " + e } }
+            FButton { visible: !!p.box.exists; text: "Megnyitás (terminál)"; icon: "terminal"; primary: true; onClicked: settings.devboxShell() }
+            FButton { visible: !!p.box.exists && p.boxConfirm !== "del"; text: "Törlés…"; flat: true; enabled: !p.box.running; onClicked: p.boxConfirm = "del" }
+            FButton { visible: p.boxConfirm === "del"; text: "Törlés — biztosan? (a saját mappája megmarad)"; danger: true
+                      onClicked: { settings.devboxRemove(); p.boxConfirm = "" } }
+        }
+        InfoRow { label: "Használat"; value: "a dobozban a saját mappája közös; telepítés: sudo apt install …   ·   parancssorból: fusion-dev box   ·   FusionOS-build: cd ~/Projektek/fusionos && build/fusion-build deps --install && build/fusion-build all" }
+        Column {
+            visible: p.boxJob.title !== "" && (p.boxJob.running || p.boxJob.rc !== null) && p.boxJob.recent === true
+            x: 14; width: parent.width - 28; spacing: 4; topPadding: 6; bottomPadding: 6
+            Text { text: p.boxJob.running ? "LÉTREHOZÁS FOLYAMATBAN…" : (p.boxJob.rc === 0 ? "KÉSZ" : "SIKERTELEN")
+                   color: p.boxJob.running ? Theme.accent : (p.boxJob.rc === 0 ? Theme.ok : Theme.danger); font.family: Theme.font; font.bold: true }
+            Repeater {
+                model: (p.boxJob.lines || []).slice(-8)
+                Text { width: parent.width; text: modelData; elide: Text.ElideMiddle; textFormat: Text.PlainText; color: Theme.dim
+                       font.family: Theme.mono; font.pixelSize: 11 }
+            }
+        }
+        Text { visible: p.boxMsg !== ""; text: p.boxMsg; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12 }
     }
     FButton { text: "A Windows-futtatókörnyezet ellenőrzése (fwr check)"; icon: "check"; onClicked: settings.openTerminal("fwrcheck") }
 }

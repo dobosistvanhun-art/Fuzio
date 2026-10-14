@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "bluetooth", "display", "devices", "printers", "printer", "drive", "sound", "programs", "store", "desktop", "users", "update", "backup", "report", "system"]
+PAGES = ["wifi", "bluetooth", "display", "devices", "printers", "printer", "drive", "sound", "programs", "store", "desktop", "users", "update", "backup", "boot", "report", "system"]
 
 
 def selftest():
@@ -59,6 +59,9 @@ def selftest():
           + f" files={len(u['files'])} error={u['error'] or '-'}", flush=True)
     b = sb.backup_state()
     print(f"FUSION-SETTINGS: BACKUP error={b['error'] or '-'} data={b.get('dataUsedText', '-')} targets={len(b.get('targets', []))} backups={len(b.get('backups', []))}", flush=True)
+    bt = sb.boot_state()
+    print(f"FUSION-SETTINGS: BOOT error={bt['error'] or '-'} entries={len(bt['entries'])} current="
+          + (",".join(e["label"].replace(" ", "_") for e in bt["entries"] if e.get("current")) or "-"), flush=True)
     r = sb.report_files()
     print(f"FUSION-SETTINGS: REPORT dir={sb.report_dir()} files={len(r)}", flush=True)
     # 0.0.40: Bluetooth, nyomtatók (CUPS), kamera — a Fusion API-n át

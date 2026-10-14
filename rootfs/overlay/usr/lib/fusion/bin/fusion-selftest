@@ -657,6 +657,22 @@ urun env QT_QPA_PLATFORM=offscreen timeout 120 fusion-vaskrom --selftest > /tmp/
 grep '^VASKROM:' /tmp/fusion-vaskrom.out | sed 's/^VASKROM:/FUSION-G1: VASKROM/'
 grep -q '^VASKROM: QML ok' /tmp/fusion-vaskrom.out || grep -v '^VASKROM:' /tmp/fusion-vaskrom.out | tail -n 15 | sed 's/^/FUSION-G1:   vaskrom: /'
 echo "FUSION-G1: VASKROM-LINK $(readlink -f /usr/bin/fusion-vaskrom) menu=$(python3 -c 'import json; print(any(a["id"] == "vaskrom" and a["group"] == "jatek" for a in json.load(open("/usr/lib/fusion/desktop/apps.json"))))')"
+# --- 0.0.46: Indítás — UEFI-bejegyzések (fusion-bootentries a fusion-admin boot …-on át, a felhasználó nevében) ---
+if [ -d /sys/firmware/efi ]; then
+    bd=/dev/$(cat /run/fusion/boot-disk)
+    efibootmgr -q -c -d "$bd" -p 1 -L "Proba arva" -l '\EFI\nincs\proba.efi' >/dev/null 2>&1
+    urun sudo -n /usr/lib/fusion/bin/fusion-admin boot list --json > /tmp/boot.json 2>&1
+    echo "FUSION-BOOT: LIST $(python3 -c 'import json; d=json.load(open("/tmp/boot.json")); e=d["entries"]; c=[x for x in e if x["current"]]; a=[x for x in e if x["label"]=="Proba arva"]; print("n=%d current=%s kind=%s orphan=%s deletable=%s" % (len(e), c[0]["label"] if c else "-", c[0]["kind"] if c else "-", a[0]["orphan"] if a else "-", a[0]["deletable"] if a else "-"))' 2>&1 | tail -n 1)"
+    num=$(python3 -c 'import json; print([x["num"] for x in json.load(open("/tmp/boot.json"))["entries"] if x["label"]=="Proba arva"][0])' 2>/dev/null)
+    cur=$(python3 -c 'import json; print([x["num"] for x in json.load(open("/tmp/boot.json"))["entries"] if x["current"]][0])' 2>/dev/null)
+    w=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$num" rossz 2>&1 | tail -n 1)
+    c=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$cur" FusionOS 2>&1 | tail -n 1)
+    f=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot first "$cur" 2>&1 | tail -n 1)
+    d=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$num" "Proba arva" 2>&1 | tail -n 1)
+    echo "FUSION-BOOT: WRONG=${w#*: } | CURRENT=${c#*: } | FIRST=$f | DELETE=$d | LEFT=$(efibootmgr | grep -c 'Proba arva') ORDER1=$(efibootmgr | sed -n 's/^BootOrder: *\([0-9A-F]*\).*/\1/p')=$cur"
+else
+    echo "FUSION-BOOT: nincs UEFI"
+fi
 # --- 0.0.40: kamera, Bluetooth, nyomtatás ---
 mods=""; for x in uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm; do modinfo -n "$x" >/dev/null 2>&1 && mods="$mods $x"; done
 echo "FUSION-J8: MODULES$mods fw=$(ls /usr/lib/firmware/intel/ibt-hw-37.7* 2>/dev/null | wc -l) groups=$(id -nG fusion | tr ' ' '\n' | grep -cx 'bluetooth\|lpadmin') qtmm=$(python3 -c 'import PyQt6.QtMultimedia; print("ok")' 2>&1 | tail -n 1)"
@@ -711,6 +727,16 @@ pd=$(urun timeout 150 fusion printers discover --json > /tmp/prdisc.json 2>&1; e
 echo "FUSION-J8: PRINT-DISCOVER rc=$pd json=$(python3 -c 'import json; print(type(json.load(open("/tmp/prdisc.json"))).__name__)' 2>&1 | tail -n 1) remove=$(urun fusion printers remove PDF --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["ok"])' 2>&1 | tail -n 1) left=$(urun fusion printers --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 runuser -u fusion -- python3 -c "import runpy; g = runpy.run_path('/usr/lib/fusion/bin/fusion-report', run_name='r'); m = g['Masker'](); print(m.text(chr(10).join(g['bt_camera_printer_section'](m))))" 2>&1 \
     | sed 's/^/FUSION-J8:   report: /' | head -n 30
+# 0.0.46: Fejlesztődoboz — létrehozás (debootstrap, az internetről), parancs a dobozban a felhasználó nevében, törlés
+t0=$(date +%s)
+urun timeout 2400 sudo -n /usr/lib/fusion/bin/fusion-admin devbox create > /tmp/devbox.out 2>&1; rc=$?
+echo "FUSION-DEVBOX: CREATE rc=$rc $(grep '^KÉSZ:' /tmp/devbox.out | head -n 1) ($(( $(date +%s) - t0 )) mp)"
+[ $rc = 0 ] || tail -n 15 /tmp/devbox.out | sed 's/^/FUSION-DEVBOX:   /'
+urun sh -c 'cd /home/fusion && timeout 300 sudo -n /usr/lib/fusion/bin/fusion-admin devbox run --cwd /home/fusion -- sh -c "echo user=\$(id -un) root=\$(sudo -n id -u) os=\$(. /etc/os-release; echo \$VERSION_ID) apt=\$(apt-get --version | head -n 1 | cut -d\" \" -f2) git=\$(git --version | cut -d\" \" -f3) home=\$(pwd) shared=\$(test -f .bashrc && echo igen || echo nem)"' > /tmp/devbox-run.out 2>&1
+echo "FUSION-DEVBOX: RUN $(grep '^user=' /tmp/devbox-run.out | tail -n 1)"
+grep -q '^user=' /tmp/devbox-run.out || tail -n 10 /tmp/devbox-run.out | sed 's/^/FUSION-DEVBOX:   /'
+echo "FUSION-DEVBOX: STATUS $(urun sudo -n /usr/lib/fusion/bin/fusion-admin devbox status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("exists=%s size=%dMiB running=%s" % (d["exists"], d["size"] >> 20, d["running"]))' 2>&1 | tail -n 1)"
+echo "FUSION-DEVBOX: REMOVE $(urun sudo -n /usr/lib/fusion/bin/fusion-admin devbox remove doboz 2>&1 | tail -n 1) left=$([ -e /data/dev/box ] && echo van || echo nincs)"
 fi
 # --- M9: jogosultságok ---
 # az `input` csoport nélkül is megnyílnak-e az Xorg bemeneti eszközei (billentyűzet, egér)
