@@ -20,6 +20,20 @@ Indítás: Start menü → Játékok → **Vas & Króm**, vagy `fusion-vaskrom`.
 
 **Nap vége**: új hirdetések és bontókínálat, a vevők jelentkeznek, az ellenfelek fejlesztenek.
 
+**Pénz (0.0.45):** kezdőpénz $3000; az újságban mindig van egy olcsó **felújítandó** motor (~$900–1300), így a
+vétel után marad pénz javításra és tétre (a legkisebb tét $50). Ha mégis elfogy: **Szerelőmunka** a Garázsban —
+egy nap telik el, $120–220 (+ a hírnévvel nő).
+
+## Hang (0.0.45)
+
+Nincs hangfájl: minden hang a játékban számolódik ki (`sound.py`), a FusionOS hangrendszerén (PipeWire) szól.
+- **Motorhang:** minden gyújtás egy rövid kipufogó-impulzus; a ritmus a hengerszámtól függ — V2 (45°): a jellegzetes
+  egyenetlen „krumpli-krumpli”, V8: dübörgés. A nagyobb köbcenti mélyebb; a hangosabb kipufogó (drag, 2-1) erősebb,
+  zajosabb, gázelvételnél durrog. Az ellenfél motorja a távolsággal halkul.
+- Kipörgő gumi, lámpa (sárga: rövid, zöld: magas), váltás, győzelem / vereség, vásárlás, hiba.
+- **Garázs → BERÚGÁS:** a motor alapjáraton jár, a GÁZ gombbal felpörgethető — a kipufogócsere itt hallatszik.
+- Menü (☰) → Hang ki/be (megjegyzi). CPU-igény: ~5 % egy magon verseny közben (két motor + gumi).
+
 ## Verseny
 
 - Lámpa: 3 sárga, majd zöld. **SZÓKÖZ** (vagy a GÁZ gomb, nyomva tartva) = gáz, **JOBB NYÍL / ENTER** (KUPLUNG) = indulás,

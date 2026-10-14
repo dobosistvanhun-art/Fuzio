@@ -71,6 +71,8 @@ ApplicationWindow {
     Menu {
         id: menu; x: win.width - 220; y: 60
         MenuItem { text: "Új játék"; onTriggered: confirmNew.open() }
+        MenuItem { text: sound.enabled ? "Hang kikapcsolása" : "Hang bekapcsolása"; enabled: sound.available
+                   onTriggered: sound.enabled = !sound.enabled }
         MenuItem { text: "Súgó"; onTriggered: help.visible = true }
         MenuItem { text: "Kilépés"; onTriggered: Qt.quit() }
     }
@@ -134,7 +136,8 @@ ApplicationWindow {
                       "<b>Kocsma</b>: kihívás pénzre vagy <b>forgalmira</b> (a vesztes motorja a győztesé).<br><br>" +
                       "<b>Verseny (402 m):</b> a lámpánál <b>SZÓKÖZ</b> = gáz (tartsd), zöldnél <b>JOBB NYÍL / ENTER</b> = kuplung, " +
                       "utána ugyanezzel váltasz. Túl magas fordulat az indulásnál: kipörgés. A piros mező fölött a motor károsodik. " +
-                      "Zöld előtt indulsz: kiesel.<br><br><b>Nap vége</b>: új hirdetések, új bontókínálat, vevők jelentkeznek."
+                      "Zöld előtt indulsz: kiesel.<br><br><b>Nap vége</b>: új hirdetések, új bontókínálat, vevők jelentkeznek. Ha fogy a pénz: <b>Szerelőmunka</b> (Garázs; egy nap, kis biztos pénz).<br>" +
+                      "Tipp: az újságban mindig van egy olcsó, <b>felújítandó</b> motor — javítsd meg, és kezdd a kocsma leggyengébbjeivel, kis tétre."
             }
         }
         MouseArea { anchors.fill: parent; z: -1; onClicked: help.visible = false }

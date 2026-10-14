@@ -12,6 +12,8 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "lib"))
 import model as M  # noqa: E402
 import art  # noqa: E402
+import sound as snd  # noqa: E402
+import json  # noqa: E402
 from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot  # noqa: E402
 
 try:
@@ -56,6 +58,7 @@ class Game(QObject):
             self.g.save()
         self._state = {}
         self._art = {}
+        self.sfx = None                           # Sound (felületi hangok)
         self.refresh()
 
     # --- állapot a felületnek
@@ -113,10 +116,12 @@ class Game(QObject):
     def state(self):
         return self._state
 
-    def _done(self, res):
+    def _done(self, res, fx="click"):
         ok, msg = res
         self.g.save()
         self.refresh()
+        if self.sfx:
+            self.sfx.play(fx if ok else "err")
         if msg:
             self.toast.emit(msg, not ok)
         return ok
@@ -124,7 +129,7 @@ class Game(QObject):
     # --- műveletek
     @pyqtSlot(str, result=bool)
     def buyAd(self, ad_id):
-        return self._done(self.g.buy_ad(ad_id))
+        return self._done(self.g.buy_ad(ad_id), "cash")
 
     @pyqtSlot(str, int, result=bool)
     def listForSale(self, uid, price):
@@ -136,7 +141,7 @@ class Game(QObject):
 
     @pyqtSlot(str, int, result=bool)
     def acceptOffer(self, uid, price):
-        return self._done(self.g.accept_offer(uid, price))
+        return self._done(self.g.accept_offer(uid, price), "cash")
 
     @pyqtSlot(int)
     def dismissMessage(self, i):
@@ -147,23 +152,23 @@ class Game(QObject):
 
     @pyqtSlot(str, result=bool)
     def buyPart(self, pid):
-        return self._done(self.g.buy_part(pid))
+        return self._done(self.g.buy_part(pid), "cash")
 
     @pyqtSlot(str, result=bool)
     def buyJunk(self, key):
-        return self._done(self.g.buy_junk(key))
+        return self._done(self.g.buy_junk(key), "cash")
 
     @pyqtSlot(int, result=bool)
     def sellPart(self, idx):
-        return self._done(self.g.sell_part(idx))
+        return self._done(self.g.sell_part(idx), "cash")
 
     @pyqtSlot(int, result=bool)
     def install(self, idx):
-        return self._done(self.g.install(idx))
+        return self._done(self.g.install(idx), "shift")
 
     @pyqtSlot(str, result=bool)
     def repair(self, slot):
-        return self._done(self.g.repair(slot or None))
+        return self._done(self.g.repair(slot or None), "shift")
 
     @pyqtSlot(str, bool, result=bool)
     def paint(self, color, flames):
@@ -184,12 +189,21 @@ class Game(QObject):
         self.toast.emit(f"{self.g.day}. nap — új hirdetések, új a kínálat a bontóban", False)
 
     @pyqtSlot()
+    def work(self):
+        pay, _ = self.g.work()
+        if self.sfx:
+            self.sfx.play("cash")
+        self.g.save()
+        self.refresh()
+        self.toast.emit(f"Egy napot dolgoztál a műhelyben: +${pay}. {self.g.day}. nap", False)
+
+    @pyqtSlot()
     def newGame(self):
         self.g = M.Game()
         self._art.clear()
         self.g.save()
         self.refresh()
-        self.toast.emit("Új játék: $2500, üres garázs. Nézd meg a Moto Apró hirdetéseit!", False)
+        self.toast.emit(f"Új játék: ${M.START_MONEY}, üres garázs. Nézd meg a Moto Apró hirdetéseit!", False)
 
     # --- verseny
     @pyqtSlot(str, int, bool, result="QVariant")
@@ -227,6 +241,34 @@ class Game(QObject):
         return res
 
 
+def settings_path():
+    return os.path.join(M.SAVE_DIR, "beallitas.json")
+
+
+def load_settings():
+    try:
+        with open(settings_path()) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(d):
+    try:
+        os.makedirs(M.SAVE_DIR, exist_ok=True)
+        with open(settings_path(), "w") as f:
+            json.dump(d, f)
+    except OSError:
+        pass
+
+
+def make_sound(engine, enabled=True):
+    s = snd.Sound(enabled)
+    s.changed.connect(lambda: save_settings(dict(load_settings(), sound=s.enabled)))
+    engine.rootContext().setContextProperty("sound", s)
+    return s
+
+
 def selftest():
     import tempfile
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -252,11 +294,14 @@ def selftest():
     eng = QQmlApplicationEngine()
     if ui:
         eng.addImportPath(ui.QML_DIR)
+    rms, peak, cpu = snd.selftest()
+    check("SOUND", rms > 0.02 and peak < 0.99 and cpu < 0.5, f"rms={rms:.3f} csúcs={peak:.2f} cpu={cpu * 1000:.0f} ms/s")
     warns = []
     eng.warnings.connect(lambda ws: warns.extend(w.toString() for w in ws))
     game = Game()
     game.g.money = 100000
     game.buyAd(min(game.g.ads, key=lambda a: a["price"])["id"])
+    game.sfx = make_sound(eng, True)
     eng.rootContext().setContextProperty("game", game)
     eng.rootContext().setContextProperty("selftestMode", True)
     eng.load(QUrl.fromLocalFile(os.path.join(HERE, "qml", "Main.qml")))
@@ -290,12 +335,14 @@ def main():
         app = QGuiApplication(sys.argv)
         engine = QQmlApplicationEngine()
     game = Game()
+    sobj = make_sound(engine, load_settings().get("sound", True))
+    game.sfx = sobj
     engine.rootContext().setContextProperty("game", game)
     engine.rootContext().setContextProperty("selftestMode", False)
     engine.load(QUrl.fromLocalFile(os.path.join(HERE, "qml", "Main.qml")))
     if not engine.rootObjects():
         return 1
-    app._keep = [game]
+    app._keep = [game, sobj]
     return app.exec()
 
 

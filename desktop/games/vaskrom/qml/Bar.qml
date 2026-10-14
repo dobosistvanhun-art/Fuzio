@@ -5,7 +5,7 @@ import QtQuick.Controls
 Item {
     id: bp
     property var st: win.st
-    property int bet: 250
+    property int bet: 100
     property bool pink: false
     Canvas {
         anchors.fill: parent
@@ -28,7 +28,7 @@ Item {
         x: 24; y: 62; spacing: 8
         Text { text: "TÉT:"; color: "#e8e8e8"; font.pixelSize: 16; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
         Repeater {
-            model: [100, 250, 500, 1000, 2500]
+            model: [50, 100, 250, 500, 1000, 2500]
             Btn { text: win.money(modelData); active: !bp.pink && bp.bet === modelData; height: 34
                   enabled: (bp.st.money || 0) >= modelData; onClicked: { bp.bet = modelData; bp.pink = false } }
         }

@@ -11,7 +11,9 @@ import random
 import time
 
 SAVE_DIR = os.environ.get("VASKROM_SAVE_DIR", os.path.join(os.path.expanduser("~"), ".local", "share", "vaskrom"))
-START_MONEY = 2500
+START_MONEY = 3000
+PROJECT_PRICE = (0.55, 0.75)          # a „felújítandó” hirdetés ára az érték arányában (mindig van egy olcsó)
+WORK_PAY = (120, 220)                  # alkalmi szerelőmunka egy napra
 GARAGE_SLOTS = 3
 RIDER_KG = 85
 QUARTER = 402.3          # m
@@ -203,7 +205,8 @@ def race_params(b):
     s = spec(b)
     return {"curve": [[r, t] for r, t in s["curve"]], "red": s["red"], "idle": 900, "ratios": s["ratios"],
             "mass": s["mass"] + RIDER_KG, "grip": s["grip"], "cda": s["cda"], "wheelbase": s["wheelbase"],
-            "cg": s["cg"], "radius": 0.33, "eff": 0.88, "hp": s["hp"], "nm": s["nm"], "cyl": s["cyl"]}
+            "cg": s["cg"], "radius": 0.33, "eff": 0.88, "hp": s["hp"], "nm": s["nm"], "cyl": s["cyl"],
+            "loud": s["loud"], "cc": s["cc"]}
 
 
 def simulate(b, rng=None, reaction=0.25, launch_frac=0.55, shift_frac=None, dt=1 / 120):
@@ -278,7 +281,8 @@ def bike_summary(b):
             "typeName": TYPE_NAMES[MODELS[b["model"]]["type"]], "cc": s["cc"], "hp": s["hp"], "nm": s["nm"],
             "mass": s["mass"], "gears": len(s["ratios"]), "tire": PARTS[p["tire"]["id"]]["w"], "mods": mods,
             "cond": b["cond"], "engineCond": p["engine"]["cond"], "value": bike_value(b), "color": b["color"],
-            "flames": b.get("flames", False), "red": s["red"]}
+            "flames": b.get("flames", False), "red": s["red"],
+            "cyl": s["cyl"], "loud": s["loud"], "peak": s["peak"]}
 
 
 # --- a játék állása -------------------------------------------------------------------------------------------------
@@ -320,6 +324,13 @@ class Game:
             seller = r.choice(FIRST)
             self.ads.append({"id": f"ad{r.randint(10**5, 10**6)}", "bike": b, "price": price, "seller": seller,
                              "text": ad_text(b, r)})
+        # mindig van legalább egy olcsó, felújítandó motor — a kezdőpénzből utána is marad szerelésre, tétre
+        mid = r.choice(["bobber883", "bobber883", "cafe1000"])
+        b = new_bike(mid, r, cond=r.randint(18, 35))
+        price = int(bike_value(b) * r.uniform(*PROJECT_PRICE) / 10) * 10
+        self.ads.insert(0, {"id": f"ad{r.randint(10**5, 10**6)}", "bike": b, "price": price, "seller": r.choice(FIRST),
+                            "text": f"FELÚJÍTANDÓ: {MODELS[mid]['name']}, {PARTS[b['parts']['engine']['id']]['cc']} cm³, "
+                                    f"régóta áll, olcsón vihető. Indul, de hangos."})
         self.junk = []
         ids = [k for k, p in PARTS.items() if p["price"] > 0 and not k.startswith(("carb_std", "cam_std", "ex_std",
                                                                                     "in_std", "ig_std"))]
@@ -330,6 +341,14 @@ class Game:
                               "key": f"j{r.randint(10**5, 10**6)}"})
         self.bar = r.sample([x for x in self.rivals if x["name"] != KING or self.king_available()],
                             k=min(5, len(self.rivals)))
+
+    def work(self):
+        """alkalmi szerelőmunka: egy nap telik el, kis biztos pénz (ha elfogyott, ne akadjon el a játék)"""
+        pay = int(self.rng.randint(*WORK_PAY) + min(200, self.rep * 5))
+        self.money += pay
+        self.note(f"szerelőmunka: ${pay}")
+        msgs = self.end_day()
+        return pay, msgs
 
     def king_available(self):
         return len(self.beaten) >= 8

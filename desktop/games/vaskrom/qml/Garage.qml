@@ -8,6 +8,23 @@ Item {
     property var st: win.st
     property var cur: st.cur
 
+    property bool running: false
+    property real grpm: 900
+    onRunningChanged: if (!running && typeof sound !== "undefined") sound.engineOff("garage")
+    onVisibleChanged: if (!visible) running = false
+    onCurChanged: running = false
+    Timer {
+        interval: 30; repeat: true; running: gp.running && !!gp.cur && !win.race
+        onRunningChanged: if (!running && typeof sound !== "undefined") sound.engineOff("garage")
+        onTriggered: {
+            var red = gp.cur.red, g = gasG.pressed
+            gp.grpm += g ? 7500 * 0.03 : -5000 * 0.03
+            gp.grpm = Math.max(900, gp.grpm)
+            if (gp.grpm >= red) gp.grpm = red - 400
+            sound.engine("garage", gp.grpm, g ? 1 : 0, gp.cur.cyl, gp.cur.loud, gp.cur.cc, 1.0)
+        }
+    }
+
     // háttér: tégla fal, szerszámfal, beton padló
     Canvas {
         anchors.fill: parent
@@ -47,6 +64,7 @@ Item {
         Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Vegyél egy használt motort a Moto Apróból — " + win.money(gp.st.money || 0) + " van nálad."
                color: "white"; font.pixelSize: 18 }
         Btn { anchors.horizontalCenter: parent.horizontalCenter; text: "MOTO APRÓ ▸"; kind: "red"; fs: 18; height: 46; onClicked: win.page = "news" }
+        Btn { anchors.horizontalCenter: parent.horizontalCenter; text: "SZERELŐMUNKA (egy nap, kis pénz)"; fs: 15; height: 40; onClicked: game.work() }
     }
 
     // bal: motorválasztó, a motor, adatok, műveletek
@@ -73,6 +91,18 @@ Item {
                 model: Math.max(0, (gp.st.garageSlots || 3) - (gp.st.bikes || []).length)
                 Rectangle { width: 150; height: 80; radius: 5; color: "#14151880"; border.color: "#3a3d42"; border.width: 2
                             Text { anchors.centerIn: parent; text: "üres hely"; color: "#6e757c"; font.pixelSize: 13 } }
+            }
+        }
+        // berúgás: a motor hangja a garázsban (a kipufogócsere itt hallatszik), GÁZ nyomva tartva
+        Row {
+            anchors.right: parent.right; y: picker.height + 12; spacing: 8; z: 2
+            visible: typeof sound !== "undefined" && sound.available && sound.enabled
+            Btn { text: gp.running ? "■ LEÁLLÍT" : "🔑 BERÚGÁS"; kind: gp.running ? "dark" : "gold"; fs: 13; height: 34
+                  onClicked: gp.running = !gp.running }
+            Rectangle {
+                visible: gp.running; width: 90; height: 34; radius: 4; color: gasG.pressed ? "#3fb950" : "#1d3a24"; border.color: "#3fb950"; border.width: 2
+                Text { anchors.centerIn: parent; text: "GÁZ"; color: "white"; font.bold: true; font.pixelSize: 14 }
+                MouseArea { id: gasG; anchors.fill: parent }
             }
         }
         // a motor
@@ -102,16 +132,17 @@ Item {
         }
         Row {
             anchors.bottom: parent.bottom; spacing: 10
-            Btn { text: "PRÓBAFUTAM"; kind: "red"; fs: 15; height: 42; onClicked: win.startRace(game.practice()) }
-            Btn { text: "FÉNYEZÉS"; fs: 15; height: 42; onClicked: paintPop.open() }
+            Btn { text: "PRÓBAFUTAM"; kind: "red"; fs: 13; height: 40; onClicked: win.startRace(game.practice()) }
+            Btn { text: "FÉNYEZÉS"; fs: 13; height: 40; onClicked: paintPop.open() }
             Btn { text: gp.cur && gp.st.bikes.find(function (b) { return b.uid === gp.cur.uid }).selling > 0 ? "ELADÁS VISSZAVONÁSA" : "ELADÁS"
-                  fs: 15; height: 42
+                  fs: 13; height: 40
                   onClicked: {
                       var b = gp.st.bikes.find(function (x) { return x.uid === gp.cur.uid })
                       if (b.selling > 0) game.cancelSale(b.uid); else { priceField.text = String(gp.cur.value); sellPop.open() }
                   } }
-            Btn { text: "TELJES JAVÍTÁS  " + (gp.cur ? win.money(gp.cur.repairAll) : ""); fs: 15; height: 42
+            Btn { text: "TELJES JAVÍTÁS  " + (gp.cur ? win.money(gp.cur.repairAll) : ""); fs: 13; height: 40
                   enabled: gp.cur && gp.cur.repairAll > 0; onClicked: game.repair("") }
+            Btn { text: "SZERELŐMUNKA"; fs: 13; height: 40; onClicked: game.work() }
         }
     }
 

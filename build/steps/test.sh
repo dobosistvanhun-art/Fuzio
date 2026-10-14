@@ -337,6 +337,7 @@ step_test() {
             _check "$log" "FUSION-M9: CHECK True False" "jogosultság-kapu: saját program igen, ismeretlen nem" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SIM ok" "Vas & Króm: a gyorsulási modell" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM ART ok" "Vas & Króm: a motor rajza (SVG)" || ok_run=0
+            _check "$log" "FUSION-G1: VASKROM SOUND ok" "Vas & Króm: motorhang (V2, V8), kipörgés, jelzőhangok — kiszámolva" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM QML ok 0 figyelmeztetés" "Vas & Króm: a felület minden oldala és egy próbafutam" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM-LINK /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py menu=True" "Vas & Króm: indító és Start menü (Játékok)" || ok_run=0
             _check "$log" "FUSION-J8: MODULES uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm fw=[1-9][0-9]* groups=2 qtmm=ok" "kamera- és Bluetooth-modulok, Intel BT-firmware, csoportok, Qt Multimedia" || ok_run=0

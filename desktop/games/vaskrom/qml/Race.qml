@@ -73,7 +73,12 @@ Rectangle {
         if (c.x >= quarter) { c.finished = true; c.et = clock - greenAt }
     }
     function launch(c) { c.launched = true; c.react = clock - greenAt; c.slipT = 0 }
-    function shift(c) { if (c.gear < c.p.ratios.length - 1) { c.gear += 1; c.shiftT = 0.12 } }
+    function shift(c) {
+        if (c.gear < c.p.ratios.length - 1) {
+            c.gear += 1; c.shiftT = 0.12
+            if (c === me && typeof sound !== "undefined") sound.play("shift")
+        }
+    }
     function clutch() {
         if (phase === "done" || !me) return
         if (!me.launched) {
@@ -108,8 +113,24 @@ Rectangle {
         }
         if (phase === "race" && (me.finished || clock - greenAt > 40)) finish()
     }
+    // hang: a motorok a fordulathoz, kipörgés, lámpa (sárga: rövid, zöld: magas), váltás
+    property int lightsHeard: 0
+    function audio() {
+        if (typeof sound === "undefined" || !sound.enabled || phase === "done") return
+        var mp = info.me
+        sound.engine("me", me.rpm, gas ? 1 : 0, mp.cyl, mp.loud, mp.cc, 1.0)
+        if (opp) {
+            var d = Math.abs(opp.x - me.x)
+            sound.engine("opp", opp.rpm, opp.throttle ? 1 : 0, info.opp.cyl, info.opp.loud, info.opp.cc, 0.5 / (1 + d / 10))
+        }
+        sound.squeal(me.spin && me.v > 0.3 ? 1 : (opp && opp.spin && opp.v > 0.3 ? 0.3 : 0))
+        var stage = clock >= greenAt ? 4 : clock >= 2.4 ? 3 : clock >= 1.9 ? 2 : clock >= 1.4 ? 1 : 0
+        while (lightsHeard < stage) { lightsHeard += 1; sound.play(lightsHeard === 4 ? "go" : "beep") }
+    }
+    Component.onDestruction: { if (typeof sound !== "undefined") { sound.stop() } }
     function finish() {
         phase = "done"
+        if (typeof sound !== "undefined") sound.stop()
         var myT = me.finished ? me.et : 99
         var theirT = 0
         if (opp) {
@@ -119,6 +140,7 @@ Rectangle {
         }
         var won = practice ? true : (!foul && myT < theirT)
         var res = game.raceDone(info.name, info.bet, info.pink, won, myT, theirT, me.overRev, foul)
+        if (typeof sound !== "undefined") sound.play(practice ? "click" : won ? "win" : "lose")
         result = { won: won, my: myT, their: theirT, react: me.react, top: Math.round(me.top * 3.6),
                    otop: opp ? Math.round(opp.top * 3.6) : 0, res: res || {}, over: me.overRev }
     }
@@ -139,6 +161,7 @@ Rectangle {
             var n = Math.max(1, Math.round(el * 120))
             for (var i = 0; i < n; i++) rc.advance(el / n)
             rc.sync()
+            rc.audio()
             rc.tick += 1
         }
     }
