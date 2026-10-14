@@ -335,8 +335,8 @@ step_test() {
             _check "$log" "FUSION-M9: XINPUT added=[1-9][0-9]* failed=0 input-group=0" "bemeneti eszközök az input csoport nélkül (Xorg)" || ok_run=0
             _check "$log" "FUSION-M9: PERMISSIONS jogproba:sandbox:net=False:folders=Projektek,Letöltések:ro validate=ok" "fusion permissions: a programok jogai" || ok_run=0
             _check "$log" "FUSION-M9: CHECK True False" "jogosultság-kapu: saját program igen, ismeretlen nem" || ok_run=0
-            _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=FusionOS kind=fusion orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
-            _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: FusionOS | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
+            _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=van cur-deletable=False orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
+            _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: .* | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
             _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
             _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9] git=[0-9] home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
             _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0

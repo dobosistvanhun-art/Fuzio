@@ -180,10 +180,10 @@ def main(a):
         return 0
     if cmd == "delete" and len(a) == 3:
         d, e = find(a[1])
-        if a[2] != e["label"]:
-            raise BootError("a megerősítés nem egyezik a bejegyzés nevével")
         if e["current"]:
             raise BootError("a most futó rendszer bejegyzése nem törölhető")
+        if a[2] != e["label"]:
+            raise BootError("a megerősítés nem egyezik a bejegyzés nevével")
         if e["managed"]:
             raise BootError("ezt a bejegyzést a FusionOS kezeli (mérési bejegyzés) — induláskor újra létrejönne")
         if not e["partuuid"]:

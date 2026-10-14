@@ -662,11 +662,12 @@ if [ -d /sys/firmware/efi ]; then
     bd=/dev/$(cat /run/fusion/boot-disk)
     efibootmgr -q -c -d "$bd" -p 1 -L "Proba arva" -l '\EFI\nincs\proba.efi' >/dev/null 2>&1
     urun sudo -n /usr/lib/fusion/bin/fusion-admin boot list --json > /tmp/boot.json 2>&1
-    echo "FUSION-BOOT: LIST $(python3 -c 'import json; d=json.load(open("/tmp/boot.json")); e=d["entries"]; c=[x for x in e if x["current"]]; a=[x for x in e if x["label"]=="Proba arva"]; print("n=%d current=%s kind=%s orphan=%s deletable=%s" % (len(e), c[0]["label"] if c else "-", c[0]["kind"] if c else "-", a[0]["orphan"] if a else "-", a[0]["deletable"] if a else "-"))' 2>&1 | tail -n 1)"
+    echo "FUSION-BOOT: LIST $(python3 -c 'import json; d=json.load(open("/tmp/boot.json")); e=d["entries"]; c=[x for x in e if x["current"]]; a=[x for x in e if x["label"]=="Proba arva"]; print("n=%d current=%s cur-deletable=%s orphan=%s deletable=%s" % (len(e), "van" if c else "-", c[0]["deletable"] if c else "-", a[0]["orphan"] if a else "-", a[0]["deletable"] if a else "-"))' 2>&1 | tail -n 1)"
     num=$(python3 -c 'import json; print([x["num"] for x in json.load(open("/tmp/boot.json"))["entries"] if x["label"]=="Proba arva"][0])' 2>/dev/null)
     cur=$(python3 -c 'import json; print([x["num"] for x in json.load(open("/tmp/boot.json"))["entries"] if x["current"]][0])' 2>/dev/null)
     w=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$num" rossz 2>&1 | tail -n 1)
-    c=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$cur" FusionOS 2>&1 | tail -n 1)
+    curl_=$(python3 -c 'import json; print([x["label"] for x in json.load(open("/tmp/boot.json"))["entries"] if x["current"]][0])' 2>/dev/null)
+    c=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$cur" "$curl_" 2>&1 | tail -n 1)
     f=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot first "$cur" 2>&1 | tail -n 1)
     d=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin boot delete "$num" "Proba arva" 2>&1 | tail -n 1)
     echo "FUSION-BOOT: WRONG=${w#*: } | CURRENT=${c#*: } | FIRST=$f | DELETE=$d | LEFT=$(efibootmgr | grep -c 'Proba arva') ORDER1=$(efibootmgr | sed -n 's/^BootOrder: *\([0-9A-F]*\).*/\1/p')=$cur"

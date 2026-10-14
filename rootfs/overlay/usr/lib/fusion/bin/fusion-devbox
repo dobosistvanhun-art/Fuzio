@@ -29,7 +29,7 @@ SUITE = "noble"
 MIRROR = os.environ.get("FUSION_DEVBOX_MIRROR", "http://archive.ubuntu.com/ubuntu")
 SECURITY = os.environ.get("FUSION_DEVBOX_SECURITY", "http://security.ubuntu.com/ubuntu")
 INCLUDE = "sudo,ca-certificates,curl,git,nano,less,xz-utils,gnupg,locales,bash-completion"
-MIN_FREE = 3 << 30
+MIN_FREE = 3 << 29                      # 1,5 GiB: az alaprendszer ~0,5 GB; a FusionOS buildjéhez ~30 GB kell
 NAME = "fejleszto"
 
 
