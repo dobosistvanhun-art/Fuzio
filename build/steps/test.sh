@@ -338,7 +338,7 @@ step_test() {
             _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=van cur-deletable=False orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
             _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: .* | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
             _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
-            _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9] git=[0-9] home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
+            _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9.]* git=[0-9.]* home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
             _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SIM ok" "Vas & Króm: a gyorsulási modell" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM ART ok" "Vas & Króm: a motor rajza (SVG)" || ok_run=0
@@ -368,7 +368,7 @@ step_test() {
             _check "$log" "FUSION-DRIVE: LOGIN url=ok redirect=307:accounts.google.com" "bejelentkezés: a helyi kiszolgáló a Google-oldalra irányít" || ok_run=0
             _check "$log" "FUSION-DRIVE: MOUNT 1 read=felho write=helyrol .*volume=Google Drive\* unit=active" "csatolás (ál-Drive): olvasás, írás, Fájlkezelő-kötet, szolgáltatás" || ok_run=0
             _check "$log" "FUSION-DRIVE: LOGOUT mounted=0 conf=nincs enabled=disabled" "leválasztás: csatolás, jegy, automatikus indítás le" || ok_run=0
-            _check "$log" 'FUSION-DEV: STATUS {"node": "v22.99.0", "npm": "10.99.0", "wrangler": "4.99.0"} owner=fusion path=/data/dev/node/bin/node /home/fusion/.local/bin/wrangler' "fejlesztői eszközök: Node.js a DATA-ra (ellenőrzőösszeggel), npm-csomag a saját mappába, PATH" || ok_run=0
+            _check "$log" 'FUSION-DEV: STATUS {"node": "v22.99.0", "npm": "10.99.0", "wrangler": "4.99.0", "box": {"exists": [a-z]*.*}} owner=fusion path=/data/dev/node/bin/node /home/fusion/.local/bin/wrangler' "fejlesztői eszközök: Node.js a DATA-ra (ellenőrzőösszeggel), npm-csomag a saját mappába, PATH" || ok_run=0
             _check "$log" "FUSION-DEV: REMOVED 0" "Node.js eltávolítása" || ok_run=0
         fi
         _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
