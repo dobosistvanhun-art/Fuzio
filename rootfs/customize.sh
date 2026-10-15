@@ -292,11 +292,24 @@ echo "  [customize] felhasználó (fejlesztői: fusion / fusion)"
 # bemeneti eszközöket a logind-on át kapja (root nélküli Xorg), vagy rootként nyitja meg
 # fusion-desktop: minden asztali felhasználó (a fusion-admin sudo-szabálya, a pendrive-ok helye) — fusion-users
 in_root groupadd --system fusion-desktop
+# a build közben (a build-gép környezetéből, pl. a Fejlesztődobozban, ahol a fejlesztő is „fusion”) keletkezhetett
+# egy root tulajdonú /home/fusion — a képbe nem való; az useradd hozza létre tisztán
+# (az mmdebstrap a helyi .deb-eket — build/cache/nvidia — a build-gépen lévő útvonalukon csatolja be, ezért a képben
+# üres /home/<build-felhasználó>/… mappák maradnak; a Minten /home/dobos, a dobozban /home/fusion)
+for d in "$R"/home/*; do
+    [ -d "$d" ] || continue
+    find "$d" -depth -type d -empty -delete 2>/dev/null || true
+done
+if [ -e "$R/home/fusion" ]; then
+    echo "  [customize] a build közben keletkezett /home/fusion törölve: $(cd "$R/home/fusion" && find . -mindepth 1 -maxdepth 2 | head -n 5 | tr '\n' ' ')"
+    rm -rf --one-file-system "${R:?}/home/fusion"
+fi
 in_root useradd -m -s /bin/bash -c "FusionOS" -G sudo,fusion-desktop,dialout,plugdev,video,audio,systemd-journal,adm,klipper,bluetooth,lpadmin fusion
 echo 'fusion:fusion' | in_root chpasswd
 in_root passwd -l root >/dev/null
-# az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell
-in_root runuser -u fusion -- touch /home/fusion/.sudo_as_admin_successful
+# az Ubuntu „To run a command as administrator…” üdvözlő sora nem kell (fájl + tulajdonos; runuser/PAM nélkül)
+: > "$R/home/fusion/.sudo_as_admin_successful"
+in_root chown fusion:fusion /home/fusion /home/fusion/.sudo_as_admin_successful
 : > "$R/etc/machine-id"          # az első indításkor jön létre, a DATA-n marad meg
 rm -f "$R/var/lib/dbus/machine-id"
 
