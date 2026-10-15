@@ -4,7 +4,9 @@
 #  $1 = a rendszerkép gyökere. A gazdagépen fut; a chroot-os parancsok a képben.
 #  Környezet: FUSION_ROOT, FUSION_VERSION, FUSION_MILESTONE (a fusion-build adja)
 # =============================================================================
-set -euo pipefail
+set -Eeuo pipefail
+# hiba esetén a sor és a parancs (az mmdebstrap csak annyit ír, hogy a hook leállt)
+trap 'echo "  [customize] HIBA: a(z) $LINENO. sorban: $BASH_COMMAND (kilépési kód: $?)" >&2' ERR
 R="$1"
 : "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
 : "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FIRMWARE_FILES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}"
@@ -58,7 +60,8 @@ while :; do
     mkdir -p "$kdir/$(dirname "$rel")"
     install -m 0644 "$f" "$kdir/$rel"
     echo "$m $kdir/$rel" >> "$idx_img"
-    deps=$(modinfo -F depends "$f" 2>/dev/null | tr ',' ' ')
+    deps=$(modinfo -F depends "$f" 2>/dev/null | tr ',' ' ') \
+        || { echo "  [customize] HIBA: a modinfo nem fut a build-gépen (kmod csomag: build/fusion-build deps --install)"; exit 1; }
     queue="$queue $deps"
 done
 rm -f "$idx_img" "$idx_src"

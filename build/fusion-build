@@ -91,7 +91,8 @@ case "$cmd" in
     vdi)      step_vdi ;;
     vm)       step_vm "$@" ;;
     vm-start) step_vm_start ;;
-    all)      step_fetch; ensure_rootfs; step_build; step_image; step_installer_image
+    all)      step_deps >/dev/null 2>&1 || { step_deps || true; die "hiányzik egy build-függőség — telepítés: build/fusion-build deps --install"; }
+              step_fetch; ensure_rootfs; step_build; step_image; step_installer_image
               if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
     test)     step_test ;;
     usb)      step_usb "$@" ;;
