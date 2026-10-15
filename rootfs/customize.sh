@@ -189,8 +189,10 @@ ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
 in_root systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
 for u in pipewire.socket pipewire-pulse.socket wireplumber.service; do
-    [ -e "$R/etc/systemd/user/sockets.target.wants/$u" ] || [ -e "$R/etc/systemd/user/pipewire.service.wants/$u" ] \
-        || [ -e "$R/usr/lib/systemd/user/sockets.target.wants/$u" ] || [ -e "$R/usr/lib/systemd/user/pipewire.service.wants/$u" ] \
+    # a képen belül nézzük (in_root): a symlinkek abszolútak, a build-gépen (pl. a Fejlesztődobozban, ahol nincs
+    # PipeWire) a cél nem létezik — a gazdagépről vizsgálva tévesen „nincs engedélyezve”
+    in_root test -e "/etc/systemd/user/sockets.target.wants/$u" || in_root test -e "/etc/systemd/user/pipewire.service.wants/$u" \
+        || in_root test -e "/usr/lib/systemd/user/sockets.target.wants/$u" || in_root test -e "/usr/lib/systemd/user/pipewire.service.wants/$u" \
         || { echo "  [customize] HIBA: a(z) $u nincs engedélyezve"; exit 1; }
 done
 rm -f "$R/usr/bin/fusion-uimeasure"
