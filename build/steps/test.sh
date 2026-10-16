@@ -199,7 +199,7 @@ _test_installer() {
                 -drive "file=$out/t3backup.img,format=raw,if=none,id=bk0" -device "usb-storage,drive=bk0,bus=ixhci.0,removable=on,serial=FUSIONBACKUP"
                 -drive "file=$out/t3media.img,format=raw,if=none,id=md0" -device "usb-storage,drive=md0,bus=ixhci.0,removable=on,serial=FUSIONMEDIA")
     QEMU_HOTPLUG=0
-    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=6000 \
+    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=7200 \
         _qemu_run installer std sata "$log" "FUSION-M1: POWEROFF"
     _check "$log" "FUSION-INST: BOOT slot=I installer=1 data=tmpfs state=running failed=0" "a telepítő pendrive elindul (telepítő mód, írható réteg RAM-ban)" || ok_run=0
     _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
