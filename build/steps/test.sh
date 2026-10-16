@@ -268,7 +268,7 @@ step_test() {
                         -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV"
                         -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV"
                         -drive "file=$out/store.img,format=raw,if=none,id=store0" -device "ide-hd,drive=store0,bus=ahci0.1,serial=FUSIONSTORE")
-            QEMU_HOTPLUG=1; QEMU_TIMEOUT=5400   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS; 0.0.46: + Fejlesztődoboz (debootstrap)
+            QEMU_HOTPLUG=1; QEMU_TIMEOUT=7200   # 0.0.48: + Adatlemez — 5400-nál a végén vágta el; a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS; 0.0.46: + Fejlesztődoboz (debootstrap)
         else
             # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el;
             # 0.0.47: a USB-lemezes futás 1800 mp-nél a végén vágta el — a USB-lemez lassabb)
