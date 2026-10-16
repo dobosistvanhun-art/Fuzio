@@ -2,7 +2,7 @@
 
 A Fusion Shell ezen át látja és kezeli az ablakokat — ablakkezelőtől függetlenül,
 az EWMH szabvány szerint (_NET_CLIENT_LIST, _NET_ACTIVE_WINDOW, _NET_CLOSE_WINDOW):
-  - ablaklista a tálcához (cím, osztály, aktív, kis méretre tett)
+  - ablaklista a tálcához (cím, osztály, aktív, kis méretre tett), az ablak saját ikonja
   - ablak aktiválása, kis méretre tétele, bezárása
   - a Shell saját ablakainak típusa: panel (dock + képernyősáv-foglalás),
     lebegő ablak (Start menü, értesítés, felugró)
@@ -19,7 +19,7 @@ ATOMS = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING"
          "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
          "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID",
          "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
-         "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW")
+         "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW", "_NET_WM_ICON")
 
 
 class X11:
@@ -125,6 +125,29 @@ class X11:
                         "active": int(i) == active,
                         "hidden": self.a["_NET_WM_STATE_HIDDEN"] in state})
         return out
+
+    def icon(self, wid, want=32):
+        """az ablak saját ikonja (_NET_WM_ICON): (szélesség, magasság, [ARGB, …]) — a kívánt mérethez
+        legközelebbi (inkább nagyobb) változat; None, ha a program nem ad ikont"""
+        win = self.d.create_resource_object("window", int(wid))
+        v = self._prop(win, "_NET_WM_ICON", Xatom.CARDINAL)
+        if v is None or len(v) < 3:
+            return None
+        v = list(v)
+        best, i = None, 0
+        while i + 2 <= len(v):
+            w, h = int(v[i]), int(v[i + 1])
+            n = w * h
+            if w <= 0 or h <= 0 or w > 1024 or h > 1024 or i + 2 + n > len(v):
+                break
+            score = (0 if w >= want else 1, abs(w - want))
+            if best is None or score < best[0]:
+                best = (score, w, h, i + 2)
+            i += 2 + n
+        if best is None:
+            return None
+        _, w, h, off = best
+        return w, h, [int(x) & 0xFFFFFFFF for x in v[off:off + w * h]]
 
     def _client_msg(self, wid, atom, data):
         win = self.d.create_resource_object("window", int(wid))

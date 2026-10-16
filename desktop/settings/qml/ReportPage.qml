@@ -51,6 +51,8 @@ SettingsPage {
                         color: Theme.text; placeholderTextColor: Theme.dim
                         font.family: Theme.font; font.pixelSize: 13; wrapMode: TextEdit.Wrap
                         background: null
+                        selectByMouse: true
+                        FTextMenu {}
                     }
                 }
             }
@@ -109,6 +111,7 @@ SettingsPage {
                 color: Theme.text; selectionColor: Theme.accent; selectedTextColor: "white"
                 font.family: Theme.mono; font.pixelSize: 11; wrapMode: TextEdit.NoWrap; selectByMouse: true
                 background: null
+                FTextMenu {}
             }
         }
     }

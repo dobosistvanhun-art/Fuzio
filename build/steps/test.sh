@@ -344,6 +344,9 @@ step_test() {
             _check "$log" "FUSION-G1: VASKROM-LINK /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py menu=True" "Vas & Króm: indító és Start menü (Játékok)" || ok_run=0
             _check "$log" "FUSION-J8: MODULES uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm fw=[1-9][0-9]* groups=2 qtmm=ok" "kamera- és Bluetooth-modulok, Intel BT-firmware, csoportok, Qt Multimedia" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
+            _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fusion-színek, magyar menü" || ok_run=0
+            _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
+            _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
             _check "$log" "FUSION-M6: SESSION-ENV 2" "a munkamenet-busz szolgáltatásai látják a kijelzőt (DISPLAY, XDG_CURRENT_DESKTOP)" || ok_run=0

@@ -145,7 +145,7 @@ def load(apps_file=None):
         with open(path, encoding="utf-8") as f:
             base = json.load(f)
     except (OSError, ValueError):
-        base = [{"id": "terminal", "name": "Terminál", "desc": "Parancssor", "icon": "terminal", "exec": "xterm"}]
+        base = [{"id": "terminal", "name": "Terminál", "desc": "Parancssor", "icon": "terminal", "exec": "fusion-terminal"}]
     for a in base:
         a.setdefault("type", "fusion")
         a.setdefault("installed", True)

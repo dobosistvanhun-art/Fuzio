@@ -1286,7 +1286,7 @@ class Files(QObject):
 
     @pyqtSlot(str)
     def terminalHere(self, path):
-        ui.spawn(["xterm"], cwd=path)
+        ui.spawn(["fusion-terminal", "--working-directory=" + path], cwd=path)
 
     @pyqtSlot(str)
     def installProgram(self, path):

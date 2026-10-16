@@ -57,7 +57,8 @@ Rectangle {
                     width: parent.width - 12; height: 2
                     color: modelData.active && !modelData.hidden ? Theme.accent : (modelData.hidden ? "transparent" : "#4b5563")
                 }
-                FIcon { id: wic; x: 8; anchors.verticalCenter: parent.verticalCenter; name: "app-" + modelData.icon; size: 18
+                FIcon { id: wic; x: 8; anchors.verticalCenter: parent.verticalCenter; size: 18
+                        name: modelData.iconFile ? modelData.iconFile : "app-" + modelData.icon
                         opacity: modelData.hidden ? 0.6 : 1 }
                 Text {
                     anchors.left: wic.right; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 8

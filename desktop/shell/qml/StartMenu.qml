@@ -62,6 +62,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.text; font.family: Theme.font; font.pixelSize: 15
             selectByMouse: true
+            FTextMenu {}
             onTextChanged: { menu.filter = text; menu.ctx = null }
             Keys.onEscapePressed: menu.ctx ? menu.ctx = null : shell.hideMenu()
             Keys.onReturnPressed: menu.launch(menu.cur)

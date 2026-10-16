@@ -5,7 +5,7 @@
 <JWM>
     <RootMenu onroot="3">
         <Program label="Fájlkezelő">fusion-files</Program>
-        <Program label="Terminál">xterm</Program>
+        <Program label="Terminál">fusion-terminal</Program>
         <Program label="Beállítások">fusion-settings</Program>
         <Separator/>
         <Program label="Start menü">fusion-shell menu</Program>
@@ -58,7 +58,7 @@
     <Key mask="A" key="F10">maximize</Key>
     <Key key="Super_L">exec:fusion-shell menu</Key>
     <Key mask="CA" key="e">exec:fusion-files</Key>
-    <Key mask="CA" key="t">exec:xterm</Key>
+    <Key mask="CA" key="t">exec:fusion-terminal</Key>
     <Key mask="CA" key="s">exec:fusion-settings</Key>
     <Key mask="CA" key="Delete">exec:fusion-tasks</Key>
     <Key mask="CS" key="Escape">exec:fusion-tasks</Key>

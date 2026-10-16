@@ -15,4 +15,5 @@ TextField {
         color: Theme.base; radius: Theme.radius
         border.color: f.activeFocus ? Theme.accent : Theme.border
     }
+    FTextMenu {}
 }

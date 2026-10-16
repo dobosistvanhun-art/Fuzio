@@ -14,7 +14,9 @@ csatlakozott/levált, USB-meghajtó, Wi-Fi-kapcsolat, rendszerfrissítés.
 Jelzések: SIGUSR1 = Start menü nyitása/zárása (fusion-shell menu, Super / Alt+F1).
 Állapot a tesztekhez: $XDG_RUNTIME_DIR/fusion-shell.state (JSON).
 """
+import array
 import glob
+import hashlib
 import json
 import os
 import signal
@@ -38,7 +40,7 @@ from dashboard import Dashboard  # noqa: E402
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
                           pyqtSignal, pyqtSlot)
 from PyQt6.QtDBus import QDBusAbstractAdaptor, QDBusConnection, QDBusMessage  # noqa: E402
-from PyQt6.QtGui import QColor  # noqa: E402
+from PyQt6.QtGui import QColor, QImage  # noqa: E402
 from PyQt6.QtQuick import QQuickView  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -53,7 +55,7 @@ MEDIA_DIR = fusion.MEDIA
 HU_DAYS = ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"]
 HU_MONTHS = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."]
 TILE_ALIAS = {"drive-usb": "usb", "download": "settings", "power": "settings", "bell": "app", "dialog-information": "app"}
-CLASS_ICONS = {"xterm": "terminal", "fusion-files": "files", "fusion-settings": "settings",
+CLASS_ICONS = {"xterm": "terminal", "lxterminal": "terminal", "fusion-files": "files", "fusion-settings": "settings",
                "fusion-web": "web", "lightburn.exe": "laser"}
 
 
@@ -156,6 +158,8 @@ class Shell(QObject):
         self._popup = ""             # "center" | "calendar" | ""
         self._hidden_at = {}
         self._apps = []
+        self._icon_cache = {}        # WM_CLASS → (Fusion-ikon, ikonfájl) a tálcához
+        self._icon_tries = {}
         self._programs_mtime = None
         self._lid = ""
         self._sound = {"ok": False, "volume": 0, "mute": False, "sinks": [], "sources": [], "icon": "volume-mute"}
@@ -445,6 +449,8 @@ class Shell(QObject):
         apps = fusion_apps.load()
         if apps != self._apps:
             self._apps = apps
+            self._icon_cache = {}
+            self._icon_tries = {}
             self.appsChanged.emit()
 
     @pyqtSlot(str)
@@ -528,11 +534,72 @@ class Shell(QObject):
         except Exception:
             return
         for i in w:
-            i["icon"] = CLASS_ICONS.get(i["cls"].lower(), CLASS_ICONS.get(i["inst"].lower(), "app"))
+            i["icon"], i["iconFile"] = self._icon_for(i)
         if w != self._windows:
             self._windows = w
             self.windowsChanged.emit()
             self.write_state()
+
+    def _icon_for(self, w):
+        """a tálcagomb ikonja: a Fusion saját ikonja, a Programkezelőben telepített program ikonja,
+        vagy az ablak saját ikonja (_NET_WM_ICON) — osztályonként egyszer keresve"""
+        key = (w.get("cls") or "") + "|" + (w.get("inst") or "")
+        hit = self._icon_cache.get(key)
+        if hit:
+            return hit
+        hit = self._resolve_icon(w, key)
+        tries = self._icon_tries.get(key, 0) + 1
+        self._icon_tries[key] = tries
+        if hit != ("app", "") or tries >= 10:      # az ablak ikonja a megjelenés után is jöhet: néhányszor újra
+            self._icon_cache[key] = hit
+        return hit
+
+    def _resolve_icon(self, w, key):
+        names = {n.lower() for n in (w.get("cls"), w.get("inst")) if n}
+        names |= {n[:-4] for n in names if n.endswith(".exe")}
+        for n in names:
+            if n in CLASS_ICONS:
+                return CLASS_ICONS[n], ""
+        for a in self._apps:
+            if a.get("type") == "fusion" and (a.get("exec") or "").split(" ")[0].lower() in names:
+                return a.get("icon") or "app", ""
+        for a in self._apps:
+            if not a.get("installed") or not a.get("pid"):
+                continue
+            keys = {a["pid"].lower(), (a.get("name") or "").lower()}
+            for k in (a.get("keywords") or "").split():
+                if "." in k:                              # Flatpak-azonosító: org.mozilla.firefox → firefox
+                    keys |= {k.lower(), k.lower().rsplit(".", 1)[-1]}
+            if names & keys:
+                if a.get("iconFile"):
+                    return a.get("icon") or "app", a["iconFile"]
+                own = self._window_icon(w, key)
+                return (a.get("icon") or "app", own) if own else (a.get("icon") or "app", "")
+        own = self._window_icon(w, key)
+        return ("app", own) if own else ("app", "")
+
+    def _window_icon(self, w, key):
+        """az ablak saját ikonja PNG-ként a futásidejű mappában (a QML fájlként tölti be)"""
+        try:
+            ic = self.x.icon(w["id"], 32)
+        except Exception:
+            ic = None
+        if not ic:
+            return ""
+        iw, ih, px = ic
+        d = os.path.join(ui.RUNTIME, "fusion-winicons")
+        path = os.path.join(d, hashlib.sha1(key.encode()).hexdigest()[:16] + ".png")
+        try:
+            os.makedirs(d, exist_ok=True)
+            data = array.array("I", px)
+            if sys.byteorder != "little":
+                data.byteswap()
+            img = QImage(data.tobytes(), iw, ih, iw * 4, QImage.Format.Format_ARGB32).copy()
+            if img.isNull() or not img.save(path, "PNG"):
+                return ""
+        except Exception:
+            return ""
+        return path
 
     # --- értesítések ---
     def add_notification(self, app, replaces, icon, summary, body, actions, urgency, timeout, local_action=None):
@@ -754,6 +821,7 @@ class Shell(QObject):
     def write_state(self, last=None):
         st = {"pid": os.getpid(), "ready": getattr(self, "_ready", False), "menu": self._menu_open,
               "popup": self._popup, "windows": len(self._windows), "notifications": len(self._notes),
+              "taskicons": sorted({("file" if w.get("iconFile") else w.get("icon", "app")) for w in self._windows}),
               "dashboard": bool(getattr(self, "desk", None) and self.desk.isVisible()), "printer": self.dash.printer.get("state", ""),
               "unread": self.unread, "toasts": len(self._toasts),
               "wifi": self._wifi.get("state", ""), "devices": [d["role"] for d in self._devices if d["present"]],

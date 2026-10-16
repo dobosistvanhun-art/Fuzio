@@ -121,6 +121,7 @@ APPS = {
     "tasks": ("tasks", "#9a3412"),
     "disks": ("disks", "#475569"),
     "report": ("report", "#a16207"),
+    "update": ("update", "#0f766e"),
 }
 
 

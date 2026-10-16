@@ -837,7 +837,7 @@ class Settings(QObject):
 
     @pyqtSlot()
     def devboxShell(self):
-        ui.spawn(["xterm", "-title", "Fejlesztődoboz", "-e", "sh", "-c",
+        ui.spawn(["fusion-terminal", "-t", "Fejlesztődoboz", "-e", "sh", "-c",
                   "cd \"$HOME\" && fusion-dev box || { echo; echo '(Enter: bezárás)'; read x; }"])
 
     # --- Indítás: UEFI-bejegyzések (fusion-bootentries) ---
@@ -1112,7 +1112,7 @@ class Settings(QObject):
                    "wrangler-login": "wrangler login && wrangler whoami"}
         c = allowed.get(cmd)
         if c:
-            ui.spawn(["xterm", "-title", "FusionOS — " + cmd, "-e", "sh", "-c", c + "; echo; echo '(Enter: bezárás)'; read x"])
+            ui.spawn(["fusion-terminal", "-t", "FusionOS — " + cmd, "-e", "sh", "-c", c + "; echo; echo '(Enter: bezárás)'; read x"])
 
     @pyqtSlot(str)
     def spawn(self, cmd):

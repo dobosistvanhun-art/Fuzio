@@ -1,0 +1,19 @@
+#!/bin/sh
+# FusionOS — a Terminál indítása (LXTerminal: jobb gombos Másolás / Beillesztés, fülek)
+#   fusion-terminal [-t cím] [--working-directory=MAPPA] [-e parancs …]
+# Sötét GTK-téma csak a terminálnak (a rendszer többi GTK-programját — pl. a Firefoxot — nem érinti).
+# Ha az LXTerminal hiányzik, xterm indul ugyanezekkel a beállításokkal.
+if command -v lxterminal >/dev/null 2>&1; then
+    GTK_THEME="${FUSION_TERMINAL_GTK_THEME:-Adwaita:dark}" exec lxterminal "$@"
+fi
+title="Terminál"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -t|--title) title="$2"; shift 2 ;;
+        --title=*) title="${1#--title=}"; shift ;;
+        --working-directory=*) cd "${1#--working-directory=}" 2>/dev/null || true; shift ;;
+        -e|--command) shift; exec xterm -title "$title" -e "$@" ;;
+        *) shift ;;
+    esac
+done
+exec xterm -title "$title"

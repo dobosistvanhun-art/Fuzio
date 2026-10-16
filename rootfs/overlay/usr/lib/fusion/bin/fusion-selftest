@@ -436,6 +436,16 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-settings wifi; sleep 3
     echo "FUSION-M6: SETTINGS window=$sw wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
     echo "FUSION-M6: WINDOWS $(sed -n 's/.*"windows": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
+    # 0.0.47: Terminál (LXTerminal a fusion-terminal-on át: jobb gombos menü, Fusion-színek), tálca-ikonok
+    rm -f /tmp/fusion-term.out
+    urun sh -c 'fusion-terminal -t FusionTermTeszt -e sh -c "echo \"TERM-OK \$PWD\" > /tmp/fusion-term.out; sleep 30" >/tmp/fusion-term.log 2>&1 &'
+    i=0; tw=0; while [ $i -lt 30 ]; do tw=$(winview 'FusionTermTeszt'); [ "$tw" = 1 ] && break; sleep 1; i=$((i + 1)); done
+    sleep 2
+    twid=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'FusionTermTeszt' | head -n 1 | awk '{print $1}')
+    echo "FUSION-T1: TERMINAL window=$tw wait=${i}s cmd=$(cut -d' ' -f1 /tmp/fusion-term.out 2>/dev/null) class=$([ -n "$twid" ] && urun xprop -id "$twid" WM_CLASS | grep -o '"lxterminal"' | tr -d '"') conf=$(grep -c '^bgcolor=rgb(13,17,23)' /usr/share/lxterminal/lxterminal.conf) hu=$([ -e /usr/share/locale/hu/LC_MESSAGES/lxterminal.mo ] && echo van || echo nincs)"
+    [ "$tw" = 1 ] || sed 's/^/FUSION-T1:   terminal: /' /tmp/fusion-term.log | tail -n 10
+    echo "FUSION-T1: TASKICONS $(python3 -c 'import json; s = set(json.load(open("/run/user/1000/fusion-shell.state")).get("taskicons", [])); print(" ".join(k + "=" + str(k in s) for k in ("files", "settings", "terminal")))')"
+    echo "FUSION-T1: TEXTMENU $(grep -c 'FTextMenu' /usr/lib/fusion/desktop/qml/FusionUI/qmldir) field=$(grep -c 'FTextMenu {}' /usr/lib/fusion/desktop/qml/FusionUI/FTextField.qml)"
     # irányítópult: asztal típusú ablak a többi alatt
     dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')
     echo "FUSION-M6: DASHBOARD viewable=$([ -n "$dw" ] && urun xwininfo -id "$dw" | grep -c IsViewable) type=$([ -n "$dw" ] && urun xprop -id "$dw" _NET_WM_WINDOW_TYPE | grep -o '_NET_WM_WINDOW_TYPE_DESKTOP')"

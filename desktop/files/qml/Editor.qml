@@ -78,6 +78,7 @@ FWindow {
             tabStopDistance: 32
             background: Rectangle { color: Theme.base }
             onTextChanged: if (ed && !ed.loading) ed.modified = true
+            FTextMenu {}
         }
     }
     FDialog {

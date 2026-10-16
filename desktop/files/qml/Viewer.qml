@@ -83,6 +83,7 @@ FWindow {
             textFormat: TextEdit.PlainText
             selectByMouse: true
             persistentSelection: true
+            FTextMenu {}
         }
     }
 }
