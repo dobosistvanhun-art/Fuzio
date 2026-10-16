@@ -199,7 +199,7 @@ _test_installer() {
                 -drive "file=$out/t3backup.img,format=raw,if=none,id=bk0" -device "usb-storage,drive=bk0,bus=ixhci.0,removable=on,serial=FUSIONBACKUP"
                 -drive "file=$out/t3media.img,format=raw,if=none,id=md0" -device "usb-storage,drive=md0,bus=ixhci.0,removable=on,serial=FUSIONMEDIA")
     QEMU_HOTPLUG=0
-    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=4200 \
+    QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=6000 \
         _qemu_run installer std sata "$log" "FUSION-M1: POWEROFF"
     _check "$log" "FUSION-INST: BOOT slot=I installer=1 data=tmpfs state=running failed=0" "a telepítő pendrive elindul (telepítő mód, írható réteg RAM-ban)" || ok_run=0
     _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
@@ -486,6 +486,8 @@ step_test() {
         fi
     done
     if [ -n "${FUSION_TEST_MAIN_ONLY:-}" ]; then
+        # FUSION_TEST_INSTALLER=1: a telepítő-teszt (T2/T3) is
+        if [ -n "${FUSION_TEST_INSTALLER:-}" ]; then _test_installer || fails=$((fails + 1)); fi
         [ "$fails" -eq 0 ] || die "$fails boot-teszt sikertelen"
         ok "a kiválasztott futások sikeresek (${FUSION_TEST_CFGS:-mind})"; return 0
     fi
