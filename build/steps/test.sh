@@ -244,8 +244,9 @@ step_test() {
     FUSION_VARIANT="test" step_image
     FUSION_VARIANT="test" step_installer_image
 
-    # FUSION_TEST_CFGS: csak a megadott futások (pl. "std-usb"); FUSION_TEST_MAIN_ONLY=1: a további szakaszok nélkül
+    # FUSION_TEST_CFGS: csak a megadott futások (pl. "std-usb", "-" = egyik sem); FUSION_TEST_MAIN_ONLY=1: a további szakaszok nélkül
     for cfg in ${FUSION_TEST_CFGS:-std-sata vmware-sata std-usb}; do
+        [ "$cfg" = - ] && continue      # FUSION_TEST_CFGS=- : egyik sem (pl. csak a telepítő-teszt)
         vga=${cfg%-*}; bus=${cfg#*-}
         case "$vga" in
             std)    want=generic-kms; drv=none;   desk=1 ;;
