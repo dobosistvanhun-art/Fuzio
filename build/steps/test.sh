@@ -244,7 +244,8 @@ step_test() {
     FUSION_VARIANT="test" step_image
     FUSION_VARIANT="test" step_installer_image
 
-    for cfg in std-sata vmware-sata std-usb; do
+    # FUSION_TEST_CFGS: csak a megadott futások (pl. "std-usb"); FUSION_TEST_MAIN_ONLY=1: a további szakaszok nélkül
+    for cfg in ${FUSION_TEST_CFGS:-std-sata vmware-sata std-usb}; do
         vga=${cfg%-*}; bus=${cfg#*-}
         case "$vga" in
             std)    want=generic-kms; drv=none;   desk=1 ;;
@@ -266,8 +267,9 @@ step_test() {
                         -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
             QEMU_HOTPLUG=1; QEMU_TIMEOUT=5400   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS; 0.0.46: + Fejlesztődoboz (debootstrap)
         else
-            # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el)
-            QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=1800
+            # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el;
+            # 0.0.47: a USB-lemezes futás 1800 mp-nél a végén vágta el — a USB-lemez lassabb)
+            QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=3000
         fi
         step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
@@ -483,6 +485,10 @@ step_test() {
             fails=$((fails + 1))
         fi
     done
+    if [ -n "${FUSION_TEST_MAIN_ONLY:-}" ]; then
+        [ "$fails" -eq 0 ] || die "$fails boot-teszt sikertelen"
+        ok "a kiválasztott futások sikeresek (${FUSION_TEST_CFGS:-mind})"; return 0
+    fi
 
     # mérési bejegyzés (loader/entries): a szöveges konzol — a kiegészített parancssor átjut-e
     FUSION_VARIANT="test" FUSION_BOOT_DEFAULT="fusion-konzol.conf" step_build >/dev/null
