@@ -58,6 +58,11 @@ def decorate(data, smart_cache):
             q["title"] = p["label"] or p["friendly"] or p["partlabel"] or p["name"]
             q["mountable"] = p["fstype"] in MOUNTABLE and not p["locked"] and not d["system"] and not p["fusionpart"]
             q["editable"] = not p["locked"] and not d["system"] and not p["fusionpart"] and not d["ro"] and not p["extended"]
+            q["storage"] = bool(p.get("storage"))
+            # Adatlemez lehet: belső lemez csatolható partíciója (a FusionOS saját lemezén kívül)
+            q["storageOk"] = q["mountable"] and not d["removable"] and not q["storage"]
+            if q["storage"]:
+                q["title"] = q["title"] + " — Adatlemez"
             q["usedText"] = (ui.human_size(p["used"]) + " foglalt, " + ui.human_size(p["avail"]) + " szabad") if p["used"] is not None else ""
             q["usedPct"] = (p["used"] / (p["used"] + p["avail"])) if p["used"] is not None and (p["used"] + p["avail"]) > 0 else -1
             segs.append(q)
@@ -190,6 +195,14 @@ class Backend(QObject):
     @pyqtSlot(str, str)
     def delete(self, part, confirm):
         self._job("Partíció törlése", self._admin("disk", "delete", part, confirm))
+
+    @pyqtSlot(str)
+    def storageSet(self, part):
+        self._job("Adatlemez", self._admin("disk", "storage-set", part))
+
+    @pyqtSlot()
+    def storageClear(self):
+        self._job("Adatlemez megszüntetése", self._admin("disk", "storage-clear"))
 
     @pyqtSlot(str)
     def mount(self, part):

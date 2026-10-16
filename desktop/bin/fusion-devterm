@@ -1,0 +1,16 @@
+#!/bin/sh
+# FusionOS — Fejlesztő terminál: a Fejlesztődoboz (Ubuntu 24.04, apt; a FusionOS buildje) parancssora
+# egy Terminál-ablakban. Start menü → Rendszer → Fejlesztő terminál.
+if [ "${1:-}" != "--in" ]; then
+    exec fusion-terminal -t "Fejlesztő terminál" --working-directory="$HOME" -e "$0" --in
+fi
+cd "$HOME" 2>/dev/null || true
+fusion-dev box
+rc=$?
+if [ "$rc" -ne 0 ]; then
+    echo
+    echo "A Fejlesztődoboz kilépett (kód: $rc)."
+    echo "Ha még nincs létrehozva: Beállítások → Programkezelő → Fejlesztődoboz → Létrehozás."
+    echo "(Enter: bezárás)"
+    read -r _
+fi

@@ -196,7 +196,12 @@ def fupd_info(path):
 
 def update_files():
     home = os.path.expanduser("~")
-    roots = [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + sorted(glob.glob(fusion.MEDIA + "/*"))
+    # a saját build kimenete is (Fejlesztődoboz: …/fusionos/build/out/release — a mappa mélyebben van, mint
+    # amit a saját mappa bejárása elér; 0.0.48: ~/Projektek/fusionos, ~/Fusion/fusionos stb.)
+    builds = sorted(set(glob.glob(os.path.join(home, "*", "build", "out", "release"))
+                        + glob.glob(os.path.join(home, "*", "*", "build", "out", "release"))))
+    roots = ([os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + builds
+             + sorted(glob.glob(fusion.MEDIA + "/*")))
     seen, out = set(), []
     for r in roots:
         if not os.path.isdir(r):
@@ -837,8 +842,7 @@ class Settings(QObject):
 
     @pyqtSlot()
     def devboxShell(self):
-        ui.spawn(["fusion-terminal", "-t", "Fejlesztődoboz", "-e", "sh", "-c",
-                  "cd \"$HOME\" && fusion-dev box || { echo; echo '(Enter: bezárás)'; read x; }"])
+        ui.spawn(["fusion-devterm"])
 
     # --- Indítás: UEFI-bejegyzések (fusion-bootentries) ---
     @pyqtSlot()

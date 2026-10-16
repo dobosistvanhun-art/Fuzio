@@ -1,0 +1,15 @@
+[Unit]
+Description=FusionOS — az Adatlemez csatolása (Lemezkezelő → Adatlemez; ~/Tárhely)
+After=local-fs.target systemd-udev-settle.service fusion-users.service
+Before=systemd-user-sessions.service getty@tty1.service display-manager.service
+RequiresMountsFor=/data
+ConditionPathExists=/data/system/storage.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=90
+ExecStart=/usr/lib/fusion/bin/fusion-disk storage-mount
+
+[Install]
+WantedBy=multi-user.target

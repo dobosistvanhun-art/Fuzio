@@ -263,9 +263,11 @@ step_test() {
             # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
             _make_stick "$out/stick.img"
             rm -f "$out/scratch.img"; truncate -s 96M "$out/scratch.img"
+            rm -f "$out/store.img"; truncate -s 128M "$out/store.img"     # 0.0.48: belső (SATA) lemez az Adatlemez-próbához
             QEMU_EXTRA=(-chardev "file,id=fser0,path=$out/serial-$cfg.out" -device qemu-xhci,id=fxhci -device "$SERIAL_DEV"
                         -drive "file=$out/stick.img,format=raw,if=none,id=stick0" -device "$STICK_DEV"
-                        -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV")
+                        -drive "file=$out/scratch.img,format=raw,if=none,id=scratch0" -device "$SCRATCH_DEV"
+                        -drive "file=$out/store.img,format=raw,if=none,id=store0" -device "ide-hd,drive=store0,bus=ahci0.1,serial=FUSIONSTORE")
             QEMU_HOTPLUG=1; QEMU_TIMEOUT=5400   # a Wine-környezet létrehozása KVM nélkül lassú; 0.0.40: + kamera, BT, CUPS; 0.0.46: + Fejlesztődoboz (debootstrap)
         else
             # terhelt gépen (KVM nélkül) a teljes selftest 1200 mp fölé is mehet (0.0.43: 1130 mp-nél vágta el;
@@ -350,6 +352,8 @@ step_test() {
             _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fusion-színek, magyar menü" || ok_run=0
             _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
             _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
+            _check "$log" "FUSION-T1: DEVTERM window=1 .*menu=True" "Fejlesztő terminál (Start → Rendszer)" || ok_run=0
+            _check "$log" "FUSION-UPDFILES: BUILD 9.9.9@~/Projektek/proba-fusionos/build/out/release" "Rendszerfrissítés: a saját build kimenete (build/out/release) a listában" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
             _check "$log" "FUSION-M6: USERNS restrict=0" "felhasználói névterek a homokozóhoz" || ok_run=0
             _check "$log" "FUSION-M6: SESSION-ENV 2" "a munkamenet-busz szolgáltatásai látják a kijelzőt (DISPLAY, XDG_CURRENT_DESKTOP)" || ok_run=0
@@ -457,6 +461,10 @@ step_test() {
             _check "$log" "FUSION-DISK: REFORMAT rc=0 fs=ntfs type=0[xX]0*7" "partíció újraformázása (NTFS, típuskód)" || ok_run=0
             _check "$log" "FUSION-DISK: WIPE rc=0 table=gpt parts=0 media=\s*\$" "a teljes lemez törlése (csatolt kötetekkel), új GPT" || ok_run=0
             _check "$log" "FUSION-DISK: GUARD fusion-disk: a FusionOS saját lemeze .* | fusion-disk: a FusionOS saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
+            _check "$log" "FUSION-STORE: SET rc=0 mounted=/run/media/fusion/Tárhely link=/run/media/fusion/Tárhely write=ok conf=1 service=enabled" "Adatlemez: belső lemez formázása (ext4), beállítás, csatolás, ~/Tárhely" || ok_run=0
+            _check "$log" "FUSION-STORE: REMOUNT rc=0 mounted=/run/media/fusion/Tárhely file=ok" "Adatlemez: újracsatolás indításkor (fusion-disk storage-mount)" || ok_run=0
+            _check "$log" "FUSION-STORE: GUARD .*cserélhető eszköz.* | .*saját lemeze" "Adatlemez: pendrive és a rendszerlemez nem lehet" || ok_run=0
+            _check "$log" "FUSION-STORE: FORGET rc=0 conf=0 link=0" "Adatlemez: a lemez törlésekor a beállítás megszűnik" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
                 warn "hiányzik: a COM3-ra írt sor nem érkezett meg az USB-soros eszközre ($out/serial-$cfg.out)"; ok_run=0
             fi

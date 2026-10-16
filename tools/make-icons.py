@@ -122,6 +122,7 @@ APPS = {
     "disks": ("disks", "#475569"),
     "report": ("report", "#a16207"),
     "update": ("update", "#0f766e"),
+    "devterm": ("file-code", "#4338ca"),
 }
 
 

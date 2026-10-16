@@ -10,8 +10,17 @@
     fusion-disk create <lemez> <kezdet-MiB> <méret-MiB> <fs> <címke> <megerősítés>
                                                                 új partíció a szabad helyen
     fusion-disk delete <partíció> <megerősítés>                 partíció törlése
+    fusion-disk storage-set <partíció>                          ez a partíció az Adatlemez: minden induláskor
+                                                                csatolva (/run/media/fusion/<címke>), a
+                                                                felhasználók mappájában: ~/Tárhely
+    fusion-disk storage-clear                                   az Adatlemez-beállítás megszüntetése
+    fusion-disk storage-mount                                   (indításkor, fusion-storage.service) csatolás
 
 fs: vfat (FAT32) | exfat | ntfs | ext4. A megerősítés a lemez kernelneve (pl. sdc) — a felhasználó gépeli be.
+
+Adatlemez (0.0.48): egy belső (nem cserélhető) lemez egy partíciója, amelyet a FusionOS minden induláskor csatol —
+a FusionOS saját lemezén (DATA) kívüli tárhely. A beállítás a DATA-n van (/data/system/storage.json), a partíciót
+az UUID-ja azonosítja; ha a partíciót újraformázzák vagy törlik, a beállítás magától megszűnik.
 
 Általános szabályok, eszköztípustól függetlenül (a Hardware Layer általános marad):
   - a FusionOS saját lemeze (/run/fusion/boot-disk) csak megtekinthető; egy másik FusionOS-lemez
@@ -36,6 +45,9 @@ ADMIN = "/usr/lib/fusion/bin/fusion-admin"
 LOCK = "/run/fusion/disk.lock"
 BUSY_DIR = "/run/fusion/disk-busy"
 SMART_CACHE = "/run/fusion/smart"
+STORAGE_CONF = "/data/system/storage.json"
+STORAGE_LINK = "Tárhely"            # a felhasználók mappájában: ~/Tárhely → az Adatlemez csatolási pontja
+STORAGE_FS = ("ext4", "ext3", "ext2", "btrfs", "xfs", "ntfs", "exfat", "vfat")
 MIB = 1024 * 1024
 os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
 os.environ["LC_ALL"] = "C.UTF-8"
@@ -113,7 +125,7 @@ def sync_kernel(disk):
 # --- felmérés -------------------------------------------------------------------------------------
 
 def lsblk():
-    cols = "NAME,PATH,TYPE,SIZE,MODEL,VENDOR,TRAN,RM,RO,HOTPLUG,PTTYPE,FSTYPE,FSVER,LABEL,PARTLABEL,PARTTYPE,MOUNTPOINTS,PKNAME"
+    cols = "NAME,PATH,TYPE,SIZE,MODEL,VENDOR,TRAN,RM,RO,HOTPLUG,PTTYPE,FSTYPE,FSVER,LABEL,UUID,PARTLABEL,PARTTYPE,MOUNTPOINTS,PKNAME"
     r = run(["lsblk", "-J", "-b", "-o", cols], check=False)
     try:
         return json.loads(r.stdout).get("blockdevices", [])
@@ -290,6 +302,7 @@ def smart_info(disk, k):
 def collect(smart=False):
     bd = boot_disk()
     mnt, sw = mounts(), swaps()
+    st_uuid = storage_conf().get("uuid", "")
     disks = []
     for d in lsblk():
         if not wanted_disk(d):
@@ -343,6 +356,7 @@ def collect(smart=False):
                 "parttype": ptype, "mountpoint": mps[0] if mps else "", "media": bool(mps) and not sysuse,
                 "used": used, "avail": avail, "locked": locked, "fusionpart": fpart,
                 "extended": ptype in ("0X5", "0XF", "0X85"),
+                "uuid": c.get("uuid") or "", "storage": bool(st_uuid) and (c.get("uuid") or "") == st_uuid,
             })
         parts.sort(key=lambda p: p["start"])
         system = bool(bd) and name == bd
@@ -372,7 +386,10 @@ def collect(smart=False):
         info["smart"] = smart_info(name, k) if smart else None
         disks.append(info)
     disks.sort(key=lambda x: (not x["system"], x["removable"], x["name"]))
-    return {"bootDisk": bd, "disks": disks}
+    st = storage_conf()
+    if st:
+        st = dict(st, present=any(p["storage"] for d in disks for p in d["partitions"]))
+    return {"bootDisk": bd, "disks": disks, "storage": st}
 
 
 # --- ellenőrzések -------------------------------------------------------------------------------
@@ -544,6 +561,7 @@ def cmd_format_disk(disk, table, fs, label, confirm):
             raise DiskError(f"{p['name']}: {p['locked']} — a lemez nem törölhető")
     with Busy(disk):
         for p in d["partitions"]:
+            storage_forget(p)
             unmount_media(p["path"])
         unmount_media(d["path"])
         say(f"a lemez törlése: /dev/{disk} ({d['model']})")
@@ -574,6 +592,7 @@ def cmd_format(part, fs, label, confirm):
     fs_arg(fs)
     label = label_ok(fs, label)
     with Busy(d["name"]):
+        storage_forget(p)
         unmount_media(p["path"])
         mkfs(p["path"], fs, label, p["size"])
         if d["table"] in ("gpt", "dos"):
@@ -645,6 +664,7 @@ def cmd_delete(part, confirm):
     d, p = find_part(part)
     check_part_writable(d, p, confirm)
     with Busy(d["name"]):
+        storage_forget(p)
         unmount_media(p["path"])
         say(f"partíció törlése: {p['path']}")
         run(["wipefs", "-a", "-q", p["path"]], check=False)
@@ -652,6 +672,137 @@ def cmd_delete(part, confirm):
         run(["partx", "-d", "--nr", str(p["number"]), f"/dev/{d['name']}"], check=False)
         sync_kernel(d["name"])
     automount(d["name"])
+    say("kész")
+
+
+# --- Adatlemez ------------------------------------------------------------------------------------
+
+def storage_conf():
+    try:
+        with open(STORAGE_CONF, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) and d.get("uuid") else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def storage_write(d):
+    os.makedirs(os.path.dirname(STORAGE_CONF), exist_ok=True)
+    tmp = STORAGE_CONF + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, STORAGE_CONF)
+
+
+def user_homes():
+    """a felhasználók mappái (uid ≥ 1000): [(mappa, uid, gid)]"""
+    out = []
+    try:
+        names = sorted(os.listdir("/home"))
+    except OSError:
+        return out
+    for n in names:
+        h = os.path.join("/home", n)
+        try:
+            st = os.stat(h)
+        except OSError:
+            continue
+        if os.path.isdir(h) and not os.path.islink(h) and 1000 <= st.st_uid < 60000:
+            out.append((h, st.st_uid, st.st_gid))
+    return out
+
+
+def storage_links(mp):
+    """~/Tárhely → a csatolási pont (mp üres: a hivatkozások törlése). Egy valódi (nem hivatkozás) Tárhely mappát
+    nem bánt."""
+    for h, uid, gid in user_homes():
+        link = os.path.join(h, STORAGE_LINK)
+        try:
+            if os.path.islink(link):
+                cur = os.readlink(link)
+                if mp and cur == mp:
+                    continue
+                if not cur.startswith(MEDIA + "/"):
+                    continue                     # a felhasználó saját hivatkozása — nem a miénk
+                os.remove(link)
+            elif os.path.exists(link):
+                if mp:
+                    say(f"{link}: már van ilyen nevű mappa — a hivatkozás kimarad")
+                continue
+            if mp:
+                os.symlink(mp, link)
+                os.lchown(link, uid, gid)
+        except OSError as e:
+            say(f"{link}: {e.strerror}")
+
+
+def storage_mount(quiet=False):
+    """az Adatlemez csatolása (indításkor és beállításkor); a csatolási pont, vagy üres"""
+    st = storage_conf()
+    if not st:
+        if not quiet:
+            say("nincs Adatlemez beállítva")
+        return ""
+    dev = os.path.realpath(f"/dev/disk/by-uuid/{st['uuid']}")
+    if not os.path.exists(f"/dev/disk/by-uuid/{st['uuid']}"):
+        say(f"az Adatlemez nem található ({st.get('label') or st['uuid']}) — a hivatkozás marad, a mappa üres")
+        return ""
+    mp = next((m for m in mounts().get(dev, []) if m.startswith(MEDIA + "/")), "")
+    if not mp:
+        r = run([ADMIN, "mount", os.path.basename(dev)], check=False)
+        if r.returncode != 0:
+            say("az Adatlemez nem csatolható: " + (r.stderr or r.stdout).strip().replace("fusion-admin: ", ""))
+            return ""
+        mp = next((m for m in mounts().get(dev, []) if m.startswith(MEDIA + "/")), "")
+    if mp:
+        storage_links(mp)
+        say(f"Adatlemez: {dev} → {mp} (~/{STORAGE_LINK})")
+    return mp
+
+
+def storage_forget(p):
+    """formázás / törlés előtt: ha ez az Adatlemez, a beállítás megszűnik"""
+    if p.get("storage"):
+        storage_links("")
+        try:
+            os.remove(STORAGE_CONF)
+        except OSError:
+            pass
+        say("az Adatlemez-beállítás megszűnt (a partíció formázása / törlése miatt)")
+
+
+def cmd_storage_set(part):
+    d, p = find_part(part)
+    if d["system"]:
+        raise DiskError("a FusionOS saját lemeze nem lehet Adatlemez (az ott a DATA)")
+    if d["removable"]:
+        raise DiskError(f"{d['name']}: cserélhető eszköz (pendrive, kártya) — Adatlemez csak belső lemez lehet")
+    if p["fusionpart"]:
+        raise DiskError(f"{p['name']}: egy másik FusionOS-telepítés partíciója ({p['partlabel']})")
+    if p["locked"]:
+        raise DiskError(f"{p['name']}: {p['locked']}")
+    if p["fstype"] not in STORAGE_FS:
+        raise DiskError(f"{p['name']}: nincs rajta csatolható fájlrendszer ({p['fstype'] or 'üres'}) — előbb: Formázás (ext4)")
+    if not p["uuid"]:
+        raise DiskError(f"{p['name']}: a fájlrendszernek nincs azonosítója (UUID)")
+    old = storage_conf()
+    if old and old.get("uuid") != p["uuid"]:
+        storage_links("")
+    storage_write({"uuid": p["uuid"], "fstype": p["fstype"], "label": p["label"], "disk": d["model"],
+                   "set": time.strftime("%Y-%m-%d %H:%M")})
+    say(f"Adatlemez: {p['path']} ({p['label'] or p['fstype']}, {d['model']})")
+    storage_mount()
+    say("kész")
+
+
+def cmd_storage_clear():
+    if not storage_conf():
+        say("nincs Adatlemez beállítva")
+        return
+    storage_links("")
+    os.remove(STORAGE_CONF)
+    say("az Adatlemez-beállítás megszűnt (a kötet csatolva marad; a következő indításkor már nem csatolódik)")
     say("kész")
 
 
@@ -677,6 +828,12 @@ def main(argv):
             cmd_create(*a)
         elif cmd == "delete" and len(a) == 2:
             cmd_delete(*a)
+        elif cmd == "storage-set" and len(a) == 1:
+            cmd_storage_set(*a)
+        elif cmd == "storage-clear" and not a:
+            cmd_storage_clear()
+        elif cmd == "storage-mount" and not a:
+            storage_mount(quiet=True)
         else:
             print("fusion-disk: hibás paraméterek — " + __doc__.split("\n\n")[1].strip().splitlines()[0], file=sys.stderr)
             return 2

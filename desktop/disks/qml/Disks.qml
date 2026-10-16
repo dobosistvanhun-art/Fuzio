@@ -219,6 +219,7 @@ FWindow {
                                       ["Méret", win.seg.sizeText],
                                       ["Foglaltság", win.seg.usedText || (win.seg.mountpoint || !win.seg.mountable ? "—" : "csatolás után látszik")],
                                       ["Csatolva", win.seg.mountpoint || "nincs csatolva"]].concat(
+                                      win.seg.storage ? [["Adatlemez", "igen — minden induláskor csatolva; a saját mappában: Tárhely"]] : [],
                                       win.seg.locked ? [["Védett", win.seg.locked]] : [])
                             Row {
                                 spacing: 10
@@ -243,6 +244,12 @@ FWindow {
                                       enabled: !disks.busy; onClicked: disks.mount(win.seg.name) }
                             FButton { text: "Leválasztás"; icon: "eject"; visible: !!win.seg && win.seg.seg === "part" && !!win.seg.media
                                       enabled: !disks.busy; onClicked: disks.unmount(win.seg.name) }
+                            FButton { text: "Legyen ez az Adatlemez"; icon: "drive"; visible: !!win.seg && win.seg.seg === "part" && !!win.seg.storageOk
+                                      tip: "minden induláskor csatolva, a saját mappában „Tárhely” néven látszik (a DATA-n kívüli tárhely)"
+                                      enabled: !disks.busy; onClicked: disks.storageSet(win.seg.name) }
+                            FButton { text: "Adatlemez megszüntetése"; icon: "minus"; flat: true; visible: !!win.seg && win.seg.seg === "part" && !!win.seg.storage
+                                      tip: "a kötet és a tartalma megmarad, csak induláskor nem csatolódik"
+                                      enabled: !disks.busy; onClicked: disks.storageClear() }
                             FButton { text: "Átnevezés…"; icon: "edit"
                                       visible: !!win.seg && win.seg.seg === "part" && win.seg.editable && ["vfat", "exfat", "ntfs", "ext2", "ext3", "ext4"].indexOf(win.seg.fstype) >= 0
                                       enabled: !disks.busy; onClicked: opDlg.ask("label") }

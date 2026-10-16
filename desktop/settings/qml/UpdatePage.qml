@@ -111,7 +111,7 @@ SettingsPage {
             }
         }
         InfoRow { visible: p.s.files.length === 0; label: "Nincs frissítőfájl"
-                  value: "Másolja a .fupd fájlt a Letöltések mappába vagy egy pendrive-ra, majd: Frissítés (jobb felső gomb)." }
+                  value: "Másolja a .fupd fájlt a Letöltések mappába vagy egy pendrive-ra, majd: Frissítés (jobb felső gomb). A saját build (…/fusionos/build/out/release) magától megjelenik." }
     }
     Flow {
         width: parent.width; spacing: 8

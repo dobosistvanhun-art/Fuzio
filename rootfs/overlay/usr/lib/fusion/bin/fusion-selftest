@@ -445,6 +445,11 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     echo "FUSION-T1: TERMINAL window=$tw wait=${i}s cmd=$(cut -d' ' -f1 /tmp/fusion-term.out 2>/dev/null) class=$([ -n "$twid" ] && urun xprop -id "$twid" WM_CLASS | grep -o '"lxterminal"' | tr -d '"') conf=$(grep -c '^bgcolor=rgb(13,17,23)' /usr/share/lxterminal/lxterminal.conf) hu=$([ -e /usr/share/locale/hu/LC_MESSAGES/lxterminal.mo ] && echo van || echo nincs)"
     [ "$tw" = 1 ] || sed 's/^/FUSION-T1:   terminal: /' /tmp/fusion-term.log | tail -n 10
     echo "FUSION-T1: TASKICONS $(python3 -c 'import json; s = set(json.load(open("/run/user/1000/fusion-shell.state")).get("taskicons", [])); print(" ".join(k + "=" + str(k in s) for k in ("files", "settings", "terminal")))')"
+    # 0.0.48: Fejlesztő terminál (Start → Rendszer): a Terminál-ablak a Fejlesztődoboz parancssorával
+    urun sh -c 'fusion-devterm >/tmp/fusion-devterm.log 2>&1 &'
+    i=0; dv=0; while [ $i -lt 30 ]; do dv=$(winview 'Fejlesztő terminál'); [ "$dv" = 1 ] && break; sleep 1; i=$((i + 1)); done
+    echo "FUSION-T1: DEVTERM window=$dv wait=${i}s menu=$(python3 -c 'import json; print(any(a["id"] == "devterm" and a["group"] == "rendszer" and a["exec"] == "fusion-devterm" for a in json.load(open("/usr/lib/fusion/desktop/apps.json"))))')"
+    pkill -u fusion -f 'fusion-devterm --in' 2>/dev/null; pkill -u fusion -f 'fusion-dev box' 2>/dev/null
     echo "FUSION-T1: TEXTMENU $(grep -c 'FTextMenu' /usr/lib/fusion/desktop/qml/FusionUI/qmldir) field=$(grep -c 'FTextMenu {}' /usr/lib/fusion/desktop/qml/FusionUI/FTextField.qml)"
     # irányítópult: asztal típusú ablak a többi alatt
     dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')
@@ -590,6 +595,32 @@ if [ -n "$scr" ]; then
 else
     echo "FUSION-DISK: nincs teszt-lemez"
 fi
+# --- Adatlemez (0.0.48): belső SATA-lemez (FUSIONSTORE) — formázás ext4-re, Adatlemez, ~/Tárhely, újracsatolás ---
+st=$(for f in /dev/disk/by-id/ata-*FUSIONSTORE*; do case "$f" in *-part*) ;; *) [ -e "$f" ] && readlink -f "$f";; esac; done | head -n 1)
+if [ -n "$st" ]; then
+    s=$(basename "$st")
+    adm disk format-disk "$s" gpt ext4 "Tárhely" "$s" > /tmp/st.out 2>&1
+    adm disk storage-set "${s}1" >> /tmp/st.out 2>&1; rc=$?
+    sleep 1; smp=$(mp_of "/dev/${s}1")
+    echo "FUSION-STORE: SET rc=$rc mounted=${smp:-nincs} link=$(readlink /home/fusion/Tárhely) write=$(runuser -u fusion -- sh -c 'echo ok > /home/fusion/Tárhely/proba.txt && cat /home/fusion/Tárhely/proba.txt' 2>/dev/null || echo no) conf=$(ls /data/system/storage.json 2>/dev/null | wc -l) service=$(systemctl is-enabled fusion-storage.service 2>/dev/null)"
+    sed 's/^/FUSION-STORE:   /' /tmp/st.out | tail -n 6
+    adm unmount "${s}1" >/dev/null 2>&1
+    /usr/lib/fusion/bin/fusion-disk storage-mount >/dev/null 2>&1; rc=$?
+    smp=$(mp_of "/dev/${s}1")
+    echo "FUSION-STORE: REMOUNT rc=$rc mounted=${smp:-nincs} file=$(cat /home/fusion/Tárhely/proba.txt 2>/dev/null)"
+    g1=$( [ -n "$scr" ] && adm disk format-disk "$(basename "$scr")" gpt ext4 "x" "$(basename "$scr")" >/dev/null 2>&1; [ -n "$scr" ] && adm disk storage-set "$(basename "$scr")1" 2>&1 | tail -n 1)
+    g2=$(adm disk storage-set "$(cat /run/fusion/boot-disk)4" 2>&1 | tail -n 1)
+    echo "FUSION-STORE: GUARD $g1 | $g2"
+    adm disk format-disk "$s" gpt none "" "$s" > /tmp/st2.out 2>&1; rc=$?
+    echo "FUSION-STORE: FORGET rc=$rc conf=$(ls /data/system/storage.json 2>/dev/null | wc -l) link=$(ls -d /home/fusion/Tárhely 2>/dev/null | wc -l)"
+else
+    echo "FUSION-STORE: nincs teszt-lemez"
+fi
+# --- Rendszerfrissítés (0.0.48): a saját build kimenete (…/build/out/release) a listában ---
+pr=/home/fusion/Projektek/proba-fusionos/build/out/release
+runuser -u fusion -- sh -c "mkdir -p '$pr' /tmp/fupdx && printf 'FUSION_VERSION=9.9.9\nFUSION_MILESTONE=p\nBUILD_STAMP=20990101000000\n' > /tmp/fupdx/fusion-update.manifest && tar -C /tmp/fupdx -cf '$pr/fusionos-9.9.9-p.fupd' fusion-update.manifest"
+echo "FUSION-UPDFILES: BUILD $(urun python3 -c 'import sys; sys.path.insert(0, "/usr/lib/fusion/desktop/settings"); sys.path.insert(0, "/usr/lib/fusion/desktop/lib"); import fusion_settings_backend as b; print(" ".join(f["version"] + "@" + f["place"] for f in b.update_files() if f["version"] == "9.9.9"))' 2>&1 | tail -n 1)"
+rm -rf /home/fusion/Projektek/proba-fusionos /tmp/fupdx
 # --- Hibajelentés: a felhasználóként (a rendszeroldali rész sudo-val), maszkolás ---
 t0=$(date +%s)
 rout=$(urun fusion-report -d "Teszt: a lézer nem látszik. jelszó=Titok123 kapcsolat: teszt.elek@pelda.hu" -o /tmp/fusion-report 2>&1); rrc=$?

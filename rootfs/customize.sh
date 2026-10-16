@@ -180,6 +180,7 @@ ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-sound "$R/usr/bin/fusion-sound"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-drive "$R/usr/bin/fusion-drive"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-terminal "$R/usr/bin/fusion-terminal"
+ln -sf /usr/lib/fusion/desktop/bin/fusion-devterm "$R/usr/bin/fusion-devterm"
 ln -sf /usr/lib/fusion/desktop/tasks/fusion_tasks_app.py "$R/usr/bin/fusion-tasks"
 ln -sf /usr/lib/fusion/desktop/disks/fusion_disks_app.py "$R/usr/bin/fusion-disks"
 ln -sf /usr/lib/fusion/desktop/laser/fusion_laser_app.py "$R/usr/bin/fusion-laser"
@@ -317,7 +318,7 @@ rm -f "$R/var/lib/dbus/machine-id"
 echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
     fusion-hardware.service fusion-selftest.service fusion-boot-check.service \
-    fusion-klipper.service fusion-moonraker.service nginx.service fusion-users.service >/dev/null 2>&1
+    fusion-klipper.service fusion-moonraker.service nginx.service fusion-users.service fusion-storage.service >/dev/null 2>&1
 # Bluetooth (az adapter megjelenésekor indul), nyomtatás (CUPS, hálózati felderítés: Avahi / mDNS)
 in_root systemctl enable bluetooth.service cups.service cups.socket avahi-daemon.service >/dev/null 2>&1 \
     || echo "  [customize] FIGYELEM: a bluetooth / cups / avahi szolgáltatás engedélyezése nem sikerült"

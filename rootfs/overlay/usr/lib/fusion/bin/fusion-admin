@@ -268,7 +268,7 @@ case "$cmd" in
         [ $# -eq 0 ] || fail "használat: update-reboot"
         exec /usr/lib/fusion/bin/fusion-update reboot ;;
     disk)
-        case "${1:-}" in list|format-disk|format|label|create|delete) ;; *) fail "használat: disk list|format-disk|format|label|create|delete …" ;; esac
+        case "${1:-}" in list|format-disk|format|label|create|delete|storage-set|storage-clear) ;; *) fail "használat: disk list|format-disk|format|label|create|delete|storage-set|storage-clear …" ;; esac
         exec /usr/lib/fusion/bin/fusion-disk "$@" ;;
     install)
         [ -e /run/fusion/installer ] || fail "a telepítés csak a telepítő pendrive-ról indított rendszerben érhető el"
