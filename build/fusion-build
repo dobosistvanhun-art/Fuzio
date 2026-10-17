@@ -28,6 +28,8 @@
 #    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
 #    installer <eszköz> telepítő pendrive (T2): a Fusion Telepítő — új telepítés vagy újratelepítés a DATA
 #                       megőrzésével, Mint nélkül (root: sudo build/fusion-build installer /dev/sdX)
+#    images             képfájlok tesztelőknek (Rufus / balenaEtcher): …-pendrive.img.xz (a pendrive-ról fut)
+#                       és …-telepito.img.xz (telepítő), SHA256SUMS, leírás — build/out/release/kiadas/
 #    cache-export [<mappa>]  a rögzített letöltések (build/cache: NVIDIA 470-server, kernel, Wine-forrás…)
 #                       mentése egy fájlba (alapértelmezett mappa: ~/Fusion) — ha az Ubuntu törli őket a tárolóból
 #    cache-import <fájl>  a mentés visszatöltése a build/cache-be
@@ -42,8 +44,8 @@ for s in "$BUILD_DIR"/steps/*.sh; do
     . "$s"
 done
 
-DEPS_CMDS=(apt-get unzip dpkg-deb sha256sum curl strip git patch cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
-DEPS_PKGS="curl unzip binutils git patch systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
+DEPS_CMDS=(apt-get xz unzip dpkg-deb sha256sum curl strip git patch cpio zstd gzip ukify depmod sfdisk mkfs.vfat mcopy mmd mkfs.ext4 truncate mmdebstrap mkfs.erofs)
+DEPS_PKGS="curl xz-utils unzip binutils git patch systemd-ukify systemd-boot-efi dosfstools mtools fdisk e2fsprogs cpio zstd kmod qemu-utils mmdebstrap erofs-utils"
 DEPS_OPT_PKGS="qemu-system-x86 ovmf exfatprogs ntfs-3g"
 
 step_deps() {
@@ -100,6 +102,7 @@ case "$cmd" in
     update)   step_update "$@" ;;
     bootentry) step_bootentry "$@" ;;
     installer-image) step_installer_image ;;
+    images)   step_images ;;
     installer) step_installer "$@" ;;
     cache-export) step_cache_export "$@" ;;
     cache-import) step_cache_import "$@" ;;

@@ -9,14 +9,28 @@ ROOTFS_SECURITY="${FUSION_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
 rootfs_img() { printf '%s/%s' "$OUT_DIR" "$ROOTFS_IMG_NAME"; }
 
 # igaz, ha a rendszerképet újra kell építeni (hiányzik, vagy frissebb a forrása)
+# a rendszerkép bemeneteinek ujjlenyomata. 0.0.51: a forrásfájlok TARTALMA számít, nem a módosítási idejük —
+# a kiadási tarball (git archive) a commit idejét adja a fájloknak, ezért egy korábbi buildnél „régebbinek”
+# látszhattak, és a régi rendszerkép maradt (a ZBookon a 0.0.50 a 0.0.49 tartalmával készült).
+# A nagy, előre fordított kimeneteknél (NVIDIA, Wine, nyomtató) elég a név + méret + idő.
+rootfs_inputs_hash() {
+    {
+        (cd "$FUSION_ROOT" && find rootfs hardware devices fwr printer desktop programs tools VERSION -type f \
+            -not -path '*/__pycache__/*' -not -name '*.pyc' -print0 2>/dev/null | sort -z | xargs -0 sha256sum)
+        (cd "$BUILD_DIR" && find config -type f -print0 2>/dev/null | sort -z | xargs -0 sha256sum)
+        for d in "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)"; do
+            [ -d "$d" ] && (cd "$d" && find . -type f -printf '%P %s %T@\n' | sort)
+        done
+    } | sha256sum | cut -c1-64
+}
+
 rootfs_stale() {
     local img; img=$(rootfs_img)
     [ -r "$img" ] || return 0
     nvidia_ko_ready || return 0
     wine_ready || return 0
     printer_ready || return 0
-    [ -n "$(find "$FUSION_ROOT/rootfs" "$FUSION_ROOT/hardware" "$FUSION_ROOT/devices" "$FUSION_ROOT/fwr" "$FUSION_ROOT/printer" "$FUSION_ROOT/desktop" "$FUSION_ROOT/programs" "$FUSION_ROOT/tools" "$BUILD_DIR/config" "$FUSION_ROOT/VERSION" "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)" \
-              -newer "$img" -type f -print -quit 2>/dev/null)" ]
+    [ "$(cat "$img.inputs" 2>/dev/null)" != "$(rootfs_inputs_hash)" ]
 }
 
 # a nem-root build lépésekből hívva: sudo-val újraindítja magát a rootfs lépésre
@@ -42,6 +56,7 @@ step_rootfs() {
     tree="$work/tree"; img=$(rootfs_img)
     mkdir -p "$OUT_DIR"
     rm_work "$work"; mkdir -p "$work"
+    rm -f "$img.inputs"
 
     # a gyári kernelmodulok (NVIDIA) a rögzített kernelhez — ha hiányoznak, most fordulnak
     nvidia_ko_ready || step_drivers
@@ -123,5 +138,7 @@ step_rootfs() {
         "$raw" "$sz" "$SLOT_MIB" "$(wc -l < "$OUT_DIR/rootfs.packages")" > "$OUT_DIR/rootfs.size"
     chown "$owner": "$OUT_DIR/rootfs.size" 2>/dev/null || true
     rm_work "$work"
+    # a bemenetek ujjlenyomata (a build közben fordított NVIDIA / Wine / nyomtató-kimenettel együtt)
+    rootfs_inputs_hash > "$img.inputs"; chown "$owner": "$img.inputs" 2>/dev/null || true
     ok "kész: $img — ${sz} MiB tömörítve (kicsomagolva ${raw} MiB, $(wc -l < "$OUT_DIR/rootfs.packages") csomag), slot: ${SLOT_MIB} MiB"
 }
