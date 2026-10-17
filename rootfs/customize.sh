@@ -164,6 +164,7 @@ for d in lib qml icons shell files settings tasks disks installer laser camera g
 done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
 find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
+rm -rf "$DK/games/vaskrom/art-src"          # a rajzolt motorképek forrása (fejlesztői eszköz, numpy) — a képbe csak az img/ kell
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
     "$DK/settings/fusion_settings.py" "$DK/bin/fusion" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
     "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/games/vaskrom/fusion_vaskrom.py" "$DK/installer/fusion_installer_app.py"

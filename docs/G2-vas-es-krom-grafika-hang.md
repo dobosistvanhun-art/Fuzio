@@ -33,3 +33,20 @@
   - a folyam állapotát a kiszolgálón.
 
   Közben lejátszik sípszókat, motorhangot és egy dallamot.
+
+## 0.0.50 (g3): rajzolt motorok
+- A hat motor rajzát István készíttette Geminivel, a `vaskrom-gemini-brief.md` alapján: bíbor háttér, zöld fényezés.
+  A források az `art-src/` mappában vannak.
+- A `art-src/make_sprites.py` fejlesztői eszköz (numpy + PIL) ebből három réteget készít, a mappája `img/bikes/`:
+  - **alap:** a háttér átlátszó, a széleken a bíbor kivonva, a küllők közti maradék bíbor szürkére cserélve;
+  - **fényezés-árnyalat;**
+  - **csillanás.**
+
+  Kimenet még a `meta.json` (talajvonal, kerékpontok).
+- **Futáskor** a játék Qt-vel (QPainter) rakja össze a választott színű motort, lángnyelvekkel vagy nélkülük, és PNG-ként tárolja a gyorsítótárban.
+- **Korlátok:**
+  - a kerekek a képen vannak, versenyben nem forognak (a sárvédő és a kipufogó takarja őket, külön kerék nem tehető rá);
+  - az alkatrészcsere (kipufogó, szűrő, feltöltő, kormány) csak a számokban látszik, a rajzon nem.
+
+  Ha egy modellnek nincs rajzolt képe, a régi SVG-rajz marad.
+- A külön kerékképek (art-src/wheel_*.jpg) most nincsenek használatban.

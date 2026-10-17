@@ -287,7 +287,9 @@ def selftest():
     t, v = M.simulate(g.cur(), reaction=0)
     check("SIM", 6 < t < 20 and v > 80, f"{t} s, {v} km/h")
     check("PART", g.buy_part("carb_45")[0] and g.install(len(g.stock) - 1)[0])
-    check("ART", all(os.path.exists(art.render(g.cur())[k][7:]) for k in ("body", "over", "rear", "front")))
+    ra = art.render(g.cur())
+    check("ART", all(os.path.exists(ra[k][7:]) for k in ("body", "over", "rear", "front") if ra.get(k)),
+          "rajzolt" if ra.get("sprite") else "svg")
     from PyQt6.QtGui import QGuiApplication
     from PyQt6.QtQml import QQmlApplicationEngine
     app = QGuiApplication(sys.argv)

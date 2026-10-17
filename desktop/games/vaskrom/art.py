@@ -723,7 +723,112 @@ def _store(text):
 
 
 def render(bike):
+    sp = render_sprite(bike)
+    if sp:
+        return sp
     svgs, g = render_svgs(bike)
     return {"body": _store(svgs["body"]), "over": _store(svgs["over"]), "rear": _store(svgs["rear"]), "front": _store(svgs["front"]),
             "w": W, "h": H, "rx": g["rx"], "ry": g["ry"], "rr": g["rr"], "fx": g["fx"], "fy": g["fy"], "fr": g["fr"],
             "ground": GROUND}
+
+
+# --- rajzolt motorképek (img/bikes, art-src/make_sprites.py) — 0.0.50 ---------------------------------------------
+SPRITES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "bikes")
+_META = None
+
+
+def sprite_meta():
+    global _META
+    if _META is None:
+        try:
+            import json
+            with open(os.path.join(SPRITES, "meta.json"), encoding="utf-8") as f:
+                _META = json.load(f)
+        except (OSError, ValueError):
+            _META = {}
+    return _META
+
+
+def _flame_mask(w, h, m):
+    """lángnyelvek az első kerék fölötti magasságban, a tank elejétől hátrafelé (a fényezésre vágva)"""
+    from PyQt6.QtGui import QColor, QImage, QLinearGradient, QPainter, QPainterPath
+    from PyQt6.QtCore import QPointF
+    img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(0)
+    sx = w / m["w"]
+    x0 = (m["fx"] - m["fr"] * 1.05) * sx               # a tank eleje kb. az első kerék hátsó széle fölött
+    ytop, ybot = h * 0.18, h * 0.62
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    gr = QLinearGradient(QPointF(x0, 0), QPointF(x0 - w * 0.45, 0))
+    for t, c in ((0, "#fff3a0"), (0.2, "#ffd23a"), (0.55, "#ff7a12"), (1, "#c8180c")):
+        gr.setColorAt(t, QColor(c))
+    path = QPainterPath()
+    n = 7
+    for k in range(n):
+        y0 = ytop + (ybot - ytop) * k / (n - 1)
+        ln = w * (0.24 + 0.1 * ((k * 5) % 3) / 2)
+        path.moveTo(x0 + 10 * sx, y0 - 8 * sx)
+        path.cubicTo(x0 - ln * 0.4, y0 - 22 * sx, x0 - ln * 0.7, y0 + 14 * sx, x0 - ln, y0 - 6 * sx)
+        path.cubicTo(x0 - ln * 0.75, y0 + 22 * sx, x0 - ln * 0.35, y0 + 20 * sx, x0 + 10 * sx, y0 + 16 * sx)
+    p.fillPath(path, gr)
+    p.end()
+    return img
+
+
+def compose_sprite(model, color, flames):
+    """a rajzolt motor a választott színnel: alap + (szín × árnyalat) + csillanás → PNG a gyorsítótárban"""
+    m = sprite_meta().get(model)
+    if not m:
+        return None
+    key = hashlib.sha1(f"S1|{model}|{color}|{bool(flames)}".encode()).hexdigest()[:16]
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, key + ".png")
+    if not os.path.exists(path):
+        from PyQt6.QtGui import QColor, QImage, QPainter
+        base = QImage(os.path.join(SPRITES, model + "_base.png"))
+        shade = QImage(os.path.join(SPRITES, model + "_shade.png")).convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        hi = QImage(os.path.join(SPRITES, model + "_hi.png"))
+        if base.isNull() or shade.isNull():
+            return None
+        w, h = base.width(), base.height()
+        # festék: az árnyalat-kép színnel szorozva (Multiply), majd a fényezés alakjára vágva (DestinationIn)
+        paint = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+        paint.fill(QColor(color))
+        if flames:
+            pp = QPainter(paint)
+            pp.drawImage(0, 0, _flame_mask(w, h, m))
+            pp.end()
+        pp = QPainter(paint)
+        pp.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
+        pp.drawImage(0, 0, shade)
+        pp.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+        pp.drawImage(0, 0, shade)
+        pp.end()
+        out = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+        out.fill(0)
+        p = QPainter(out)
+        p.drawImage(0, 0, base)
+        p.drawImage(0, 0, paint)
+        p.drawImage(0, 0, hi)
+        p.end()
+        tmp = path + ".tmp.png"
+        out.save(tmp, "PNG")
+        os.replace(tmp, path)
+    return path
+
+
+def render_sprite(bike):
+    m = sprite_meta().get(bike["model"])
+    if not m:
+        return None
+    path = compose_sprite(bike["model"], bike.get("color", "#b01818"), bike.get("flames"))
+    if not path:
+        return None
+    # a játék 680 széles koordinátarendszere; az árnyék külön (SVG), a kerekek a képen (nem forognak)
+    sh = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{_f(m["h"] + 14)}" viewBox="0 0 {W} {_f(m["h"] + 14)}">'
+          f'<defs>{BASE_DEFS}</defs><ellipse cx="{_f((m["rx"] + m["fx"]) / 2)}" cy="{_f(m["ground"] + 2)}" '
+          f'rx="{_f((m["fx"] - m["rx"]) / 2 + m["rr"] + 20)}" ry="10" fill="url(#shadow)"/></svg>')
+    return {"body": "file://" + path, "shadow": _store(sh), "over": "", "rear": "", "front": "",
+            "w": W, "h": m["h"], "rx": m["rx"], "ry": m["ry"], "rr": m["rr"], "fx": m["fx"], "fy": m["fy"], "fr": m["fr"],
+            "ground": m["ground"], "sprite": True}

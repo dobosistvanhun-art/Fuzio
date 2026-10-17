@@ -343,7 +343,7 @@ step_test() {
             _check "$log" "FUSION-BOOT: LIST n=[0-9]* current=van cur-deletable=False orphan=True deletable=True" "Indítás: UEFI-bejegyzések, a futó rendszer, elárvult bejegyzés felismerve" || ok_run=0
             _check "$log" "FUSION-BOOT: WRONG=a megerősítés nem egyezik .* | CURRENT=a most futó rendszer bejegyzése nem törölhető | FIRST=KÉSZ: alapértelmezett: .* | DELETE=KÉSZ: törölve: Proba arva | LEFT=0 ORDER1=\([0-9A-F]*\)=\1" "Indítás: védelem, alapértelmezett, törlés" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SIM ok" "Vas & Króm: a gyorsulási modell" || ok_run=0
-            _check "$log" "FUSION-G1: VASKROM ART ok" "Vas & Króm: a motor rajza (SVG)" || ok_run=0
+            _check "$log" "FUSION-G1: VASKROM ART ok rajzolt" "Vas & Króm: a motor rajza (rajzolt kép, választott színnel)" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM SOUND ok" "Vas & Króm: motorhang (V2, V8), kipörgés, jelzőhangok — kiszámolva" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM QML ok 0 figyelmeztetés" "Vas & Króm: a felület minden oldala és egy próbafutam" || ok_run=0
             _check "$log" "FUSION-G1: VASKROM-LINK /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py menu=True" "Vas & Króm: indító és Start menü (Játékok)" || ok_run=0
