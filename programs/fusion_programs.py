@@ -866,6 +866,93 @@ def install_native(path, log=None, name=None, exec_rel=None):
     return manifest(pid)
 
 
+# --- Windows-program archívumban (hordozható: a teljes mappa kell, pl. Vas & Króm Windows-változat) ---
+def _archive_names(path):
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as z:
+            return [i.filename for i in z.infolist() if not i.is_dir()]
+    with tarfile.open(path) as t:
+        return [i.name for i in t.getmembers() if i.isfile()]
+
+
+def archive_windows_exes(path):
+    """az archívumban lévő Windows-programok (.exe) — ha Linux-indítófájl (.desktop) is van, natívnak számít"""
+    try:
+        names = _archive_names(path)
+    except (OSError, zipfile.BadZipFile, tarfile.TarError):
+        return []
+    if any(n.lower().endswith(".desktop") or n.lower().endswith(".appimage") for n in names):
+        return []
+    return [n for n in names if n.lower().endswith(".exe")]
+
+
+def install_windows_archive(path, log=None, name=None, exec_rel=None):
+    """ZIP / tar egy hordozható Windows-programmal: a teljes tartalom a Windows-környezet Program Files mappájába,
+    az indítandó .exe a legfelső szinten lévő grafikus program (nem telepítő, nem eltávolító, nem segédprogram)"""
+    base = re.sub(r"(?i)(\.tar)?\.(gz|xz|bz2|zst|zip|tgz|txz)$", "", os.path.basename(path))
+    base = re.sub(r"(?i)[-_ .]*(windows|win64|win|x64|portable|v?\d+[\d._-]*)+.*$", "", base) or base
+    pid, old = target_id(name or base, "win64")
+    m = old or {"id": pid, "name": name or base, "windows": "win10", "drive.P": "Projektek",
+                "prefix": os.path.join(PROGRAMS, pid, "win64")}
+    m["type"] = "win64"
+    m["source"] = "file:" + os.path.basename(path)
+    existed = os.path.exists(os.path.join(PROGRAMS, pid, "program.fusion"))
+    write_manifest(m)
+    try:
+        rc, out = _run(["fwr", "prepare", pid], log)
+        if rc != 0:
+            raise ProgramError("a Windows-környezet nem hozható létre")
+        dst = os.path.join(m["prefix"], "drive_c", "Program Files", pid)
+        _rmtree(dst)
+        os.makedirs(dst)
+        root = os.path.realpath(dst) + "/"
+        _log(log, f"Kicsomagolás: {os.path.basename(path)} → C:\\Program Files\\{pid}")
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as z:
+                for i in z.infolist():
+                    if os.path.realpath(os.path.join(dst, i.filename)).startswith(root):
+                        z.extract(i, dst)
+        else:
+            with tarfile.open(path) as t:
+                t.extractall(dst, filter="data")
+        # egyetlen legfelső mappa (pl. VasEsKrom/) → a tartalma közvetlenül a program mappájába
+        top = os.listdir(dst)
+        if len(top) == 1 and os.path.isdir(os.path.join(dst, top[0])):
+            inner = os.path.join(dst, top[0])
+            for n in os.listdir(inner):
+                os.rename(os.path.join(inner, n), os.path.join(dst, n))
+            os.rmdir(inner)
+        if exec_rel:
+            exe = os.path.join(dst, exec_rel)
+        else:
+            cands = []
+            for e in glob.glob(os.path.join(dst, "**", "*.exe"), recursive=True):
+                bn = os.path.basename(e).lower()
+                if any(w in bn for w in SKIP_WORDS) or any(w in bn for w in ("unins", "setup", "install")) \
+                        or re.match(r"^pythonw?(\d|\.exe)", bn) or bn in ("python.exe", "pythonw.exe"):
+                    continue
+                pi = pe_info(e) or {}
+                cands.append((os.path.relpath(e, dst).count("/"), not pi.get("gui"),
+                              _slug(os.path.splitext(bn)[0]) != _slug(base), e))
+            if not cands:
+                raise ProgramError("az archívumban nincs indítható Windows-program (.exe)")
+            exe = sorted(cands)[0][3]
+        if not os.path.isfile(exe):
+            raise ProgramError("a program nem található: " + exe)
+        m["exe"] = "C:\\" + os.path.relpath(exe, os.path.join(m["prefix"], "drive_c")).replace("/", "\\")
+        ic = pe_icon(exe, os.path.join(PROGRAMS, pid, "icon"))
+        if ic:
+            m["icon"] = ic
+        m["installed"] = time.strftime("%Y-%m-%d")
+        write_manifest(m)
+        _log(log, f"Telepítve: {m['name']} ({m['exe']})")
+        return manifest(pid)
+    except (ProgramError, OSError, zipfile.BadZipFile, tarfile.TarError) as e:
+        if not existed:
+            _rmtree(os.path.join(PROGRAMS, pid))
+        raise ProgramError(str(e)) if not isinstance(e, ProgramError) else e
+
+
 def install(src, log=None, name=None, exec_rel=None, portable=False):
     """telepítés bármiből: fájl (típus felismerve) vagy flathub:<azonosító>"""
     if src.startswith("flathub:"):
@@ -881,6 +968,8 @@ def install(src, log=None, name=None, exec_rel=None, portable=False):
             m = install_flatpak(src, log)
         elif kind == "appimage":
             m = install_appimage(src, log, name)
+        elif kind == "archive" and archive_windows_exes(src):
+            m = install_windows_archive(src, log, name, exec_rel)
         elif kind in ("archive", "elf"):
             m = install_native(src, log, name, exec_rel)
         else:
