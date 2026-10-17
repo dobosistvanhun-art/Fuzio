@@ -16,7 +16,10 @@ import os
 
 from model import MODELS, PARTS
 
-CACHE = os.environ.get("VASKROM_CACHE", os.path.join(os.path.expanduser("~"), ".cache", "vaskrom"))
+if os.name == "nt":
+    CACHE = os.environ.get("VASKROM_CACHE", os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "VasEsKrom", "cache"))
+else:
+    CACHE = os.environ.get("VASKROM_CACHE", os.path.join(os.path.expanduser("~"), ".cache", "vaskrom"))
 W, H = 680, 380
 CYL = 0.82              # a hengerek mérete a blokkhoz képest (a fej a tank alá férjen)
 GROUND = 330
@@ -711,6 +714,11 @@ def render_svgs(bike):
             "front": _wheel(fr, wk, 120, True, t)}, g
 
 
+def _url(path):
+    """fájlútvonal → file:// cím (Windowson: file:///C:/…)"""
+    return ("file:///" + path.replace("\\", "/")) if os.name == "nt" else "file://" + path
+
+
 def _store(text):
     os.makedirs(CACHE, exist_ok=True)
     h = hashlib.sha1((VERSION + text).encode()).hexdigest()[:16]
@@ -719,7 +727,7 @@ def _store(text):
         with open(path + ".tmp", "w", encoding="utf-8") as f:
             f.write(text)
         os.replace(path + ".tmp", path)
-    return "file://" + path
+    return _url(path)
 
 
 def render(bike):
@@ -829,6 +837,6 @@ def render_sprite(bike):
     sh = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{_f(m["h"] + 14)}" viewBox="0 0 {W} {_f(m["h"] + 14)}">'
           f'<defs>{BASE_DEFS}</defs><ellipse cx="{_f((m["rx"] + m["fx"]) / 2)}" cy="{_f(m["ground"] + 2)}" '
           f'rx="{_f((m["fx"] - m["rx"]) / 2 + m["rr"] + 20)}" ry="10" fill="url(#shadow)"/></svg>')
-    return {"body": "file://" + path, "shadow": _store(sh), "over": "", "rear": "", "front": "",
+    return {"body": _url(path), "shadow": _store(sh), "over": "", "rear": "", "front": "",
             "w": W, "h": m["h"], "rx": m["rx"], "ry": m["ry"], "rr": m["rr"], "fx": m["fx"], "fy": m["fy"], "fr": m["fr"],
             "ground": m["ground"], "sprite": True}

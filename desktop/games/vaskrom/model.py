@@ -10,7 +10,10 @@ import os
 import random
 import time
 
-SAVE_DIR = os.environ.get("VASKROM_SAVE_DIR", os.path.join(os.path.expanduser("~"), ".local", "share", "vaskrom"))
+if os.name == "nt":                                   # Windows-változat: %APPDATA%\VasEsKrom
+    SAVE_DIR = os.environ.get("VASKROM_SAVE_DIR", os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "VasEsKrom"))
+else:
+    SAVE_DIR = os.environ.get("VASKROM_SAVE_DIR", os.path.join(os.path.expanduser("~"), ".local", "share", "vaskrom"))
 START_MONEY = 3000
 PROJECT_PRICE = (0.55, 0.75)          # a „felújítandó” hirdetés ára az érték arányában (mindig van egy olcsó)
 WORK_PAY = (120, 220)                  # alkalmi szerelőmunka egy napra

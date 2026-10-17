@@ -18,8 +18,9 @@ from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot  # no
 
 try:
     import fusion_ui as ui
-except ImportError:                       # a FusionOS-en kívül (fejlesztés)
+except ImportError:                       # a FusionOS-en kívül (fejlesztés, Windows-változat)
     ui = None
+    os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
 
 def part_desc(pid):
@@ -288,7 +289,7 @@ def selftest():
     check("SIM", 6 < t < 20 and v > 80, f"{t} s, {v} km/h")
     check("PART", g.buy_part("carb_45")[0] and g.install(len(g.stock) - 1)[0])
     ra = art.render(g.cur())
-    check("ART", all(os.path.exists(ra[k][7:]) for k in ("body", "over", "rear", "front") if ra.get(k)),
+    check("ART", all(os.path.exists(QUrl(ra[k]).toLocalFile()) for k in ("body", "over", "rear", "front") if ra.get(k)),
           "rajzolt" if ra.get("sprite") else "svg")
     from PyQt6.QtGui import QGuiApplication
     from PyQt6.QtQml import QQmlApplicationEngine
@@ -375,10 +376,20 @@ def main():
         return sound_probe()
     if ui:
         app, engine = ui.create_app("fusion-vaskrom", "Vas & Króm", "game")
-    else:
-        from PyQt6.QtGui import QGuiApplication
+    else:                                     # a FusionOS-en kívül (Windows-változat, fejlesztés)
+        os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
+        from PyQt6.QtGui import QFontDatabase, QGuiApplication, QIcon
         from PyQt6.QtQml import QQmlApplicationEngine
         app = QGuiApplication(sys.argv)
+        app.setApplicationName("Vas & Króm")
+        fonts = os.path.join(HERE, "fonts")   # a Windows-változat a DejaVu betűket magával hozza
+        if os.path.isdir(fonts):
+            for fn in sorted(os.listdir(fonts)):
+                if fn.lower().endswith(".ttf"):
+                    QFontDatabase.addApplicationFont(os.path.join(fonts, fn))
+        icon = os.path.join(HERE, "vaskrom.ico")
+        if os.path.exists(icon):
+            app.setWindowIcon(QIcon(icon))
         engine = QQmlApplicationEngine()
     game = Game()
     sobj = make_sound(engine, load_settings().get("sound", True))
