@@ -35,3 +35,10 @@ parancssorával (`fusion-dev box`), a saját mappában.
 
 A frissítőfájlok listájában magától megjelenik a `~/*/build/out/release` és a `~/*/*/build/out/release` mappa `.fupd`-je
 (például `~/Projektek/fusionos/build/out/release`). Nem kell a Letöltésekbe másolni.
+
+## Tapasztalat a ZBookon (2026-10-17): „No bootable device” a Mint törlése után
+
+- Az UEFI-bejegyzések rendben voltak: a FusionOS volt az első, mind az ADATA-ra (sdb) mutatott. A HP firmware mégsem indította.
+- Az ok: az ADATA az optikai helyen (Upgrade Bay) ül, és a BIOS-ban az „Upgrade Bay Hard Drive boot” ki volt kapcsolva. Eddig a fő helyen lévő Mint eltakarta a gondot.
+- A pipa bekapcsolása önmagában nem volt elég. A megoldás: F10 → Advanced → Boot Options → **Customized Boot → Add → `\EFI\BOOT\BOOTX64.EFI`**. Ez a FusionOS ESP-jén lévő systemd-boot.
+- A HP BIOS amerikai kiosztással gépel. Magyar billentyűzeten a `\` az **Ű** gombon van (vagy az **Í**-n).
