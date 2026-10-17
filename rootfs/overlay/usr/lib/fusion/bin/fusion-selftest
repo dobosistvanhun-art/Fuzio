@@ -690,7 +690,7 @@ fi
 urun env QT_QPA_PLATFORM=offscreen fusion-laser --selftest 2>&1 | grep '^FUSION-LASER:'
 # feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át; az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt
 jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/settings'); sys.path.insert(0, '/usr/lib/fusion/desktop/lib')
-import fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok')" 2>&1 | tail -n 1)
+import os, fusion_settings_backend as b; print(b.Settings().reportCreate('M8b feladat-próba') or 'ok', flush=True); os._exit(0)" 2>&1 | tail -n 1)
 i=0; while [ $i -lt 300 ] && urun fusion jobs show report --json 2>/dev/null | grep -q '"running": true'; do sleep 2; i=$((i + 2)); done
 echo "FUSION-CLI: JOB start=$jr $(urun fusion jobs show report --json | python3 -c 'import json,sys; j=json.load(sys.stdin); print("running=%s rc=%s title=%s" % (j["running"], j["rc"], j["title"]))') file=$([ -f /run/user/1000/fusion/jobs/report.json ] && echo van || echo nincs)"
 # --- 0.0.44: Vas & Króm (beépített játék): modell, rajz, minden oldal és egy próbafutam, ablak nélkül ---
