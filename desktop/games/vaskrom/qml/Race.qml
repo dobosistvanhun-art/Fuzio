@@ -188,47 +188,20 @@ Rectangle {
     readonly property real farLane: height * 0.60
     readonly property real nearLane: height * 0.80
 
-    Rectangle {
-        width: parent.width; height: rc.horizon
-        gradient: Gradient { GradientStop { position: 0; color: "#1a2a4a" } GradientStop { position: 0.7; color: "#d9773a" } GradientStop { position: 1; color: "#f2b25a" } }
+    // égbolt (naplemente), távoli város (lassú parallaxis), lelátó (közepes parallaxis) — SVG: scenes.py
+    Image {
+        width: parent.width; height: rc.horizon; source: "../img/sky.svg"; fillMode: Image.PreserveAspectCrop
+        sourceSize.width: Math.max(width, height * 4); smooth: true
     }
-    // távoli város (lassú parallaxis)
-    Canvas {
-        id: city; y: rc.horizon - 140; width: rc.width * 2; height: 140
-        x: -((rc.myX * rc.ppm * 0.06) % rc.width)
-        onPaint: {
-            var c = getContext("2d"), w = width / 2
-            c.fillStyle = "#2a1e2e"
-            var seed = 3
-            function r() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 }
-            var xs = [], x = 0
-            while (x < w) { var bw = 30 + r() * 60, bh = 30 + r() * 100; xs.push([x, bw, bh]); x += bw + 4 }
-            for (var k = 0; k < 2; k++) for (var i = 0; i < xs.length; i++) c.fillRect(xs[i][0] + k * w, 140 - xs[i][2], xs[i][1], xs[i][2])
-            c.fillStyle = "rgba(255,210,120,0.6)"
-            for (k = 0; k < 2; k++) for (i = 0; i < xs.length; i++)
-                for (var yy = 140 - xs[i][2] + 8; yy < 130; yy += 14) for (var xx = xs[i][0] + 6; xx < xs[i][0] + xs[i][1] - 6; xx += 12)
-                    if ((xx * 7 + yy * 3) % 5 < 2) c.fillRect(xx + k * w, yy, 4, 6)
-        }
+    Image {
+        id: city; y: rc.horizon - 140; height: 140; width: rc.width + 700
+        x: -((rc.myX * rc.ppm * 0.06) % 700)
+        source: "../img/city.svg"; fillMode: Image.Tile; sourceSize.width: 700; sourceSize.height: 140; smooth: true
     }
-    // lelátó és kerítés (közepes parallaxis)
-    Canvas {
-        y: rc.horizon - 70; width: rc.width + 400; height: rc.farLane - rc.horizon + 30
-        x: -((rc.myX * rc.ppm * 0.5) % 400)
-        onPaint: {
-            var c = getContext("2d"), h = height
-            c.fillStyle = "#3d4a3a"; c.fillRect(0, 70, width, h - 70)
-            for (var x = 0; x < width; x += 400) {
-                c.fillStyle = "#5a5f66"; c.fillRect(x + 20, 10, 300, 60)
-                c.fillStyle = "#3a3d42"; for (var r = 0; r < 4; r++) c.fillRect(x + 20, 18 + r * 14, 300, 3)
-                c.fillStyle = "#8a2a1a"; c.fillRect(x + 10, 0, 320, 10)
-                for (var p = 0; p < 28; p++) { c.fillStyle = ["#d9773a", "#3a6ea5", "#e8e8e8", "#c4271b"][p % 4]
-                                               c.fillRect(x + 28 + p * 10.5, 22 + (p * 7 % 4) * 12, 6, 8) }
-            }
-            c.strokeStyle = "#9aa0a6"; c.lineWidth = 2
-            c.beginPath(); c.moveTo(0, 74); c.lineTo(width, 74); c.stroke()
-            for (x = 0; x < width; x += 25) { c.beginPath(); c.moveTo(x, 74); c.lineTo(x, 100); c.stroke() }
-            c.beginPath(); c.moveTo(0, 100); c.lineTo(width, 100); c.stroke()
-        }
+    Image {
+        y: rc.farLane - 50 - 216; height: 220; width: rc.width + 800
+        x: -((rc.myX * rc.ppm * 0.5) % 800)
+        source: "../img/stands.svg"; fillMode: Image.Tile; sourceSize.width: 800; sourceSize.height: 220; smooth: true
     }
     // aszfalt
     Rectangle {

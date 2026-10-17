@@ -325,9 +325,52 @@ def selftest():
     os._exit(0 if ok else 1)                   # a QML-motor lebontása nélkül (a context-objektumok sorrendje miatt)
 
 
+def sound_probe():
+    """fusion-vaskrom --hangproba: a hangkimenet ellenőrzése a valódi gépen (mit lát a játék, szól-e)"""
+    import subprocess
+    import time
+    from PyQt6.QtCore import QEventLoop, QTimer
+    from PyQt6.QtGui import QGuiApplication
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"      # ablak nem kell
+    app = QGuiApplication(sys.argv)
+
+    def sh(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return f"({e})"
+    print("HANGPRÓBA — Vas & Króm")
+    print("  beállítás (a játék menüjében):", "BE" if load_settings().get("sound", True) else "KI (Menü → Hang bekapcsolása)")
+    print("  hangkiszolgáló:", sh(["pactl", "info"]).replace("\n", " | ")[:300])
+    print("  alapértelmezett kimenet:", sh(["pactl", "get-default-sink"]))
+    print("  hangerő / némítás:", sh(["pactl", "get-sink-volume", "@DEFAULT_SINK@"]).splitlines()[0:1], sh(["pactl", "get-sink-mute", "@DEFAULT_SINK@"]))
+    s = snd.Sound(True)
+    print("  Qt-eszköz:", s.info.get("device", "-"), "| minden kimenet:", ", ".join(s.info.get("outputs", [])) or "-")
+    print("  formátum:", s.info.get("format", "-"), "| próbák:", "; ".join(s.info.get("tried", [])) or "-")
+    print("  hiba:", s.error or "nincs")
+    if not s.sink:
+        return 1
+    print("  most szól: 3 sípszó, majd 2 mp motorhang (V2) és egy dallam …", flush=True)
+    loop = QEventLoop()
+    seq = [(300, lambda: s.play("beep")), (900, lambda: s.play("beep")), (1500, lambda: s.play("go")),
+           (2200, lambda: s.engine("p", 2500, 1, 2, 3, 1340, 1.0)), (3200, lambda: s.engine("p", 5000, 1, 2, 3, 1340, 1.0)),
+           (4300, lambda: (s.engineOff("p"), s.play("win")))]
+    for ms, fn in seq:
+        QTimer.singleShot(ms, fn)
+    QTimer.singleShot(3000, lambda: print("  a folyam a kiszolgálón:", (sh(["pactl", "list", "short", "sink-inputs"]) or "NINCS").replace("\n", " | "),
+                                           "| állapot:", s.sink.state().name, "| hiba:", s.sink.error().name, "| kiírva:", s.written, "bájt", flush=True))
+    QTimer.singleShot(5600, loop.quit)
+    loop.exec()
+    print("  kész. Hallottad? (igen / nem)")
+    sys.stdout.flush()
+    os._exit(0)
+
+
 def main():
     if sys.argv[1:2] == ["--selftest"]:
         return selftest()
+    if sys.argv[1:2] == ["--hangproba"]:
+        return sound_probe()
     if ui:
         app, engine = ui.create_app("fusion-vaskrom", "Vas & Króm", "game")
     else:

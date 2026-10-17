@@ -26,34 +26,11 @@ Item {
     }
 
     // háttér: tégla fal, szerszámfal, beton padló
-    Canvas {
-        anchors.fill: parent
-        onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
-        onPaint: {
-            var c = getContext("2d"), w = width, h = height, fy = h * 0.70
-            var g = c.createLinearGradient(0, 0, 0, fy)
-            g.addColorStop(0, "#2b2420"); g.addColorStop(1, "#3a2e26"); c.fillStyle = g; c.fillRect(0, 0, w, fy)
-            c.strokeStyle = "rgba(0,0,0,0.35)"; c.lineWidth = 2
-            for (var y = 0; y < fy; y += 26) {
-                c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke()
-                for (var x = (y / 26) % 2 ? 0 : 40; x < w; x += 80) { c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 26); c.stroke() }
-            }
-            // szerszámfal
-            c.fillStyle = "#5c4a35"; c.fillRect(30, 30, 300, 170)
-            c.fillStyle = "#2a2018"
-            for (var py = 42; py < 195; py += 14) for (var px = 42; px < 325; px += 14) { c.beginPath(); c.arc(px, py, 2, 0, 6.3); c.fill() }
-            c.strokeStyle = "#9aa0a6"; c.lineWidth = 5
-            c.beginPath(); c.moveTo(70, 60); c.lineTo(70, 150); c.stroke()
-            c.beginPath(); c.moveTo(110, 60); c.lineTo(110, 130); c.stroke()
-            c.beginPath(); c.arc(190, 110, 30, 0, 6.3); c.stroke()
-            c.lineWidth = 4; c.beginPath(); c.moveTo(250, 60); c.lineTo(290, 160); c.stroke()
-            // padló
-            g = c.createLinearGradient(0, fy, 0, h); g.addColorStop(0, "#4a4b4d"); g.addColorStop(1, "#232426")
-            c.fillStyle = g; c.fillRect(0, fy, w, h - fy)
-            c.fillStyle = "rgba(0,0,0,0.25)"
-            for (var i = 0; i < 6; i++) { c.beginPath(); c.ellipse(80 + i * 170, fy + 40 + (i % 3) * 30, 70, 14); c.fill() }
-            c.fillStyle = "#c79a1e"; c.fillRect(0, fy - 4, w, 4)
-        }
+    // a padló vonala a háttérképen (scenes.py: 900-ból 630) — a motor ezen áll
+    readonly property real floorY: height - 270 * Math.max(width / 1600, height / 900)
+    Image {
+        anchors.fill: parent; source: "../img/garage.svg"; fillMode: Image.PreserveAspectCrop; verticalAlignment: Image.AlignBottom
+        sourceSize.width: Math.max(width, height * 16 / 9); smooth: true; asynchronous: true
     }
 
     // üres garázs
@@ -109,7 +86,8 @@ Item {
         BikeView {
             id: big; art: gp.cur ? gp.cur.art : null
             s: Math.min(1.05, parent.width / 680)
-            anchors.horizontalCenter: parent.horizontalCenter; y: picker.height + 4
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Math.max(picker.height + 4, gp.floorY - 12 - (art ? art.ground : 330) * s + 2)
         }
         Column {
             anchors.left: parent.left; anchors.top: big.bottom; anchors.topMargin: -6; spacing: 4
@@ -127,7 +105,7 @@ Item {
                     }
                 }
             }
-            Text { visible: gp.cur && gp.cur.mods.length > 0; text: gp.cur ? "Tuning: " + gp.cur.mods.join(", ") : ""; color: "#ffb347"; font.pixelSize: 13
+            Text { visible: !!gp.cur && gp.cur.mods.length > 0; text: gp.cur ? "Tuning: " + gp.cur.mods.join(", ") : ""; color: "#ffb347"; font.pixelSize: 13
                    width: big.width; wrapMode: Text.Wrap }
         }
         Row {
@@ -141,7 +119,7 @@ Item {
                       if (b.selling > 0) game.cancelSale(b.uid); else { priceField.text = String(gp.cur.value); sellPop.open() }
                   } }
             Btn { text: "TELJES JAVÍTÁS  " + (gp.cur ? win.money(gp.cur.repairAll) : ""); fs: 13; height: 40
-                  enabled: gp.cur && gp.cur.repairAll > 0; onClicked: game.repair("") }
+                  enabled: !!gp.cur && gp.cur.repairAll > 0; onClicked: game.repair("") }
             Btn { text: "SZERELŐMUNKA"; fs: 13; height: 40; onClicked: game.work() }
         }
     }

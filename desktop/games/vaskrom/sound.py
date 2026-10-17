@@ -235,60 +235,87 @@ if QObject is not object:
             self._enabled = enabled
             self.sink = self.io = None
             self.mix = Mixer(SR)
-            self.idle = 0
+            self.ch = 1
             self.error = ""
-            try:
-                from PyQt6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
-                dev = QMediaDevices.defaultAudioOutput()
-                if dev.isNull():
-                    self.error = "nincs hangkimenet"
-                    return
-                fmt = QAudioFormat()
-                fmt.setChannelCount(1)
-                fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-                for sr in (SR, 44100, 48000):
-                    fmt.setSampleRate(sr)
-                    if dev.isFormatSupported(fmt):
-                        break
-                self.mix = Mixer(fmt.sampleRate())
-                self.sink = QAudioSink(dev, fmt, self)
-                self.sink.setBufferSize(int(fmt.sampleRate() * 0.15) * 2)
-                self.io = self.sink.start()
-                self.sink.suspend()
-                self.running = False
-            except Exception as e:                    # hang nélkül is menjen a játék
-                self.error = str(e)
-                self.sink = None
-                return
+            self.info = {}
+            self.written = 0
+            self._open()
             self.timer = QTimer(self)
             self.timer.setInterval(12)
             self.timer.timeout.connect(self._feed)
-            self.timer.start()
+            if self.sink:
+                self.timer.start()
+
+        def _open(self):
+            """a hangkimenet megnyitása. 0.0.49: több formátum próbája (a gép kimenete nem minden formátumot fogad),
+            a megnyitás hibája kiderül (sink.error), és a folyam végig fut (nincs felfüggesztés / folytatás:
+            csendben csak nullák mennek) — a ZBookon a játék néma volt"""
+            try:
+                from PyQt6.QtMultimedia import QAudio, QAudioFormat, QAudioSink, QMediaDevices
+            except Exception as e:                    # hang nélkül is menjen a játék
+                self.error = f"QtMultimedia: {e}"
+                return
+            dev = QMediaDevices.defaultAudioOutput()
+            self.info["device"] = dev.description() if not dev.isNull() else ""
+            self.info["outputs"] = [d.description() for d in QMediaDevices.audioOutputs()]
+            if dev.isNull():
+                self.error = "nincs hangkimenet (QMediaDevices: üres alapértelmezett eszköz)"
+                return
+            tries = [(1, SR), (2, 48000), (2, 44100), (1, 48000), (1, 44100)]
+            pf = dev.preferredFormat()
+            if pf.sampleRate() > 0 and pf.channelCount() in (1, 2):
+                tries.append((pf.channelCount(), pf.sampleRate()))
+            errs = []
+            for ch, sr in tries:
+                fmt = QAudioFormat()
+                fmt.setChannelCount(ch)
+                fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+                fmt.setSampleRate(sr)
+                if not dev.isFormatSupported(fmt):
+                    errs.append(f"{ch}ch/{sr}: nem támogatott")
+                    continue
+                sink = QAudioSink(dev, fmt, self)
+                sink.setBufferSize(int(sr * 0.2) * 2 * ch)
+                io = sink.start()
+                if sink.error() != QAudio.Error.NoError or io is None:
+                    errs.append(f"{ch}ch/{sr}: {sink.error().name}")
+                    sink.stop()
+                    continue
+                self.sink, self.io, self.ch = sink, io, ch
+                self.mix = Mixer(sr)
+                self.info.update(format=f"{ch} csatorna, {sr} Hz, 16 bit", tried=errs)
+                return
+            self.error = "a hangkimenet nem nyitható meg: " + "; ".join(errs)
+            self.info["tried"] = errs
 
         def _wake(self):
-            if self.sink and not self.running:
-                self.sink.resume()
-                self.running = True
-                self.idle = 0
+            pass
 
         def _feed(self):
-            if not self.sink or not self.running:
+            if not self.sink:
                 return
             sr = self.mix.sr
-            queued = self.sink.bufferSize() - self.sink.bytesFree()
-            want = int(sr * 0.07) * 2 - queued                     # ~70 ms előre
+            frame = 2 * self.ch
+            free = self.sink.bytesFree()
+            queued = self.sink.bufferSize() - free
+            want = (int(sr * 0.07) * frame - queued) // frame              # ~70 ms előre (képkocka)
             if want <= 0:
                 return
-            data = self.mix.render(want // 2)
-            if self.io:
-                self.io.write(data.tobytes())
-            if not self.mix.busy():
-                self.idle += 1
-                if self.idle > 60:
-                    self.sink.suspend()
-                    self.running = False
+            want = min(want, free // frame)
+            if want <= 0:
+                return
+            if self.mix.busy():
+                data = self.mix.render(want)
+                if self.ch == 2:
+                    st = array.array("h", bytes(4 * len(data)))
+                    st[0::2] = data
+                    st[1::2] = data
+                    data = st
+                raw = data.tobytes()
             else:
-                self.idle = 0
+                raw = bytes(want * frame)                                  # csend: a folyam fut tovább
+            if self.io:
+                self.written += self.io.write(raw) or 0
 
         @pyqtProperty(bool, notify=changed)
         def enabled(self):

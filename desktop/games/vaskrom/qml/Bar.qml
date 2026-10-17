@@ -7,19 +7,9 @@ Item {
     property var st: win.st
     property int bet: 100
     property bool pink: false
-    Canvas {
-        anchors.fill: parent
-        onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
-        onPaint: {
-            var c = getContext("2d"), w = width, h = height
-            var g = c.createLinearGradient(0, 0, 0, h)
-            g.addColorStop(0, "#2a1a10"); g.addColorStop(1, "#140c07"); c.fillStyle = g; c.fillRect(0, 0, w, h)
-            c.strokeStyle = "rgba(0,0,0,0.4)"; c.lineWidth = 2
-            for (var x = 0; x < w; x += 46) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke() }
-            // neon felirat fénye
-            var rg = c.createRadialGradient(w * 0.35, 40, 10, w * 0.35, 40, 300)
-            rg.addColorStop(0, "rgba(255,60,40,0.25)"); rg.addColorStop(1, "rgba(255,60,40,0)"); c.fillStyle = rg; c.fillRect(0, 0, w, 300)
-        }
+    Image {
+        anchors.fill: parent; source: "../img/bar.svg"; fillMode: Image.PreserveAspectCrop
+        sourceSize.width: Math.max(width, height * 16 / 9); smooth: true; asynchronous: true
     }
     Text { x: 24; y: 10; text: "KOCSMA · Olajos Kanna"; color: "#ff6a50"; font.pixelSize: 32; font.bold: true; font.family: "DejaVu Serif"
            style: Text.Outline; styleColor: "#5a0a00" }
