@@ -14,7 +14,7 @@ step_images() {
     [ -r "$out/fusionos.img" ] || die "előbb: build/fusion-build all (hiányzik: $out/fusionos.img)"
     [ -r "$out/fusionos-telepito.img" ] || die "előbb: build/fusion-build all (hiányzik: $out/fusionos-telepito.img)"
     mkdir -p "$dst"
-    rm -f "$dst"/*.img.xz "$dst"/SHA256SUMS
+    rm -f "$dst"/*.img.xz "$dst"/*.tmp "$dst"/SHA256SUMS
     step "Képfájlok a tesztelőknek (Rufus / balenaEtcher): $dst"
     local src target t0
     for pair in "fusionos.img:$name-pendrive.img.xz" "fusionos-telepito.img:$name-telepito.img.xz"; do
