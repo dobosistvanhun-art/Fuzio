@@ -1,4 +1,4 @@
-"""leíró-sémák, 1-es változat (M8b) — a Fusion-leírók formális leírása és ellenőrzése
+"""leíró-sémák, 1-es változat (M8b) — a Fúzió-leírók formális leírása és ellenőrzése
 
     program.fusion   egy telepített program leírása (/data/programs/<id>/program.fusion) — a Programkezelő írja
     *.fwr            recept: egy ismert Windows-program „gyári” leírása (/usr/lib/fusion/fwr/profiles/<id>.fwr)

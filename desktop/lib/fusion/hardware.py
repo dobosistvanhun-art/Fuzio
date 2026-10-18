@@ -1,4 +1,4 @@
-"""a Fusion Hardware Layer állapota (csak olvas) — a fusion-hwprobe kimenete: /run/fusion/hardware/display.env"""
+"""a Fúzió Hardware Layer állapota (csak olvas) — a fusion-hwprobe kimenete: /run/fusion/hardware/display.env"""
 import os
 
 from . import RUN, kv

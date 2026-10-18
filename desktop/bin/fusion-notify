@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — fusion-notify: értesítés küldése a Fusion Shellnek (a Fusion API fusion.notify modulján át)
+"""Fúzió — fusion-notify: értesítés küldése a Fúzió Shellnek (a Fúzió API fusion.notify modulján át)
 
     fusion-notify [-i ikon] [-u low|normal|critical] [-a program] [-t ms] <cím> [szöveg]
 

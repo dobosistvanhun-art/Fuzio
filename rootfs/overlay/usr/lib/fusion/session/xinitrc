@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fusion Desktop — munkamenet: JWM (ablakok) + Fusion Shell (panel, Start menü, értesítések)
+# Fúzió Desktop — munkamenet: JWM (ablakok) + Fúzió Shell (panel, Start menü, értesítések)
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/fusion"
 setxkbmap hu 2>/dev/null
 # háttérszín (Beállítások → Asztal) — csak #rrggbb fogadható el
@@ -27,7 +27,7 @@ export PATH="/data/dev/node/bin:$HOME/.local/bin:$PATH" NPM_CONFIG_PREFIX="$HOME
 export XDG_CURRENT_DESKTOP=FusionOS XDG_SESSION_TYPE=x11
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null
 [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
-# telepítő pendrive (fusion.installer): a Fusion Telepítő a Fusion Shell helyett
+# telepítő pendrive (fusion.installer): a Fúzió Telepítő a Fúzió Shell helyett
 if [ -e /run/fusion/installer ]; then
     fusion-installer &
     exec jwm

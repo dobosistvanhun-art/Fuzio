@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FusionOS — a Fusion Desktop ikonjai (egyszerű, saját rajzolású SVG-k).
+"""Fúzió — a Fúzió Desktop ikonjai (egyszerű, saját rajzolású SVG-k).
 
     tools/make-icons.py [kimeneti könyvtár]      (alapértelmezés: desktop/icons)
 

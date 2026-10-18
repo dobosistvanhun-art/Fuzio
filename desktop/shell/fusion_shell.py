@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Fusion Shell: a Fusion Desktop panelje, Start menüje és értesítései (Qt Quick)
+"""Fúzió — Fúzió Shell: a Fúzió Desktop panelje, Start menüje és értesítései (Qt Quick)
 
 Egy folyamat, több ablak:
   Panel          a képernyő alján (dock, 40 px foglalás): Start, tálca, eszközök, Wi-Fi, értesítések, óra
@@ -116,7 +116,7 @@ class NotifyAdaptor(QDBusAbstractAdaptor):
     def GetServerInformation(self, msg):
         # négy kimenő érték: késleltetett válasz a D-Bus-üzenetre
         msg.setDelayedReply(True)
-        QDBusConnection.sessionBus().send(msg.createReply(["Fusion Shell", "FusionOS", "1.0", "1.2"]))
+        QDBusConnection.sessionBus().send(msg.createReply(["Fúzió Shell", "Fúzió", "1.0", "1.2"]))
 
 # Wi-Fi: ennyi másodpercen belüli visszakapcsolódásról nincs értesítés (csak napló) — 0.0.40
 WIFI_DROP_GRACE = 30
@@ -158,7 +158,7 @@ class Shell(QObject):
         self._popup = ""             # "center" | "calendar" | ""
         self._hidden_at = {}
         self._apps = []
-        self._icon_cache = {}        # WM_CLASS → (Fusion-ikon, ikonfájl) a tálcához
+        self._icon_cache = {}        # WM_CLASS → (Fúzió-ikon, ikonfájl) a tálcához
         self._icon_tries = {}
         self._programs_mtime = None
         self._lid = ""
@@ -347,17 +347,17 @@ class Shell(QObject):
         self.x.setup_floating(int(self.menu.winId()), "dialog")
         self.menu.activeChanged.connect(lambda: self._focus_lost(self.menu, "menu"))
 
-        self.center = view("NotifyCenter.qml", "Fusion Értesítések", pop)
+        self.center = view("NotifyCenter.qml", "Fúzió Értesítések", pop)
         self.center.setGeometry(sw - CENTER_W, sh - PANEL_HEIGHT - CENTER_H, CENTER_W, CENTER_H)
         self.x.setup_floating(int(self.center.winId()), "popup")
         self.center.activeChanged.connect(lambda: self._focus_lost(self.center, "center"))
 
-        self.cal = view("Calendar.qml", "Fusion Naptár", pop)
+        self.cal = view("Calendar.qml", "Fúzió Naptár", pop)
         self.cal.setGeometry(sw - CAL_W, sh - PANEL_HEIGHT - CAL_H, CAL_W, CAL_H)
         self.x.setup_floating(int(self.cal.winId()), "popup")
         self.cal.activeChanged.connect(lambda: self._focus_lost(self.cal, "calendar"))
 
-        self.snd = view("SoundPopup.qml", "Fusion Hang", pop)
+        self.snd = view("SoundPopup.qml", "Fúzió Hang", pop)
         self.snd.setGeometry(sw - SOUND_W - 150, sh - PANEL_HEIGHT - SOUND_H, SOUND_W, SOUND_H)
         self.x.setup_floating(int(self.snd.winId()), "popup")
         self.snd.activeChanged.connect(lambda: self._focus_lost(self.snd, "sound"))
@@ -365,7 +365,7 @@ class Shell(QObject):
         self._place_sound()
 
         # buborék: felülíró (override-redirect) ablak — nem veszi el a fókuszt, nincs kerete
-        self.toast = view("Toasts.qml", "Fusion értesítés", F.ToolTip | F.FramelessWindowHint | F.WindowStaysOnTopHint | F.WindowDoesNotAcceptFocus)
+        self.toast = view("Toasts.qml", "Fúzió értesítés", F.ToolTip | F.FramelessWindowHint | F.WindowStaysOnTopHint | F.WindowDoesNotAcceptFocus)
         self.toast.rootObject().implicitHeightChanged.connect(self._place_toast)
         self._ready = False
         self.panel.frameSwapped.connect(self._first_frame)
@@ -480,7 +480,7 @@ class Shell(QObject):
         elif action in ("reboot", "poweroff"):
             rc, out = ui.admin("power", action)
             if rc != 0:
-                self.add_notification("FusionOS", 0, "power", "Nem sikerült: " + action, out.strip()[:200], [], 2, -1)
+                self.add_notification("Fúzió", 0, "power", "Nem sikerült: " + action, out.strip()[:200], [], 2, -1)
 
     # --- felugrók: értesítésközpont, naptár ---
     def _hide_popups(self):
@@ -697,7 +697,7 @@ class Shell(QObject):
         self.toast.setGeometry(self.sw - TOAST_W - 10, self.sh - PANEL_HEIGHT - h - 10, TOAST_W, h)
 
     def local_note(self, icon, summary, body="", action=None, urgency=1):
-        self.add_notification("FusionOS", 0, icon, summary, body, [], urgency, -1, local_action=action)
+        self.add_notification("Fúzió", 0, icon, summary, body, [], urgency, -1, local_action=action)
 
     # --- időzített lekérdezések ---
     def tick_clock(self):
@@ -772,7 +772,7 @@ class Shell(QObject):
             ui.run(["xset", "s", "off", "-dpms"], timeout=3)
 
     def tick_devices(self):
-        devs = fdev.present()      # Fusion API: minden .role szerep (egy új szerep kódváltozás nélkül megjelenik)
+        devs = fdev.present()      # Fúzió API: minden .role szerep (egy új szerep kódváltozás nélkül megjelenik)
         media = []
         try:
             with open("/proc/self/mounts") as f:
@@ -815,7 +815,7 @@ class Shell(QObject):
 
     def startup_notes(self):
         if os.path.exists("/run/fusion/image-changed"):
-            self.local_note("download", "FusionOS frissült", ui.fusion_version())
+            self.local_note("download", "Fúzió frissült", ui.fusion_version())
         self._first = False
 
     def write_state(self, last=None):
@@ -838,7 +838,7 @@ class Shell(QObject):
 
 
 def main():
-    app, _engine = ui.create_app("fusion-shell", "Fusion Shell", "app")
+    app, _engine = ui.create_app("fusion-shell", "Fúzió Shell", "app")
     app.setQuitOnLastWindowClosed(False)
     shell = Shell(app)
 

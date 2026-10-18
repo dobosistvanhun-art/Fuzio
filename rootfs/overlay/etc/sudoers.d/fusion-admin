@@ -1,4 +1,4 @@
-# FusionOS — a Fusion Desktop rendszersegédje jelszó nélkül (csak ez a program, ellenőrzött parancsokkal)
+# Fúzió — a Fúzió Desktop rendszersegédje jelszó nélkül (csak ez a program, ellenőrzött parancsokkal)
 # Minden asztali felhasználó (fusion-desktop csoport); a nem rendszergazda hívónak a fusion-admin csak a mindennapi
 # műveleteket engedi (csatolás, kikapcsolás, jelszócsere …)
 %fusion-desktop ALL=(root) NOPASSWD: /usr/lib/fusion/bin/fusion-admin

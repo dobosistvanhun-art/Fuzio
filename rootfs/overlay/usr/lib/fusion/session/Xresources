@@ -1,4 +1,4 @@
-! FusionOS — terminál (xterm): FusionDark színek
+! Fúzió — terminál (xterm): FusionDark színek
 XTerm*faceName: DejaVu Sans Mono
 XTerm*faceSize: 11
 XTerm*locale: true

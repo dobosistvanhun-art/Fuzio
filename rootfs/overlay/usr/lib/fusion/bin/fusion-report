@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — hibajelentés: a rendszer állapota egy ember (és bármilyen elemző eszköz) számára olvasható
+"""Fúzió — hibajelentés: a rendszer állapota egy ember (és bármilyen elemző eszköz) számára olvasható
 szövegfájlban. Determinisztikus, AI nélkül is teljes értékű, és **nem küld adatot sehova** — a fájlt a
 felhasználó maga adhatja tovább, ha akarja. Mentés előtt automatikus maszkolás: jelszavak, kulcsok,
 tokenek, Wi-Fi-kulcsok és -hálózatnevek, e-mail-címek, MAC-címek, sorozatszámok, nyilvános IP-címek,
@@ -35,7 +35,7 @@ MAX_LINE = 400
 
 
 def render_text():
-    """a Fusion-felület rajzolása (Beállítások → Kijelző, vagy a mérési boot-bejegyzés) — a Fusion API-ból"""
+    """a Fúzió-felület rajzolása (Beállítások → Kijelző, vagy a mérési boot-bejegyzés) — a Fúzió API-ból"""
     from fusion import ui as fui
     rf = os.path.join(os.path.expanduser("~") if os.getuid() else "/home/fusion", ".config/fusion/render")
     t = "szoftveres (processzor)" if fui.render_mode(rf) == "software" else "grafikus kártya (OpenGL)"
@@ -65,7 +65,7 @@ def tail(path, n):
 
 
 def kv(path):
-    """kulcs=érték / shell-idézett fájlok — a Fusion API olvasójával (fusion.kv)"""
+    """kulcs=érték / shell-idézett fájlok — a Fúzió API olvasójával (fusion.kv)"""
     return fkv.read(path, shell=True)
 
 
@@ -349,7 +349,7 @@ def wifi_section():
     fq = [l.strip() for l in read(f"{home}/.local/share/fusion/shell.log").splitlines() if "Wi-Fi: kapcsolódva — frekvencia" in l
           or "Wi-Fi: rövid megszakadás" in l][-20:]
     if fq:
-        L.append("  Kapcsolódások csatornája (Fusion Shell):")
+        L.append("  Kapcsolódások csatornája (Fúzió Shell):")
         L += indent("\n".join(fq), 4)
     L.append("  Kernel — Wi-Fi üzenetek (utolsó 60):")
     L += indent("\n".join(wifi_kernel_lines()[-60:]) or "(nincs)", 4)
@@ -367,7 +367,7 @@ CAM_KERNEL = re.compile(r"(?i)uvcvideo|\buvc\b|webcam|camera")
 
 
 def bt_camera_printer_section(m):
-    """Bluetooth, kamera, nyomtatók (CUPS) — a Fusion API-n át; a telefonok / számítógépek neve maszkolva"""
+    """Bluetooth, kamera, nyomtatók (CUPS) — a Fúzió API-n át; a telefonok / számítógépek neve maszkolva"""
     from fusion import bluetooth as fbt, camera as fcam, printers as fprn
     L = section("BLUETOOTH")
     try:
@@ -482,7 +482,7 @@ def quick_checks(sysinfo):
         f"kijelzőprofil: {env.get('FUSION_DISPLAY_PROFILE', '?')} ({env.get('FUSION_DISPLAY_STATUS', '?')}, driver: {env.get('FUSION_DISPLAY_DRIVER_STATE', '?')})")
     ready = os.path.exists("/run/user/1000/fusion-shell.ready")
     xorg = bool(run(["pgrep", "-x", "Xorg"], timeout=5).strip())
-    add("OK" if ready else "HIBA" if xorg else "--", "Fusion Desktop: " + ("fut (Shell kész)" if ready else
+    add("OK" if ready else "HIBA" if xorg else "--", "Fúzió Desktop: " + ("fut (Shell kész)" if ready else
         "az X fut, de a Shell nem jelzett készenlétet" if xorg else "nem fut (szöveges mód?)"))
     wl = re.sub(r"\x1b\[[0-9;]*m", "", run(["sh", "-c", "for d in $(ls /sys/class/net); do [ -d /sys/class/net/$d/wireless ] "
                                               "&& iwctl station $d show; done"], timeout=8))
@@ -532,9 +532,9 @@ def build(desc, sysinfo, m):
     env = kv("/run/fusion/hardware/display.env")
     up = float(read("/proc/uptime", "0").split()[0] or 0)
 
-    L = ["FusionOS hibajelentés", "=" * 21,
+    L = ["Fúzió hibajelentés", "=" * 21,
          f"Készült:      {now:%Y-%m-%d %H:%M:%S %z}",
-         f"Verzió:       FusionOS {rel.get('FUSION_VERSION', '?')} ({rel.get('FUSION_MILESTONE', '?')}), rendszerkép: {rel.get('FUSION_IMAGE_ID', '?')}",
+         f"Verzió:       Fúzió {rel.get('FUSION_VERSION', '?')} ({rel.get('FUSION_MILESTONE', '?')}), rendszerkép: {rel.get('FUSION_IMAGE_ID', '?')}",
          f"Alap:         {base}",
          f"Kernel:       {os.uname().release}",
          f"Rendszer:     slot {read('/run/fusion/slot', '?')}, lemez: {read('/run/fusion/boot-disk', '?')}, "
@@ -634,7 +634,7 @@ def build(desc, sysinfo, m):
         L.append("  Kernel (dmesg) hibák:")
         L += ["    " + x for x in sysinfo["dmesg_err"]]
     home = os.path.expanduser("~") if os.getuid() else "/home/fusion"
-    for title, path, n in (("Fusion Shell (shell.log)", f"{home}/.local/share/fusion/shell.log", 40),
+    for title, path, n in (("Fúzió Shell (shell.log)", f"{home}/.local/share/fusion/shell.log", 40),
                            ("Munkamenet (session.log)", f"{home}/.local/share/fusion/session.log", 30)):
         t = tail(path, n)
         if t:

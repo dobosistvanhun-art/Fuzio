@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — fusion-backup: a DATA mentése egy külső lemezre (root, a fusion-admin hívja)
+"""Fúzió — fusion-backup: a DATA mentése egy külső lemezre (root, a fusion-admin hívja)
 
     fusion-backup list                  a lehetséges célok (csatolt külső kötetek) és a meglévő mentések (JSON)
     fusion-backup create <kötet>        mentés a <kötet>/FusionOS-mentes/ mappába (a kötet: /run/media/…)
@@ -7,7 +7,7 @@
 A mentés: fusion-data-<dátum>.tar.zst (tar, zstd-tömörítéssel) — a programok (Windows-programok, Flatpak,
 Linux-programok), a beállítások, a Wi-Fi, a saját fájlok, a nyomtató adatai; a tulajdonosok, jogok és
 bővített attribútumok megmaradnak. FAT32-n (4 GB-os fájlméret-korlát) 3900 MB-os darabokban (.000, .001 …).
-Mellette: <név>.info.json (verzió, dátum, méret). Visszaállítás: a Fusion Telepítőben (új telepítés + mentés).
+Mellette: <név>.info.json (verzió, dátum, méret). Visszaállítás: a Fúzió Telepítőben (új telepítés + mentés).
 A mentés jelszavakat is tartalmaz (Wi-Fi, Google Drive) — a felhasználónak biztonságban kell tartania.
 """
 import datetime

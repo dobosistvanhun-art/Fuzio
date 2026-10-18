@@ -1,6 +1,6 @@
-"""FusionOS — Fusion API: ablakok (X11, EWMH) — a Fusion Shell és a Feladatkezelő közös alapja (M8)
+"""Fúzió — Fúzió API: ablakok (X11, EWMH) — a Fúzió Shell és a Feladatkezelő közös alapja (M8)
 
-A Fusion Shell ezen át látja és kezeli az ablakokat — ablakkezelőtől függetlenül,
+A Fúzió Shell ezen át látja és kezeli az ablakokat — ablakkezelőtől függetlenül,
 az EWMH szabvány szerint (_NET_CLIENT_LIST, _NET_ACTIVE_WINDOW, _NET_CLOSE_WINDOW):
   - ablaklista a tálcához (cím, osztály, aktív, kis méretre tett), az ablak saját ikonja
   - ablak aktiválása, kis méretre tétele, bezárása

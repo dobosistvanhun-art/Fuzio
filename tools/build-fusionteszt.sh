@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS — a Programkezelő Windows-tesztprogramjának fordítása (mingw-w64 kell: gcc-mingw-w64-x86-64)
+# Fúzió — a Programkezelő Windows-tesztprogramjának fordítása (mingw-w64 kell: gcc-mingw-w64-x86-64)
 # Az eredmény (programs/tests/fusionteszt-setup.exe) a tárolóban van; csak a forrás változásakor kell.
 set -e
 cd "$(dirname "$0")/../programs/tests"

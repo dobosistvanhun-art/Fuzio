@@ -1,4 +1,4 @@
-"""FusionOS — Fájlkezelő: háttérrész (könyvtárlista, fájlműveletek, keresés, archívumok, kötetek)
+"""Fúzió — Fájlkezelő: háttérrész (könyvtárlista, fájlműveletek, keresés, archívumok, kötetek)
 
 A felület (QML) csak megjelenít; minden fájlrendszer-művelet itt történik, a hosszúak
 (másolás, mozgatás, törlés, tömörítés, kicsomagolás, keresés, mappaméret) külön szálon,
@@ -894,7 +894,7 @@ def volumes():
         out.append({"name": os.path.basename(dl.rstrip("/")) or "Letöltések", "path": dl, "icon": "download", "dev": "",
                     "info": dl, "mounted": True, "media": False})
     if os.path.isdir("/data"):
-        out.append({"name": "Adatok (FusionOS DATA)", "path": "/data", "icon": "drive", "dev": "", "info": "/data", "mounted": True, "media": False})
+        out.append({"name": "Adatok (Fúzió DATA)", "path": "/data", "icon": "drive", "dev": "", "info": "/data", "mounted": True, "media": False})
     out.append({"name": "Rendszer", "path": "/", "icon": "drive", "dev": "", "info": "/ (csak olvasható alap)", "mounted": True, "media": False})
     rc, js = ui.run(["lsblk", "-J", "-b", "-o", "NAME,PATH,LABEL,FSTYPE,SIZE,MOUNTPOINTS,RM,TRAN,PARTLABEL,TYPE,PKNAME"], timeout=5)
     try:

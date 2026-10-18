@@ -1,4 +1,4 @@
-// FusionOS — Fusion Telepítő: céllemez, mód (új telepítés / a DATA megőrzésével), megerősítés, telepítés
+// Fúzió — Fúzió Telepítő: céllemez, mód (új telepítés / a DATA megőrzésével), megerősítés, telepítés
 import QtQuick
 import QtQuick.Controls
 import FusionUI
@@ -9,7 +9,7 @@ FWindow {
     minimumWidth: 860; minimumHeight: 560
     visible: true
     visibility: Window.Maximized
-    title: "FusionOS telepítő"
+    title: "Fúzió telepítő"
     property int page: 0                  // 0 üdvözlés, 1 céllemez, 2 mód, 3 megerősítés, 4 telepítés
     property string target: ""
     property string mode: "new"
@@ -39,7 +39,7 @@ FWindow {
                     FIcon { name: "app-disks"; size: 30 }
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
-                        Text { text: "FusionOS"; color: Theme.text; font.family: Theme.font; font.pixelSize: 17; font.bold: true }
+                        Text { text: "Fúzió"; color: Theme.text; font.family: Theme.font; font.pixelSize: 17; font.bold: true }
                         Text { text: "telepítő"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12 }
                     }
                 }
@@ -88,13 +88,13 @@ FWindow {
                     Column {
                         visible: win.page === 0; width: parent.width; spacing: 14
                         Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 14
-                               text: "A FusionOS telepítése egy lemezre — új telepítés, vagy egy meglévő FusionOS újratelepítése a programok és beállítások megtartásával." }
+                               text: "A Fúzió telepítése egy lemezre — új telepítés, vagy egy meglévő Fúzió újratelepítése a programok és beállítások megtartásával." }
                         Rectangle {
                             width: parent.width; height: infoCol.implicitHeight + 24; color: Theme.panel; radius: Theme.radius
                             Column {
                                 id: infoCol; x: 16; y: 12; width: parent.width - 32; spacing: 6
                                 Repeater {
-                                    model: [["Telepítendő rendszer", win.payOk ? "FusionOS " + win.pay.version + (win.pay.milestone ? " (" + win.pay.milestone + ")" : "") + "   ·   " + win.pay.name
+                                    model: [["Telepítendő rendszer", win.payOk ? "Fúzió " + win.pay.version + (win.pay.milestone ? " (" + win.pay.milestone + ")" : "") + "   ·   " + win.pay.name
                                                                                : (inst.loading ? "beolvasás…" : "HIBA: " + (win.pay.error || "nincs csomag"))],
                                             ["Gép", win.mach.model || "…"],
                                             ["Memória", win.mach.memoryText || "…"],
@@ -118,7 +118,7 @@ FWindow {
                     Column {
                         visible: win.page === 1; width: parent.width; spacing: 8
                         Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 13
-                               text: "Melyik lemezre kerüljön a FusionOS? (legalább 10 GiB)" }
+                               text: "Melyik lemezre kerüljön a Fúzió? (legalább 10 GiB)" }
                         Repeater {
                             model: win.d.disks
                             Rectangle {
@@ -150,9 +150,9 @@ FWindow {
                         visible: win.page === 2; width: parent.width; spacing: 10
                         Repeater {
                             model: [["keep-data", "Újratelepítés, a DATA megőrzésével",
-                                     "A rendszer újraíródik, a programok (pl. LightBurn), a Wi-Fi, a beállítások és a saját fájlok MEGMARADNAK. Ha a FusionOS elromlott, ez a helyreállítás."],
+                                     "A rendszer újraíródik, a programok (pl. LightBurn), a Wi-Fi, a beállítások és a saját fájlok MEGMARADNAK. Ha a Fúzió elromlott, ez a helyreállítás."],
                                     ["new", "Új telepítés",
-                                     "A lemez TELJES tartalma törlődik; tiszta FusionOS kerül rá — üres DATA-val, vagy a DATA egy mentésből (lent)."]]
+                                     "A lemez TELJES tartalma törlődik; tiszta Fúzió kerül rá — üres DATA-val, vagy a DATA egy mentésből (lent)."]]
                             Rectangle {
                                 readonly property bool avail: modelData[0] === "new" || (!!win.disk && win.disk.keepData)
                                 width: body.width; height: mcol.implicitHeight + 24; radius: Theme.radius
@@ -164,7 +164,7 @@ FWindow {
                                     Text { text: modelData[1]; color: Theme.text; font.family: Theme.font; font.pixelSize: 15; font.bold: true }
                                     Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12
                                            text: parent.parent.avail ? modelData[2]
-                                                 : "Csak meglévő FusionOS-lemezen" + (win.disk && win.disk.fusion && win.disk.fusion.reason ? " (" + win.disk.fusion.reason + ")" : "") + "." }
+                                                 : "Csak meglévő Fúzió-lemezen" + (win.disk && win.disk.fusion && win.disk.fusion.reason ? " (" + win.disk.fusion.reason + ")" : "") + "." }
                                 }
                                 MouseArea { anchors.fill: parent; enabled: parent.avail; onClicked: win.mode = modelData[0] }
                             }
@@ -175,7 +175,7 @@ FWindow {
                             Text { text: "DATA AZ ÚJ TELEPÍTÉSHEZ"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11; font.bold: true }
                             Repeater {
                                 model: [{ path: "", title: "Üres DATA (tiszta rendszer)", sub: "a programokat és a beállításokat újra kell telepíteni / megadni" }].concat(
-                                       (win.d.backups || []).map(b => ({ path: b.path, title: "Visszaállítás mentésből: " + b.when + " (FusionOS " + b.version + ")",
+                                       (win.d.backups || []).map(b => ({ path: b.path, title: "Visszaállítás mentésből: " + b.when + " (Fúzió " + b.version + ")",
                                                                          sub: b.where + "   ·   " + b.sizeText + " tömörítve, " + b.dataText + " adat" })))
                                 Rectangle {
                                     width: body.width; height: 50; radius: Theme.radius
@@ -190,7 +190,7 @@ FWindow {
                                 }
                             }
                             Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11
-                                   text: "Mentés: FusionOS → Beállítások → Mentés. A mentést tartalmazó lemezt dugja be, majd: Céllemez → Lista frissítése." }
+                                   text: "Mentés: Fúzió → Beállítások → Mentés. A mentést tartalmazó lemezt dugja be, majd: Céllemez → Lista frissítése." }
                             FCheck { visible: win.wifiAvail; checked: win.wifi; onToggled: win.wifi = checked
                                      text: "A telepítőben beállított Wi-Fi átvétele (" + (win.d.wifi || []).join(", ") + ")" }
                         }
@@ -204,7 +204,7 @@ FWindow {
                             Column {
                                 id: sumCol; x: 16; y: 12; width: parent.width - 32; spacing: 6
                                 Repeater {
-                                    model: !win.disk ? [] : [["Rendszer", "FusionOS " + (win.pay.version || "?") + (win.pay.milestone ? " (" + win.pay.milestone + ")" : "")],
+                                    model: !win.disk ? [] : [["Rendszer", "Fúzió " + (win.pay.version || "?") + (win.pay.milestone ? " (" + win.pay.milestone + ")" : "")],
                                                              ["Céllemez", win.disk.model + " — " + win.disk.name + ", " + win.disk.sizeText],
                                                              ["Most rajta", win.disk.content],
                                                              ["Mód", win.mode === "new" ? "új telepítés — a lemez TELJES tartalma törlődik" : "újratelepítés — a DATA megmarad"]].concat(
@@ -223,7 +223,7 @@ FWindow {
                             visible: !!win.disk && win.mode === "new" && (win.disk.otheros || !!win.disk.fusion)
                             width: parent.width; height: wt.implicitHeight + 20; color: "#3a1515"; radius: Theme.radius
                             Text { id: wt; x: 14; y: 10; width: parent.width - 28; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 13
-                                   text: win.disk && win.disk.fusion ? "Ezen a lemezen most FusionOS van — az új telepítés a programokat és a beállításokat is TÖRLI. Ha meg akarja tartani őket: Vissza → „Újratelepítés, a DATA megőrzésével”."
+                                   text: win.disk && win.disk.fusion ? "Ezen a lemezen most Fúzió van — az új telepítés a programokat és a beállításokat is TÖRLI. Ha meg akarja tartani őket: Vissza → „Újratelepítés, a DATA megőrzésével”."
                                                                      : "Ezen a lemezen egy másik operációs rendszer van (pl. Linux Mint vagy Windows) — az is TÖRLŐDIK." }
                         }
                         Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 13; textFormat: Text.StyledText
@@ -243,7 +243,7 @@ FWindow {
                                         color: inst.state === "failed" ? Theme.danger : inst.state === "done" ? Theme.ok : Theme.accent }
                         }
                         Text { visible: inst.state === "done"; width: parent.width; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 14
-                               text: "Vegye ki a telepítő pendrive-ot, majd indítsa újra a gépet. A FusionOS a boot menüből (ZBook: F9) is választható." }
+                               text: "Vegye ki a telepítő pendrive-ot, majd indítsa újra a gépet. A Fúzió a boot menüből (ZBook: F9) is választható." }
                         Row {
                             spacing: 8; visible: inst.state === "done" || inst.state === "failed"
                             FButton { visible: inst.state === "done"; text: "Újraindítás"; icon: "restart"; primary: true; onClicked: inst.power("reboot") }

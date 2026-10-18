@@ -1,4 +1,4 @@
-"""fusion — a Fusion API parancssora (M8b): egy belépési pont, minden lekérdezés `--json`-nal is
+"""fusion — a Fúzió API parancssora (M8b): egy belépési pont, minden lekérdezés `--json`-nal is
 
     fusion api-version                        az API változata (1)
     fusion system [--json]                    verzió, alap, slot, A/B-állapot, Hardware Layer, rajzolási mód
@@ -190,10 +190,10 @@ def main(argv=None):
         if cmd == "system":
             s = system_info()
             _out(s, as_json, lambda: "\n".join([
-                f"FusionOS {s['version']} ({s['milestone']}), alap: {s['base']}, kernel: {s['kernel']}",
+                f"Fúzió {s['version']} ({s['milestone']}), alap: {s['base']}, kernel: {s['kernel']}",
                 f"slot: {s['slot'] or '?'}, indulás: {s['bootState'] or '?'}",
                 f"kijelző: {s['display']['profile'] or '?'} ({s['display']['status'] or '?'}), felület: {s['render'] or '?'}",
-                f"Fusion API: {s['api']}"]))
+                f"Fúzió API: {s['api']}"]))
             return 0
         if cmd == "hardware":
             d = {k: v for k, v in hardware.display().items() if k != "raw"}
@@ -299,7 +299,7 @@ def main(argv=None):
         if cmd == "schema":
             d = schema.describe()
             _out(d, as_json, lambda: "\n".join(
-                [f"Fusion-leírók, {d['version']}. változat", "", "program.fusion (= *.fwr recept):"]
+                [f"Fúzió-leírók, {d['version']}. változat", "", "program.fusion (= *.fwr recept):"]
                 + [f"  {k:<14} {'*' if f['required'] else ' '} {f['desc']}" + (f" [{', '.join(f['types'])}]" if f["types"] else "")
                    for k, f in d["program"]["fields"].items()]
                 + ["", "*.role (eszközszerep):"]

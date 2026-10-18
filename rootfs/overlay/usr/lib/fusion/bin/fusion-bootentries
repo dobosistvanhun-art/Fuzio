@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — UEFI indítási bejegyzések (root; a Beállítások → Indítás a `fusion-admin boot …`-on át hívja)
+"""Fúzió — UEFI indítási bejegyzések (root; a Beállítások → Indítás a `fusion-admin boot …`-on át hívja)
 
     fusion-bootentries list [--json]          a bejegyzések: mire mutatnak, létezik-e még a fájl, melyik indult most
     fusion-bootentries first <szám>           a sorrend elejére (ez indul alapértelmezésként)
@@ -7,7 +7,7 @@
     fusion-bootentries delete <szám> <név>    törlés — megerősítés: a bejegyzés pontos neve
 
 Védelem: a most futó rendszer bejegyzése és a lemez nélküli (firmware-) bejegyzések nem törölhetők; a
-„Fusion meres - …” bejegyzéseket a FusionOS maga tartja karban (minden induláskor), azokat itt nem kell kezelni.
+„Fuzio meres - …” bejegyzéseket a Fúzió maga tartja karban (minden induláskor), azokat itt nem kell kezelni.
 """
 import json
 import os
@@ -16,7 +16,8 @@ import subprocess
 import sys
 import tempfile
 
-FW_PREFIX = "Fusion meres - "
+FW_PREFIX = "Fuzio meres - "
+OLD_FW_PREFIXES = ("Fusion meres - ",)
 
 
 class BootError(Exception):
@@ -92,7 +93,7 @@ def _exists_ci(root, rel):
 
 
 def current_esp():
-    """a futó FusionOS ESP-jének PARTUUID-je"""
+    """a futó Fúzió ESP-jének PARTUUID-je"""
     r = run(["blkid", "-t", "PARTLABEL=FUSION_ESP", "-o", "device"], check=False)
     devs = r.stdout.split()
     boot = ""
@@ -123,7 +124,7 @@ def entries():
         e = {"num": num, "label": label, "active": active, "current": num == cur, "next": num == nxt,
              "pos": order.index(num) if num in order else -1, "path": fp.group(1) if fp else "",
              "partuuid": hd.group(1).lower() if hd else "", "disk": "", "model": "", "exists": None,
-             "kind": "firmware", "managed": label.startswith(FW_PREFIX)}
+             "kind": "firmware", "managed": label.startswith((FW_PREFIX,) + OLD_FW_PREFIXES)}
         if hd:
             p = parts.get(e["partuuid"])
             if p:
@@ -185,7 +186,7 @@ def main(a):
         if a[2] != e["label"]:
             raise BootError("a megerősítés nem egyezik a bejegyzés nevével")
         if e["managed"]:
-            raise BootError("ezt a bejegyzést a FusionOS kezeli (mérési bejegyzés) — induláskor újra létrejönne")
+            raise BootError("ezt a bejegyzést a Fúzió kezeli (mérési bejegyzés) — induláskor újra létrejönne")
         if not e["partuuid"]:
             raise BootError("lemez nélküli (firmware-) bejegyzés — a BIOS-beállításokban kezelhető")
         run(["efibootmgr", "-q", "-b", e["num"], "-B"])

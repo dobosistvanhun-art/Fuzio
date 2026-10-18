@@ -1,5 +1,5 @@
 [Unit]
-Description=FusionOS — az Adatlemez csatolása (Lemezkezelő → Adatlemez; ~/Tárhely)
+Description=Fúzió — az Adatlemez csatolása (Lemezkezelő → Adatlemez; ~/Tárhely)
 After=local-fs.target systemd-udev-settle.service fusion-users.service
 Before=systemd-user-sessions.service getty@tty1.service display-manager.service
 RequiresMountsFor=/data

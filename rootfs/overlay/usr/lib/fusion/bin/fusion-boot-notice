@@ -1,10 +1,10 @@
 #!/bin/sh
-# FusionOS — a munkamenet indulásakor: a rendszerfrissítés eredménye értesítésként (egyszer indításonként).
+# Fúzió — a munkamenet indulásakor: a rendszerfrissítés eredménye értesítésként (egyszer indításonként).
 # A fusion-boot-check (root) írja a /run/fusion/boot-notice-ot: véglegesítés vagy visszaállás után.
 n=/run/fusion/boot-notice
 shown="${XDG_RUNTIME_DIR:-/tmp}/fusion-boot-notice.shown"
 [ -e "$shown" ] && exit 0
-sleep 6      # a Fusion Shell (az értesítések fogadója) elinduljon
+sleep 6      # a Fúzió Shell (az értesítések fogadója) elinduljon
 i=0
 # a próba-indítás véglegesítése a felület megjelenése után történik — legfeljebb ~6 percig várunk rá
 while [ $i -lt 180 ]; do

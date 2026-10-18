@@ -3,7 +3,7 @@
 
 _data_readme() {
     cat <<EOF
-FusionOS adatpartíció (FUSION_DATA)
+Fúzió adatpartíció (FUSION_DATA)
 
 Ide kerülnek majd a felhasználói adatok, beállítások, a Windows-programok
 környezetei és a Klipper-konfiguráció. Az M0 ezt a partíciót nem használja.
@@ -40,7 +40,7 @@ step_image() {
     dd if="$espimg" of="$img" bs=1M seek=1 conv=notrunc,sparse status=none
     rm -f "$espimg"
 
-    # A slot: a FusionOS rendszerkép (EROFS)
+    # A slot: a Fúzió rendszerkép (EROFS)
     dd if="$rootimg" of="$img" bs=1M seek=$((1 + ESP_MIB)) conv=notrunc,sparse status=none
     info "A slot: $(basename "$rootimg") ($(( $(stat -c %s "$rootimg") / 1024 / 1024 )) MiB); B slot: üres"
 

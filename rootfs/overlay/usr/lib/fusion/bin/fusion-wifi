@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-#  FusionOS — fusion-wifi: Wi-Fi kezelése egyszerűen (az iwd fölött)
+#  Fúzió — fusion-wifi: Wi-Fi kezelése egyszerűen (az iwd fölött)
 #
 #    fusion-wifi                  állapot: eszköz, hálózat, IP-cím
 #    fusion-wifi list             elérhető hálózatok (keresés)

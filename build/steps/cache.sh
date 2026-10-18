@@ -1,8 +1,8 @@
 # shellcheck shell=bash
-# FusionOS build — a rögzített letöltések (build/cache) mentése és visszatöltése (A3, 0.0.30)
+# Fúzió build — a rögzített letöltések (build/cache) mentése és visszatöltése (A3, 0.0.30)
 #
 # Miért: az Ubuntu 2026-ban kivezette a 470-es NVIDIA-ágat; ha a rögzített csomagok (470-server, a 6.8-as kernel)
-# eltűnnek a tárolóból, a FusionOS a mentett cache-ből továbbra is buildelhető.
+# eltűnnek a tárolóból, a Fúzió a mentett cache-ből továbbra is buildelhető.
 #
 #   cache-export [<mappa>]   build/cache → <mappa>/fusionos-cache-<dátum>.tar.zst (+ .sha256)
 #                            (alapértelmezett mappa: ~/Fusion) — a build/cache/root kimarad (a .deb-ekből újra kibontható)
@@ -21,8 +21,8 @@ step_cache_export() {
     # a mentés leírása (a fájlok listája SHA-256-tal kerül a csomagba)
     local man="$CACHE_DIR/CACHE-MANIFEST.txt"
     {
-        echo "FusionOS build/cache mentés — $(date -Iseconds)"
-        echo "FusionOS-verzió: ${FUSION_VERSION:-?}"
+        echo "Fúzió build/cache mentés — $(date -Iseconds)"
+        echo "Fúzió-verzió: ${FUSION_VERSION:-?}"
         echo
         (cd "$CACHE_DIR" && find . -path ./root -prune -o -type f \( -name '*.deb' -o -name '*.zip' -o -name '*.tar*' \) -print \
             | sort | xargs -r sha256sum)

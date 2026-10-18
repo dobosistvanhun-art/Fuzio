@@ -1,4 +1,4 @@
-"""eszközszerepek — a FusionOS saját eszközrétege (lézer, 3D nyomtató, és bármely új szerep egy .role fájllal)
+"""eszközszerepek — a Fúzió saját eszközrétege (lézer, 3D nyomtató, és bármely új szerep egy .role fájllal)
 
     roles()                 a szerepek leírása + állapota (csatlakoztatva-e, melyik eszköz, rögzített azonosító)
     present()               gyors állapot (a Shell 2 mp-enként hívja): [{role, name, present, dev}]
@@ -7,7 +7,7 @@
 
 Egy hely, egy igazság (M8): a szerepfájl `windows.com` kulcsa csak JAVASLAT (ezt kínálja fel a Programkezelő egy
 Windows-program engedélyezésekor); a ténylegesen használt COM-port a program leírójában van (`port.COMn = szerep`) —
-a Fusion Windows Runtime (fwr) is onnan olvassa.
+a Fúzió Windows Runtime (fwr) is onnan olvassa.
 """
 import glob
 import os

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  FusionOS build
+#  Fúzió build
 #
 #  Használat:  build/fusion-build <parancs> [opciók]
 #
@@ -8,10 +8,10 @@
 #    deps [--install]   build-függőségek ellenőrzése (--install: telepítés apt-tal)
 #    fetch              kernel, busybox, modulok, betűkészlet, NVIDIA 470 csomagok letöltése (root nélkül)
 #    drivers            NVIDIA 470 kernelmodul fordítása a rögzített kernelhez — root kell (sudo)
-#    wine               Wine (WoW64) fordítása a Fusion Windows Runtime-hoz — root kell (sudo)
+#    wine               Wine (WoW64) fordítása a Fúzió Windows Runtime-hoz — root kell (sudo)
 #    printer            Klipper + Moonraker futtatókörnyezet (M5) — root kell (sudo)
-#    rootfs [--force]   a FusionOS rendszerkép (EROFS) építése — root kell (sudo)
-#    build              initramfs-ek + UKI-k (FusionOS + diagnosztika) + ESP-fa
+#    rootfs [--force]   a Fúzió rendszerkép (EROFS) építése — root kell (sudo)
+#    build              initramfs-ek + UKI-k (Fúzió + diagnosztika) + ESP-fa
 #    image              GPT lemezkép (VirtualBox / QEMU)
 #    vdi                a lemezkép VDI-vé alakítása
 #    vm [--usb]         FusionOS-dev VirtualBox VM létrehozása / frissítése
@@ -23,10 +23,10 @@
 #    install <eszköz> [--internal] [--data-from <FUSION_DATA>] [--wifi-file <fájl>]
 #                       telepítés lemezre (a lemez törlődik); belső lemezre csak --internal-lal
 #    update <eszköz> [--wifi-file <fájl>] [--hibas-proba]
-#                       rendszerfrissítés meglévő FusionOS-lemezen, a nem aktív slotba (A/B, M7) —
+#                       rendszerfrissítés meglévő Fúzió-lemezen, a nem aktív slotba (A/B, M7) —
 #                       a DATA (programok, adatok) megmarad; --hibas-proba: a visszaállás próbája
-#    bootentry <eszköz> UEFI-bejegyzés „FusionOS” néven (F9 menü); a Mint marad az alapértelmezett
-#    installer <eszköz> telepítő pendrive (T2): a Fusion Telepítő — új telepítés vagy újratelepítés a DATA
+#    bootentry <eszköz> UEFI-bejegyzés „Fuzio” néven (F9 menü); a Mint marad az alapértelmezett
+#    installer <eszköz> telepítő pendrive (T2): a Fúzió Telepítő — új telepítés vagy újratelepítés a DATA
 #                       megőrzésével, Mint nélkül (root: sudo build/fusion-build installer /dev/sdX)
 #    images             képfájlok tesztelőknek (Rufus / balenaEtcher): …-pendrive.img.xz (a pendrive-ról fut)
 #                       és …-telepito.img.xz (telepítő), SHA256SUMS, leírás — build/out/release/kiadas/

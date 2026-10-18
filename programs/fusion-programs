@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Fusion Programkezelő parancssorból
+"""Fúzió — Fúzió Programkezelő parancssorból
 
     fusion-programs                       a telepített programok
     fusion-programs list [--json]

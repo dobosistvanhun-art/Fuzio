@@ -6,5 +6,5 @@ role = laser
 name = Lézer (GRBL)
 match.usb = 1a86:7523 1a86:5523 0403:6001 0403:6015
 identify = path
-# a Fusion Windows Runtime (M4) ezen a néven adja a LightBurnnek
+# a Fúzió Windows Runtime (M4) ezen a néven adja a LightBurnnek
 windows.com = COM3

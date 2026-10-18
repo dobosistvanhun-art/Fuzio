@@ -41,7 +41,7 @@ _make_initramfs() {
     install -m 0755 "$initsrc" "$ir/init"
     install -m 0755 "$FUSION_ROOT/hardware/fusion-hwprobe" "$ir/usr/lib/fusion/hardware/fusion-hwprobe"
     cp -r "$FUSION_ROOT/hardware/profiles" "$ir/usr/lib/fusion/hardware/profiles"
-    printf "FUSION_VERSION='%s'\nFUSION_MILESTONE='%s'\nFUSION_PRETTY_NAME='FusionOS %s (%s)'\n" \
+    printf "FUSION_VERSION='%s'\nFUSION_MILESTONE='%s'\nFUSION_PRETTY_NAME='Fúzió %s (%s)'\n" \
         "$FUSION_VERSION" "$FUSION_MILESTONE" "$FUSION_VERSION" "$FUSION_MILESTONE" > "$ir/etc/fusion-release"
     # konzol betűkészlet
     local font="$root/usr/share/consolefonts/$CONSOLE_FONT"
@@ -76,7 +76,7 @@ _make_initramfs() {
 _make_uki() {
     local outfile="$1" initrd="$2" cmdline="$3" pretty="$4" imgver="$5"
     local root="$CACHE_DIR/root" osrel="$outfile.os-release"
-    printf 'NAME="FusionOS"\nID=fusionos\nPRETTY_NAME="%s"\nVERSION_ID=%s\nIMAGE_ID=fusionos\nIMAGE_VERSION=%s\n' \
+    printf 'NAME="Fúzió"\nID=fusionos\nPRETTY_NAME="%s"\nVERSION_ID=%s\nIMAGE_ID=fusionos\nIMAGE_VERSION=%s\n' \
         "$pretty" "$FUSION_VERSION" "$imgver" > "$osrel"
     ukify build \
         --linux "$root/boot/vmlinuz-$KERNEL_ABI" \
@@ -109,7 +109,7 @@ step_build() {
     cm_main="$cm_base fusion.slot=A"
     BUILD_STAMP=${FUSION_BUILD_STAMP:-$(date -u +%Y%m%d%H%M%S)}
 
-    step "FusionOS initramfs (fusion-init, $variant)"
+    step "Fúzió initramfs (fusion-init, $variant)"
     _make_initramfs "$out/initramfs-fusion.cpio.zst" "$FUSION_ROOT/initramfs/fusion/init" "$FUSION_MODULES"
     step "Diagnosztikai initramfs (M0 boot-teszt, $variant)"
     _make_initramfs "$out/initramfs-diag.cpio.zst" "$FUSION_ROOT/initramfs/m0/init" "$DIAG_MODULES"
@@ -121,13 +121,13 @@ step_build() {
     for sl in A B; do
         # IMAGE_VERSION: a systemd-boot ez alapján rendez (a legújabb build elöl)
         _make_uki "$out/$(uki_name $sl)" "$out/initramfs-fusion.cpio.zst" "$cm_base fusion.slot=$sl" \
-            "FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — $sl" "$FUSION_VERSION-$BUILD_STAMP-$sl"
+            "Fúzió $FUSION_VERSION ($FUSION_MILESTONE) — $sl" "$FUSION_VERSION-$BUILD_STAMP-$sl"
     done
     _make_uki "$out/$diag" "$out/initramfs-diag.cpio.zst" "$cm_diag" \
-        "FusionOS diagnosztika" "$FUSION_VERSION-diag"
+        "Fúzió diagnosztika" "$FUSION_VERSION-diag"
     # telepítő pendrive (T2): ugyanaz a rendszer telepítő módban (FUSION_ISYS, írható réteg RAM-ban)
     _make_uki "$out/fusion-installer.efi" "$out/initramfs-fusion.cpio.zst" "$cm_base fusion.installer=1" \
-        "FusionOS $FUSION_VERSION telepítő" "$FUSION_VERSION-$BUILD_STAMP-installer"
+        "Fúzió $FUSION_VERSION telepítő" "$FUSION_VERSION-$BUILD_STAMP-installer"
 
     step "ESP-fa (systemd-boot)"
     local esp="$out/esp"
@@ -149,7 +149,7 @@ step_build() {
             "$title" "$id" "$uki" "$cm_main" "$extra" > "$esp/loader/entries/$id.conf"
         n=$((n + 1))
     done < "$BOOT_MEASURE_FILE"
-    ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: FusionOS (A), FusionOS diagnosztika, $n mérési bejegyzés"
+    ok "ESP kész: $(du -sh "$esp" | cut -f1) — menü: Fúzió (A), Fúzió diagnosztika, $n mérési bejegyzés"
 
     # a telepítőnek: a céllemez ESP-jének állandó része (systemd-boot, loader.conf, bejegyzések, diagnosztika) —
     # a rendszer UKI-ja a .fupd-ből kerül mellé
@@ -181,7 +181,7 @@ _make_update_dir() {  # <mappa> <A uki> <B uki> [rendszerkép]
     ln "$img" "$d/rootfs.erofs" 2>/dev/null || cp "$img" "$d/rootfs.erofs"
     ln "$ua" "$d/uki-A.efi" 2>/dev/null || cp "$ua" "$d/uki-A.efi"
     ln "$ub" "$d/uki-B.efi" 2>/dev/null || cp "$ub" "$d/uki-B.efi"
-    # T3: a telepítő pendrive a .fupd-ből is elkészíthető (a FusionOS-ből, Mint nélkül)
+    # T3: a telepítő pendrive a .fupd-ből is elkészíthető (a Fúzióból, Mint nélkül)
     local extra=""
     if [ -r "$out/fusion-installer.efi" ] && [ -r "$out/esp-static.tar" ]; then
         ln "$out/fusion-installer.efi" "$d/uki-installer.efi" 2>/dev/null || cp "$out/fusion-installer.efi" "$d/uki-installer.efi"
@@ -189,7 +189,7 @@ _make_update_dir() {  # <mappa> <A uki> <B uki> [rendszerkép]
         extra="uki-installer.efi esp-static.tar"
     fi
     {
-        echo "# FusionOS frissítőcsomag (fusion-update apply <mappa>)"
+        echo "# Fúzió frissítőcsomag (fusion-update apply <mappa>)"
         echo "FUSION_VERSION=$FUSION_VERSION"
         echo "FUSION_MILESTONE=$FUSION_MILESTONE"
         echo "BUILD_STAMP=$BUILD_STAMP"

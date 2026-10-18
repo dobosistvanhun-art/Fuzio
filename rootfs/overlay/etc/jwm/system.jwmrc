@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<!-- FusionOS — ablakkezelő (JWM) beállítás.
-     A panelt, a Start menüt és az értesítéseket a Fusion Shell adja (fusion-shell), a JWM csak
+<!-- Fúzió — ablakkezelő (JWM) beállítás.
+     A panelt, a Start menüt és az értesítéseket a Fúzió Shell adja (fusion-shell), a JWM csak
      az ablakokat kezeli: saját tálca nincs, egy munkaasztal, lapos FusionDark stílus. -->
 <JWM>
     <RootMenu onroot="3">

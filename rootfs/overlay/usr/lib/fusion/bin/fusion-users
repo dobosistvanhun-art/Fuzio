@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — felhasználókezelés (root; a fusion-admin `users` parancsa hívja, a hívó: SUDO_USER)
+"""Fúzió — felhasználókezelés (root; a fusion-admin `users` parancsa hívja, a hívó: SUDO_USER)
 
     fusion-users list [--json]                     felhasználók (uid ≥ 1000): név, teljes név, rendszergazda, automatikus belépés
     fusion-users add <név> <teljes név> <0|1>      új felhasználó (a jelszó a bemenet első sora); 1 = rendszergazda
@@ -10,7 +10,7 @@
     fusion-users autologin <név|none>              automatikus belépés a tty1-en (rendszergazda; none = jelszóval)
     fusion-users apply                             indításkor: a tárolt felhasználók visszaállítása
 
-A FusionOS alapfelhasználója (fusion / fusion) a rendszerkép része: nem törölhető, a jelszava és a jogai nem
+A Fúzió alapfelhasználója (fusion / fusion) a rendszerkép része: nem törölhető, a jelszava és a jogai nem
 módosíthatók innen (István, 2026-10-13: „a fusion/fusion maradjon mint eddig”).
 
 Tartósság: a felhasználó-adatbázis (/etc/passwd, group, shadow) a rendszerfrissítéskor a rendszerképé lesz (az
@@ -152,7 +152,7 @@ def users():
 def write_autologin(name):
     """a tty1 automatikus belépése; a meglévő fusion-autologin.conf után (névsorrend) érvényes"""
     auto = f" --autologin {name}" if name and name != "none" else ""
-    text = ("# FusionOS — fusion-users (Beállítások → Felhasználók): a tty1 automatikus belépése\n"
+    text = ("# Fúzió — fusion-users (Beállítások → Felhasználók): a tty1 automatikus belépése\n"
             "[Service]\nExecStart=\n" + GETTY.format(auto=auto) + "\n")
     try:
         with open(AUTOLOGIN_DROPIN, encoding="utf-8") as f:

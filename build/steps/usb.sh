@@ -1,17 +1,17 @@
 # shellcheck shell=bash
 # Lemezre írás — root kell hozzá.
 #
-#   usb <eszköz>                      a FusionOS felírása egy USB-pendrive-ra (a teljes pendrive törlődik)
+#   usb <eszköz>                      a Fúzió felírása egy USB-pendrive-ra (a teljes pendrive törlődik)
 #   install <eszköz> [kapcsolók]      telepítés egy lemezre (a teljes lemez törlődik)
 #       --internal                    belső (SATA/NVMe) lemez engedélyezése — pl. a ZBook optikai
 #                                     helyén lévő SSD; e nélkül csak USB-eszközre ír
 #       --data-from <könyvtár|partíció>
-#                                     a DATA tartalmának átvétele egy meglévő FusionOS-ről (pl. a
+#                                     a DATA tartalmának átvétele egy meglévő Fúzióról (pl. a
 #                                     pendrive FUSION_DATA-ja): telepített Windows-programok (LightBurn),
 #                                     Wi-Fi, nyomtató-adatok — semmit nem kell újratelepíteni
 #       --wifi-file <fájl>            Wi-Fi-hálózat előre beállítva (SSID=… és PSK=… sorok)
 #   update <eszköz> [--wifi-file <fájl>] [--hibas-proba]
-#                                     rendszerfrissítés egy meglévő FusionOS-lemezen (A/B, M7): az új
+#                                     rendszerfrissítés egy meglévő Fúzió-lemezen (A/B, M7): az új
 #                                     rendszer a NEM aktív slotba kerül, próbaként indul (3 lehetőség),
 #                                     a mostani tartalék marad; a DATA (programok, beállítások) MEGMARAD
 #       --hibas-proba                 szándékosan HIBÁS frissítés (sérült rendszerkép) — a visszaállás
@@ -23,7 +23,7 @@
 #   - nem lehet rajta a futó rendszer (/, /boot, /boot/efi, /home, /usr, /var, swap);
 #   - más, csatolt fájlrendszer (nem FUSION_*) esetén megáll: előbb le kell választani;
 #   - a felhasználónak be kell gépelnie az eszköz nevét a megerősítéshez;
-#   - update: csak FusionOS-lemezen (FUSION_ESP/A/B/DATA partíciók), és a DATA-hoz nem nyúl.
+#   - update: csak Fúzió-lemezen (FUSION_ESP/A/B/DATA partíciók), és a DATA-hoz nem nyúl.
 
 # a lemez ellenőrzése; kiírja a jellemzőit (DEV_TRAN, DEV_SIZE_GIB, DEV_DESC globálisok)
 _disk_checks() {  # <eszköz> <allow_internal 0|1>
@@ -60,7 +60,7 @@ _disk_checks() {  # <eszköz> <allow_internal 0|1>
             /|/boot|/boot/efi|/home|/usr|/var|/var/*|\[SWAP\]) die "$dev tartalmazza a futó rendszer egy részét ($mp) — megszakítva." ;;
         esac
         case "$label" in
-            FUSION_*) ;;    # a FusionOS saját partíciói (automatikus csatolás): leválasztjuk
+            FUSION_*) ;;    # a Fúzió saját partíciói (automatikus csatolás): leválasztjuk
             *) die "$dev egyik partíciója csatolva van: /dev/$name → $mp (${label:-címke nélkül}). Ha biztosan törölhető, előbb: sudo umount $mp" ;;
         esac
     done < <(lsblk -lno NAME "$dev")
@@ -205,7 +205,7 @@ _install_or_usb() {  # <mód: usb|install> <eszköz> [kapcsolók]
         else
             die "a --data-from nem könyvtár és nem partíció: $data_from"
         fi
-        [ -d "$src_mnt/overlay" ] || [ -d "$src_mnt/fwr" ] || die "a --data-from nem FusionOS DATA-nak tűnik (nincs overlay/ vagy fwr/): $data_from"
+        [ -d "$src_mnt/overlay" ] || [ -d "$src_mnt/fwr" ] || die "a --data-from nem Fúzió DATA-nak tűnik (nincs overlay/ vagy fwr/): $data_from"
     fi
 
     step "Céllemez"
@@ -258,7 +258,7 @@ _install_or_usb() {  # <mód: usb|install> <eszköz> [kapcsolók]
     elif [ "$DEV_TRAN" != loop ] && [ -d /sys/firmware/efi ] && have efibootmgr; then
         step "UEFI boot-bejegyzés"
         step_bootentry "$dev" quiet || warn "a boot-bejegyzés nem sikerült — később: sudo build/fusion-build bootentry $dev"
-        ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → „FusionOS”."
+        ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → „Fuzio”."
     else
         ok "kész. Indítsd újra a ZBookot, F9 (boot menü) → a(z) $DEV_DESC lemez UEFI-bejegyzése (vagy: sudo build/fusion-build bootentry $dev)."
     fi
@@ -282,21 +282,21 @@ step_update() {
     need lsblk mkfs.vfat udevadm blockdev mmd mcopy mdir mdel mren cmp
     # mtools: a partíción formázott ESP fejlécére ne figyelmeztessen („Hidden … does not match sectors”)
     export MTOOLS_SKIP_CHECK=1
-    [ -n "$dev" ] || die "add meg a FusionOS-lemezt, pl.:  sudo build/fusion-build update /dev/sdb"
+    [ -n "$dev" ] || die "add meg a Fúzió-lemezt, pl.:  sudo build/fusion-build update /dev/sdb"
     local rel="$OUT_DIR/release"
     [ -d "$rel/esp/EFI" ] || die "nincs kész release ESP — előbb (root nélkül): build/fusion-build all"
     [ -r "$(rootfs_img)" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
     [ -r "$rel/update/fusion-update.manifest" ] || die "nincs frissítőcsomag ($rel/update) — előbb: build/fusion-build all"
     [ -z "$wifi_file" ] || [ -r "$wifi_file" ] || die "a Wi-Fi-fájl nem olvasható: $wifi_file"
     dev=$(readlink -f "$dev")
-    # frissítéshez belső lemez is jó: a FusionOS-elrendezés és a partíciónevek védik a többi lemezt
+    # frissítéshez belső lemez is jó: a Fúzió-elrendezés és a partíciónevek védik a többi lemezt
     _disk_checks "$dev" 1
     local p1 p2 p3 p4 i want name
     p1=$(part_dev "$dev" 1); p2=$(part_dev "$dev" 2); p3=$(part_dev "$dev" 3); p4=$(part_dev "$dev" 4)
     i=1
     for want in "$PART_ESP" "$PART_A" "$PART_B" "$PART_DATA"; do
         name=$(_partlabel "$(part_dev "$dev" $i)")
-        [ "$name" = "$want" ] || die "$dev nem FusionOS-lemez (a(z) $i. partíció neve: '${name:-nincs}', várt: $want). Új telepítés: install"
+        [ "$name" = "$want" ] || die "$dev nem Fúzió-lemez (a(z) $i. partíció neve: '${name:-nincs}', várt: $want). Új telepítés: install"
         i=$((i + 1))
     done
     _unmount_fusion "$dev"
@@ -334,12 +334,12 @@ step_update() {
         ukitmp=$(mktemp -d); newuki=$(uki_name "$target")
         info "a lemezen már van ilyen vagy újabb build — friss UKI ($BUILD_STAMP), hogy az új rendszer induljon"
         _make_uki "$ukitmp/$newuki" "$rel/initramfs-fusion.cpio.zst" "$CMDLINE_RELEASE fusion.slot=$target" \
-            "FusionOS $FUSION_VERSION ($FUSION_MILESTONE) — $target" "$FUSION_VERSION-$BUILD_STAMP-$target" >/dev/null
+            "Fúzió $FUSION_VERSION ($FUSION_MILESTONE) — $target" "$FUSION_VERSION-$BUILD_STAMP-$target" >/dev/null
         newuki_file="$ukitmp/$newuki"
     fi
     newname="${newuki%.efi}+3.efi"
 
-    step "Frissítendő FusionOS-lemez"
+    step "Frissítendő Fúzió-lemez"
     info "Eszköz:  $dev ($DEV_DESC, ${DEV_SIZE_GIB} GiB, ${DEV_TRAN:-?})"
     lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$dev" | sed 's/^/      /'
     info "A lemez boot-bejegyzései:"
@@ -350,7 +350,7 @@ step_update() {
         [ -n "$active" ] || die "hibás próba csak akkor, ha van működő (véglegesített) rendszer a lemezen"
         SLOT_IMAGE=$(mktemp); head -c $((64 * 1024 * 1024)) /dev/zero | tr '\0' 'X' > "$SLOT_IMAGE"
     fi
-    info "Új rendszer: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) → a(z) $target slotba (próbaként indul)"
+    info "Új rendszer: Fúzió $FUSION_VERSION ($FUSION_MILESTONE) → a(z) $target slotba (próbaként indul)"
     [ -n "$active" ] && info "A mostani rendszer ($active slot) megmarad tartaléknak: ha az új 3× nem indul el, magától ez indul."
     info "A DATA ($p4) MEGMARAD: telepített programok, Wi-Fi, beállítások, nyomtató-adatok."
     _confirm "$dev" "A(z) $target slot felülíródik (a DATA-hoz és a(z) ${active:-—} slothoz nem nyúl)."
@@ -396,12 +396,12 @@ step_update() {
     mren -D o -i "$p1" ::/EFI/Linux/fusion-update.tmp "::/EFI/Linux/$newname" < /dev/null || die "az UKI átnevezése nem sikerült"
     info "/EFI/Linux/$newname"
     sync
-    ok "kész: FusionOS $FUSION_VERSION ($FUSION_MILESTONE) a(z) $target slotban — a DATA változatlan."
+    ok "kész: Fúzió $FUSION_VERSION ($FUSION_MILESTONE) a(z) $target slotban — a DATA változatlan."
     info "Indítás: F9 → a lemez UEFI-bejegyzése. Az új rendszer próbaként indul; ha rendben elindul (a Fusion"
     info "Desktop megjelenik), véglegessé válik. Ha 3× nem sikerül, magától a(z) ${active:-előző} slot rendszere indul."
 }
 
-# UEFI boot-bejegyzés a FusionOS-lemezhez (a ZBook F9-menüjében „FusionOS” néven jelenik meg).
+# UEFI boot-bejegyzés a Fúzió-lemezhez (a ZBook F9-menüjében „Fúzió” néven jelenik meg).
 # A HP firmware a belső SATA-lemez ESP-jét magától nem ajánlja fel — e nélkül csak a
 # „Boot from EFI file” tallózásával indítható. A jelenlegi első bejegyzés (a Mint) marad az első.
 step_bootentry() {
@@ -409,25 +409,25 @@ step_bootentry() {
     [ "$(id -u)" -eq 0 ] || die "root kell:  sudo build/fusion-build bootentry /dev/sdX"
     [ -d /sys/firmware/efi ] || die "a Mint nem UEFI-módban fut — boot-bejegyzés nem hozható létre"
     need efibootmgr
-    [ -n "$dev" ] || die "add meg a FusionOS-lemezt, pl.:  sudo build/fusion-build bootentry /dev/sdb"
+    [ -n "$dev" ] || die "add meg a Fúzió-lemezt, pl.:  sudo build/fusion-build bootentry /dev/sdb"
     dev=$(readlink -f "$dev")
-    [ "$(_partlabel "$(part_dev "$dev" 1)")" = "$PART_ESP" ] || die "$dev nem FusionOS-lemez (nincs $PART_ESP az 1. partíción)"
+    [ "$(_partlabel "$(part_dev "$dev" 1)")" = "$PART_ESP" ] || die "$dev nem Fúzió-lemez (nincs $PART_ESP az 1. partíción)"
     local old_order old_first n new rest=""
     old_order=$(efibootmgr | sed -n 's/^BootOrder: //p')
-    # a korábbi FusionOS-bejegyzések törlése (újratelepítéskor megváltozik a partíció azonosítója)
-    for n in $(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *FusionOS\b.*/\1/p'); do
-        efibootmgr -q -b "$n" -B && info "régi FusionOS-bejegyzés törölve: Boot$n"
+    # a korábbi Fúzió-bejegyzések törlése (újratelepítéskor megváltozik a partíció azonosítója)
+    for n in $(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *\(FusionOS\|Fuzio\)\(	.*\)\{0,1\}[[:space:]]*$/\1/p'); do
+        efibootmgr -q -b "$n" -B && info "régi Fúzió-bejegyzés törölve: Boot$n"
         old_order=$(printf '%s' "$old_order" | tr ',' '\n' | grep -vix "$n" | paste -sd, -)
     done
-    efibootmgr -q -c -d "$dev" -p 1 -L "FusionOS" -l '\EFI\BOOT\BOOTX64.EFI' || die "az efibootmgr nem hozta létre a bejegyzést"
-    new=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *FusionOS\b.*/\1/p' | head -n 1)
-    [ -n "$new" ] || die "a FusionOS-bejegyzés nem látszik az efibootmgr listájában"
-    # sorrend: az eddigi első (a Mint) marad elöl, utána a FusionOS, majd a többi
+    efibootmgr -q -c -d "$dev" -p 1 -L "Fuzio" -l '\EFI\BOOT\BOOTX64.EFI' || die "az efibootmgr nem hozta létre a bejegyzést"
+    new=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] *\(FusionOS\|Fuzio\)\(	.*\)\{0,1\}[[:space:]]*$/\1/p' | head -n 1)
+    [ -n "$new" ] || die "a Fúzió-bejegyzés nem látszik az efibootmgr listájában"
+    # sorrend: az eddigi első (a Mint) marad elöl, utána a Fúzió, majd a többi
     old_first=$(printf '%s' "$old_order" | cut -d, -f1)
     rest=$(printf '%s' "$old_order" | tr ',' '\n' | sed '1d' | grep -vix "$new" | paste -sd, -)
     if [ -n "$old_first" ]; then
         efibootmgr -q -o "$old_first,$new${rest:+,$rest}" || warn "a boot-sorrend nem állítható vissza — ellenőrizd: efibootmgr"
     fi
-    [ -n "$quiet" ] || efibootmgr | sed -n '/^BootOrder\|FusionOS\|^Boot'"$old_first"'/p' | sed 's/^/      /'
-    ok "UEFI-bejegyzés: Boot$new „FusionOS” — F9 menüben választható; az alapértelmezett indítás változatlan."
+    [ -n "$quiet" ] || efibootmgr | sed -n '/^BootOrder\|FusionOS\|Fuzio\|^Boot'"$old_first"'/p' | sed 's/^/      /'
+    ok "UEFI-bejegyzés: Boot$new „Fuzio” — F9 menüben választható; az alapértelmezett indítás változatlan."
 }

@@ -1,4 +1,4 @@
-"""kulcs = érték fájlok — a FusionOS leíróinak egyetlen olvasója / írója
+"""kulcs = érték fájlok — a Fúzió leíróinak egyetlen olvasója / írója
 
 Formátum: soronként `kulcs = érték`, `#` megjegyzés, üres sor. A Hardware Layer kimenete (display.env) shell-idézett:
 `KULCS='érték'` (shell=True: az idézőjeleket a shell szabályai szerint oldja fel).

@@ -1,4 +1,4 @@
-"""FusionOS — Fusion Shell: irányítópult (az asztalon, minden ablak alatt)
+"""Fúzió — Fúzió Shell: irányítópult (az asztalon, minden ablak alatt)
 
 Egy pillantásra: lézer, 3D nyomtató (Klipper: állapot, nyomtatás, hőmérsékletek), hálózat,
 rendszer (CPU, hőmérséklet, memória, akkumulátor, DATA), meghajtók, gyorsindítás.
@@ -85,7 +85,7 @@ def system_status():
 
 
 def _battery():
-    """az első akkumulátor (a Fusion API fusion.power) — akkumulátor nélküli gépen üres"""
+    """az első akkumulátor (a Fúzió API fusion.power) — akkumulátor nélküli gépen üres"""
     bs = fpower.batteries()
     if not bs:
         return {}

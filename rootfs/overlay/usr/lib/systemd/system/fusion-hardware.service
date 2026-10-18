@@ -1,5 +1,5 @@
 [Unit]
-Description=Fusion Hardware Layer — grafikus hardver azonosítása és driver betöltése
+Description=Fúzió Hardware Layer — grafikus hardver azonosítása és driver betöltése
 DefaultDependencies=no
 After=systemd-udevd.service systemd-udev-trigger.service systemd-modules-load.service
 Wants=systemd-udev-trigger.service

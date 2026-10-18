@@ -1,7 +1,7 @@
 #!/usr/bin/python3
-"""FusionOS — Lemezkezelő: lemezek és partíciók megtekintése, állapot (SMART), formázás, címke,
+"""Fúzió — Lemezkezelő: lemezek és partíciók megtekintése, állapot (SMART), formázás, címke,
 partíció létrehozása és törlése. A rendszerműveletek a szűk jogú segéden át mennek
-(sudo -n fusion-admin disk …  →  fusion-disk); a FusionOS saját lemeze csak megtekinthető.
+(sudo -n fusion-admin disk …  →  fusion-disk); a Fúzió saját lemeze csak megtekinthető.
 
     fusion-disks              az ablak (ha már fut: előre hozza)
     fusion-disks --selftest   önteszt: a lemezlista, a rendszerlemez védelme, a felület betöltése
@@ -19,7 +19,7 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSl
 
 FS_NAMES = {"vfat": "FAT32", "exfat": "exFAT", "ntfs": "NTFS", "ext4": "ext4", "ext3": "ext3", "ext2": "ext2",
             "btrfs": "Btrfs", "xfs": "XFS", "swap": "Linux swap", "iso9660": "CD/DVD-kép (ISO 9660)",
-            "udf": "UDF", "erofs": "EROFS (FusionOS rendszerkép)", "crypto_LUKS": "titkosított (LUKS)",
+            "udf": "UDF", "erofs": "EROFS (Fúzió rendszerkép)", "crypto_LUKS": "titkosított (LUKS)",
             "LVM2_member": "LVM", "linux_raid_member": "RAID", "BitLocker": "titkosított (BitLocker)"}
 MOUNTABLE = {"vfat", "exfat", "ntfs", "ext2", "ext3", "ext4", "btrfs", "xfs", "iso9660", "udf"}
 KIND_NAMES = {"usb": "USB", "sd": "SD-kártya", "nvme": "NVMe SSD", "ssd": "SSD", "hdd": "merevlemez"}
@@ -59,7 +59,7 @@ def decorate(data, smart_cache):
             q["mountable"] = p["fstype"] in MOUNTABLE and not p["locked"] and not d["system"] and not p["fusionpart"]
             q["editable"] = not p["locked"] and not d["system"] and not p["fusionpart"] and not d["ro"] and not p["extended"]
             q["storage"] = bool(p.get("storage"))
-            # Adatlemez lehet: belső lemez csatolható partíciója (a FusionOS saját lemezén kívül)
+            # Adatlemez lehet: belső lemez csatolható partíciója (a Fúzió saját lemezén kívül)
             q["storageOk"] = q["mountable"] and not d["removable"] and not q["storage"]
             if q["storage"]:
                 q["title"] = q["title"] + " — Adatlemez"

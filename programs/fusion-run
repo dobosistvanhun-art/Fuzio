@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS — program indítása a Programkezelő leírása alapján (Start menü, Fájlkezelő, .desktop)
+# Fúzió — program indítása a Programkezelő leírása alapján (Start menü, Fájlkezelő, .desktop)
 #   fusion-run <id> [fájl…]
 # Hibát értesítésben is jelez (a Start menüből indítva nincs terminál).
 [ $# -ge 1 ] || { echo "használat: fusion-run <program-azonosító> [fájl…]" >&2; exit 2; }

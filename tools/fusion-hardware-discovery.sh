@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  FusionOS — Phase 0: Hardware Discovery
+#  Fúzió — Phase 0: Hardware Discovery
 #  fusion-hardware-discovery.sh  v0.1.1
 #
 #  Célgép: HP ZBook 15 G2 (a jelenlegi Linux Mint telepítésen futtatandó)
 #
 #  Mit csinál:
-#    Összegyűjti a FusionOS kernel-, driver-, display-, boot- és eszközdöntéseihez
+#    Összegyűjti a Fúzió kernel-, driver-, display-, boot- és eszközdöntéseihez
 #    szükséges hardver- és driverinformációkat EGYETLEN szövegfájlba:
 #        ./fusion-hardware-report.txt
 #    A végén automatikus összefoglalót készít:
@@ -213,14 +213,14 @@ LSUSB="$(lsusb 2>/dev/null)"
 # =============================================================================
 : > "$REPORT" || { echo "HIBA: nem írható: $REPORT" >&2; exit 1; }
 
-echo "FusionOS Phase 0 — Hardware Discovery v$SCRIPT_VERSION"
+echo "Fúzió Phase 0 — Hardware Discovery v$SCRIPT_VERSION"
 echo "Jelentés: $REPORT"
 [ "$IS_ROOT" -ne 1 ] && echo "FIGYELEM: root nélkül fut — a root-igényes részek kimaradnak. Teljes jelentés: sudo bash $SCRIPT_NAME"
 echo
 
 {
     echo "$SEP"
-    echo " FusionOS — Hardware Discovery Report"
+    echo " Fúzió — Hardware Discovery Report"
     echo "$SEP"
     echo " Script verzió : $SCRIPT_VERSION"
     echo " Időpont       : $(date '+%Y-%m-%d %H:%M:%S %z')"
@@ -636,7 +636,7 @@ fi
 if [ -d /sys/firmware/efi ]; then
     hw "Boot: UEFI mód ($(sysval /sys/firmware/efi/fw_platform_size)-bit)"
 else
-    warn "A rendszer Legacy BIOS/CSM módban bootolt — a FusionOS UEFI-t céloz"
+    warn "A rendszer Legacy BIOS/CSM módban bootolt — a Fúzió UEFI-t céloz"
 fi
 case "$SB_STATE" in
     enabled)
@@ -718,7 +718,7 @@ if [ "$TARGET_USER" != "root" ] && ! id -nG "$TARGET_USER" 2>/dev/null | grep -q
     warn "A(z) '$TARGET_USER' felhasználó nincs a 'dialout' csoportban — soros portok (GRBL/Klipper) root nélkül nem érhetők el"
 fi
 if have systemctl && [ "$(systemctl is-active ModemManager 2>/dev/null)" = "active" ]; then
-    warn "A ModemManager fut — lefoglalhatja a ttyACM eszközöket (Klipper MCU / GRBL); a FusionOS-ben ezt kezelni kell"
+    warn "A ModemManager fut — lefoglalhatja a ttyACM eszközöket (Klipper MCU / GRBL); a Fúzióban ezt kezelni kell"
 fi
 if ls /usr/lib/udev/rules.d/*brltty* /lib/udev/rules.d/*brltty* >/dev/null 2>&1; then
     warn "A brltty udev szabályai telepítve vannak — ismert, hogy lefoglalja a CH340 alapú USB-soros eszközöket (sok GRBL lézer ilyen)"

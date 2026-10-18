@@ -1,2 +1,2 @@
-# FusionOS: a gyökeret (overlay: EROFS rendszerkép + DATA), a csak olvasható /usr-t
+# Fúzió: a gyökeret (overlay: EROFS rendszerkép + DATA), a csak olvasható /usr-t
 # és a /data-t a fusion-init csatolja az initramfs-ben. Itt nincs teendő.

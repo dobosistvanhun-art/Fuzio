@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# telepítő pendrive (T2) — a FusionOS telepítő módban (fusion.installer): Fusion Telepítő a céllemezre.
+# telepítő pendrive (T2) — a Fúzió telepítő módban (fusion.installer): Fúzió Telepítő a céllemezre.
 #
 #   installer-image            a telepítő lemezképe: build/out/<változat>/fusionos-telepito.img (root nélkül; az 'all' része)
 #   installer <eszköz>         a telepítő felírása egy USB-pendrive-ra (root: sudo build/fusion-build installer /dev/sdX)
@@ -18,11 +18,11 @@ _inst_img() { printf '%s/fusionos-telepito.img' "$(variant_dir)"; }
 
 _inst_readme() {
     cat <<EOF
-FusionOS telepítő pendrive ($FUSION_VERSION, $FUSION_MILESTONE)
+Fúzió telepítő pendrive ($FUSION_VERSION, $FUSION_MILESTONE)
 
-Indítás: a gép boot menüje (ZBook: F9) -> ez a pendrive. A Fusion Telepítő:
+Indítás: a gép boot menüje (ZBook: F9) -> ez a pendrive. A Fúzió Telepítő:
   - új telepítés egy lemezre (a lemez TELJES tartalma törlődik), vagy
-  - újratelepítés egy meglévő FusionOS-lemezre a DATA megőrzésével (programok, Wi-Fi, beállítások maradnak).
+  - újratelepítés egy meglévő Fúzió-lemezre a DATA megőrzésével (programok, Wi-Fi, beállítások maradnak).
 
 Ebben a mappában:
   fusionos-*.fupd     a telepítendő rendszer — kicserélhető egy újabb .fupd fájlra (egyszerre csak egy legyen itt)
@@ -114,5 +114,5 @@ step_installer() {
     # a GPT tartalék fejléce a pendrive végére (a lemezkép kisebb a pendrive-nál)
     sfdisk --quiet --relocate gpt-bak-std "$dev" >/dev/null 2>&1 || warn "a GPT tartalék fejléce nem helyezhető át (nem baj)"
     udevadm settle
-    ok "kész. A pendrive-ról: F9 (boot menü) → a pendrive UEFI-bejegyzése → Fusion Telepítő."
+    ok "kész. A pendrive-ról: F9 (boot menü) → a pendrive UEFI-bejegyzése → Fúzió Telepítő."
 }

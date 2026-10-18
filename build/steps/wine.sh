@@ -1,9 +1,9 @@
 # shellcheck shell=bash
-# wine — KÍSÉRLETI M4-MEGOLDÁS (proof-of-concept), nem a FusionOS végleges architektúrája.
+# wine — KÍSÉRLETI M4-MEGOLDÁS (proof-of-concept), nem a Fúzió végleges architektúrája.
 #
-# Az M4 funkcionális követelménye: a Windows-os LightBurn x64 fusson a FusionOS alatt, és a
+# Az M4 funkcionális követelménye: a Windows-os LightBurn x64 fusson a Fúzió alatt, és a
 # valódi GRBL lézervezérlőt USB-n, COM3-ként érje el. Ehhez az M4-ben egy kísérleti
-# futtató kell; ez most a Wine, forrásból fordítva. A FusionOS-szintű rész ettől független:
+# futtató kell; ez most a Wine, forrásból fordítva. A Fúzió-szintű rész ettől független:
 # a COM3 a Fusion eszközréteg (M3) szerepére mutat (/dev/fusion/laser).
 #
 # Miért forrásból: az új WoW64 mód (egy 64 bites Wine futtat 32 és 64 bites
@@ -55,7 +55,7 @@ libxinerama-dev,libxcomposite-dev,libxrender-dev,libxxf86vm-dev,libxkbfile-dev,b
 # a fordítás receptjének változata: ha a fusion-build.sh lépései érdemben változnak, növelni kell
 WINE_BUILD_REV=3
 
-# a Wine konfigurációja: WoW64, csak a FusionOS-ben használt alrendszerek
+# a Wine konfigurációja: WoW64, csak a Fúzióban használt alrendszerek
 WINE_CONFIGURE="--prefix=/usr/lib/fusion/wine --enable-archs=i386,x86_64 --disable-tests \
 --with-x --with-gnutls --with-freetype --with-fontconfig --with-opengl --with-vulkan --with-dbus \
 --without-wayland --without-pulse --without-alsa --without-oss --without-gstreamer --without-ffmpeg \

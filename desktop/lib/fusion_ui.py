@@ -1,6 +1,6 @@
-"""FusionOS — Fusion Desktop: közös Python-rész a QML-programokhoz (Qt 6 / PyQt6)
+"""Fúzió — Fúzió Desktop: közös Python-rész a QML-programokhoz (Qt 6 / PyQt6)
 
-A Fusion Desktop programjai (Fusion Shell, Fájlkezelő, Beállítások) ugyanígy indulnak:
+A Fúzió Desktop programjai (Fúzió Shell, Fájlkezelő, Beállítások) ugyanígy indulnak:
   - Qt Quick (QML) felület, a közös FusionUI QML-modullal (téma, gombok, ikonok)
   - Python háttérrész (QObject), a QML ezt hívja
 Ez a modul adja az indítást, a téma színeit Pythonnak, és néhány rendszerhívást
@@ -45,7 +45,7 @@ def fusion_release():
 
 def fusion_version():
     v = fusion_release().get("FUSION_VERSION", "")
-    return ("FusionOS " + v).strip()
+    return ("Fúzió " + v).strip()
 
 
 def run(cmd, timeout=10, env=None):
@@ -77,8 +77,8 @@ def admin(*args, timeout=60):
     return run(["sudo", "-n", ADMIN] + [str(a) for a in args], timeout=timeout)
 
 
-def notify(summary, body="", icon="", app="FusionOS", timeout_ms=-1, urgency="normal"):
-    """értesítés a Fusion Shellnek — a Fusion API egyetlen küldőjén át (fusion.notify)"""
+def notify(summary, body="", icon="", app="Fúzió", timeout_ms=-1, urgency="normal"):
+    """értesítés a Fúzió Shellnek — a Fúzió API egyetlen küldőjén át (fusion.notify)"""
     from fusion import notify as _n
     return _n.send(summary, body, icon, app, urgency, timeout_ms)
 
@@ -118,7 +118,7 @@ class Sys(QObject):
         return fusion_version()
 
 
-# a rajzolási mód a Fusion API-ban (Qt nélkül, a parancssor és a hibajelentés is ezt használja)
+# a rajzolási mód a Fúzió API-ban (Qt nélkül, a parancssor és a hibajelentés is ezt használja)
 from fusion.ui import RENDER_FILE, render_forced, render_mode  # noqa: E402,F401
 
 
@@ -127,7 +127,7 @@ def create_app(name, title, icon="app", software_ok=True):
     (a Qt Quick szoftveres rajzolója a videót — VideoOutput — nem jeleníti meg; ZBook, 0.0.41: fekete kamera-élőkép)"""
     if render_mode() == "software" and software_ok:
         # mérés (0.0.30): a Qt Quick szoftveres rajzolója OpenGL nélkül — kevesebb memória, több CPU.
-        # API-hívás, nem környezeti változó: a Fusion-programokból indított más programokat nem érinti.
+        # API-hívás, nem környezeti változó: a Fúzió-programokból indított más programokat nem érinti.
         from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
         QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Software)
     app = QGuiApplication(sys.argv)

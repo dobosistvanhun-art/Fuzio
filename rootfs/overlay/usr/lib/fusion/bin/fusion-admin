@@ -1,8 +1,8 @@
 #!/bin/sh
 # =============================================================================
-#  FusionOS — fusion-admin: a Fusion Desktop szűk jogú rendszersegédje (root)
+#  Fúzió — fusion-admin: a Fúzió Desktop szűk jogú rendszersegédje (root)
 #
-#  A grafikus programok (Fusion Shell, Fájlkezelő, Beállítások) ezen át végeznek
+#  A grafikus programok (Fúzió Shell, Fájlkezelő, Beállítások) ezen át végeznek
 #  rendszerműveletet: sudo -n /usr/lib/fusion/bin/fusion-admin <parancs> (a sudo
 #  csoportnak jelszó nélkül, /etc/sudoers.d/fusion-admin). Csak az alábbi,
 #  ellenőrzött paraméterű parancsokat ismeri — tetszőleges parancsot nem futtat.
@@ -19,15 +19,15 @@
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
 #    update-status [--json]           az A/B rendszerfrissítés állapota (csak olvas)
 #    update-apply <fájl.fupd>         rendszerfrissítés az inaktív slotba (fusion-update apply)
-#    update-reboot                    újraindítás a FusionOS-be (UEFI BootNext)
+#    update-reboot                    újraindítás a Fúzióba (UEFI BootNext)
 #    disk list [--smart] | format-disk | format | label | create | delete …
-#                                     Fusion Lemezkezelő (fusion-disk; a paramétereket az ellenőrzi,
+#                                     Fúzió Lemezkezelő (fusion-disk; a paramétereket az ellenőrzi,
 #                                     a lemezíró műveletekhez a lemez nevét is meg kell adni)
 #    report                           a hibajelentés rendszeroldali része (fusion-report --system; csak olvas)
 #    install list | run <lemez> <new|keep-data> <megerősítés> [--restore <mentés>] [--wifi] | report
-#                                     Fusion Telepítő (fusion-install) — csak a telepítő pendrive-ról indítva
+#                                     Fúzió Telepítő (fusion-install) — csak a telepítő pendrive-ról indítva
 #    installer-media <fájl.fupd> <lemez> <megerősítés>
-#                                     telepítő pendrive készítése egy .fupd-ből (a futó FusionOS-ből is)
+#                                     telepítő pendrive készítése egy .fupd-ből (a futó Fúzióból is)
 #    backup list | create <kötet>     a DATA mentése egy csatolt külső kötetre (fusion-backup)
 #    devbox status|create|remove doboz | run [--cwd <mappa>] [-- <parancs…>]
 #                                     Fejlesztődoboz (fusion-devbox): Ubuntu 24.04 a DATA-n, systemd-nspawn
@@ -35,7 +35,7 @@
 #                                     UEFI indítási bejegyzések (fusion-bootentries)
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
-#    - a FusionOS saját lemeze (amelyről indult) és a FUSION_* partíciók soha
+#    - a Fúzió saját lemeze (amelyről indult) és a FUSION_* partíciók soha
 #    - fájlrendszer: vfat, exfat, ntfs (ntfs3), ext2/3/4, btrfs, xfs, iso9660, udf
 #    - FAT/exFAT/NTFS: a munkamenet felhasználójáé (uid/gid), a jogok 755/644
 #    - ha írhatóan nem csatolható (pl. hibernált Windows NTFS-e), csak olvashatóan
@@ -43,7 +43,7 @@
 #  a belső lemezek (pl. a Mint lemeze) csak kérésre (Fájlkezelő → Ez a gép).
 # =============================================================================
 set -u
-MEDIA_USER=fusion     # a FusionOS felhasználója (customize.sh hozza létre)
+MEDIA_USER=fusion     # a Fúzió felhasználója (customize.sh hozza létre)
 MEDIA=/run/media/$MEDIA_USER   # szabványos hely: a GTK / Qt fájlválasztók eszközként mutatják
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -92,8 +92,8 @@ check_allowed() {   # a rendszer saját kötetei nem csatolhatók / választhat�
     d=$1
     boot=$(cat /run/fusion/boot-disk 2>/dev/null)
     disk=$(parent_disk "$d")
-    [ -n "$boot" ] && [ "$disk" = "$boot" ] && fail "a FusionOS saját lemeze ($boot) — nem kezelhető innen"
-    case "$(prop "$d" PART_ENTRY_NAME)" in FUSION_*) fail "FusionOS-partíció ($(prop "$d" PART_ENTRY_NAME)) — nem csatolható" ;; esac
+    [ -n "$boot" ] && [ "$disk" = "$boot" ] && fail "a Fúzió saját lemeze ($boot) — nem kezelhető innen"
+    case "$(prop "$d" PART_ENTRY_NAME)" in FUSION_*) fail "Fúzió-partíció ($(prop "$d" PART_ENTRY_NAME)) — nem csatolható" ;; esac
     if mounts_of "$d" | grep -qv "^$MEDIA/"; then
         fail "a rendszer használja: $(mounts_of "$d" | grep -v "^$MEDIA/" | head -n 1)"
     fi

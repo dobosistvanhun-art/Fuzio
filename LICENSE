@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Dobos István ("Lézer") — https://github.com/dobosistvanhun-art/FusionOS
+Copyright (c) 2026 Dobos István ("Lézer") — Fúzió (korábban FusionOS), https://github.com/dobosistvanhun-art/Fuzio
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,11 @@ SOFTWARE.
 
 ---------------------------------------------------------------------------
 Magyarul (tájékoztató, a fenti angol szöveg a mérvadó):
-A FusionOS forrása szabadon használható, másolható, módosítható és terjeszthető —
+A Fúzió forrása szabadon használható, másolható, módosítható és terjeszthető —
 akár üzleti célra is — azzal a feltétellel, hogy a fenti szerzői jogi megjegyzés
 (a forrás megjelölése) és ez az engedély minden másolatban megmarad.
 A szoftver garancia nélkül, „ahogy van” állapotban érhető el.
 
 A kész rendszerképekben lévő külső programokra (Linux kernel, Ubuntu-csomagok, Qt,
 Wine, NVIDIA-illesztő stb.) a saját licencük vonatkozik; ez a licenc csak a
-FusionOS saját forrására (ez a tároló) érvényes.
+Fúzió saját forrására (ez a tároló) érvényes.

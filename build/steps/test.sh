@@ -1,14 +1,14 @@
 # shellcheck shell=bash
 # test — automatikus EFI boot-teszt QEMU + OVMF alatt (fejlesztői ellenőrzés).
 #
-# FusionOS (alapértelmezett boot-bejegyzés), a soros naplóból ellenőrizve:
+# Fúzió (alapértelmezett boot-bejegyzés), a soros naplóból ellenőrizve:
 #   std    + SATA  -> QEMU std VGA (1234:1111)   -> profil: generic-kms
 #   vmware + SATA  -> VMware SVGA II (15ad:0405) -> profil: vmware-svga (= VirtualBox VMSVGA), driver: vmwgfx
 #   std    + USB   -> a lemezkép USB-pendrive-ként (xHCI + usb-storage), mint a ZBookon
 # Diagnosztika (a boot menü második bejegyzése):
 #   std    + USB   -> az M0 ellenőrző képernyő
 #
-# Minden FusionOS-futásnál: systemd "running", gyökér-overlay, /usr csak olvasható
+# Minden Fúzió-futásnál: systemd "running", gyökér-overlay, /usr csak olvasható
 # (EROFS), /data ext4, A slot, getty, nincs hibás szolgáltatás, magyar locale.
 
 _ovmf_code() {
@@ -166,7 +166,7 @@ _test_ab() {
     local ok_run=1 tries
     _check "$log" "FUSION-AB: BOOT step=good slot=A" "1. indítás: A slot" || ok_run=0
     _check "$log" "FUSION-AB: GUARD fusion-admin: " "a segéd csak engedélyezett helyről telepít" || ok_run=0
-    _check "$log" "FUSION-AB:   frissítőcsomag: FusionOS .* — good.fupd" "telepítés .fupd fájlból, a felhasználó (fusion-admin)" || ok_run=0
+    _check "$log" "FUSION-AB:   frissítőcsomag: Fúzió .* — good.fupd" "telepítés .fupd fájlból, a felhasználó (fusion-admin)" || ok_run=0
     _check "$log" "FUSION-AB: APPLY good rc=0" "frissítés a B slotba" || ok_run=0
     _check "$log" "FUSION-AB: BOOT step=bad slot=B .*count=.*B+" "2. indítás: B, próbaként (számlálóval)" || ok_run=0
     _check "$log" "FUSION-AB: STATE VÉGLEGESÍTVE: fusionos-.*-B.efi" "a B véglegesítve (a számláló lekerült)" || ok_run=0
@@ -192,7 +192,7 @@ _test_installer() {
     [ -r "$out/fusionos-telepito.img" ] || FUSION_VARIANT="test" step_installer_image
     rm -f "$out/target.img" "$out/t3backup.img" "$out/t3media.img"
     truncate -s 12G "$out/target.img"; truncate -s 4G "$out/t3backup.img"; truncate -s 3G "$out/t3media.img"
-    # T3: mentőlemez (FUSIONBACKUP) és egy üres pendrive a FusionOS-ben készülő telepítőnek (FUSIONMEDIA)
+    # T3: mentőlemez (FUSIONBACKUP) és egy üres pendrive a Fúzióban készülő telepítőnek (FUSIONMEDIA)
     # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
     QEMU_EXTRA=(-drive "file=$out/fusionos-telepito.img,format=raw,if=none,id=inst0,snapshot=on"
                 -device qemu-xhci,id=ixhci -device "usb-storage,drive=inst0,bus=ixhci.0,removable=on,bootindex=1"
@@ -202,7 +202,7 @@ _test_installer() {
     QEMU_DISK="$out/target.img" QEMU_SNAPSHOT=off QEMU_REBOOT=1 QEMU_DISK_OPTS="serial=FUSIONTARGET,bootindex=0" QEMU_TIMEOUT=7200 \
         _qemu_run installer std sata "$log" "FUSION-M1: POWEROFF"
     _check "$log" "FUSION-INST: BOOT slot=I installer=1 data=tmpfs state=running failed=0" "a telepítő pendrive elindul (telepítő mód, írható réteg RAM-ban)" || ok_run=0
-    _check "$log" "FUSION-INST: WINDOW 1" "a Fusion Telepítő ablaka megjelenik" || ok_run=0
+    _check "$log" "FUSION-INST: WINDOW 1" "a Fúzió Telepítő ablaka megjelenik" || ok_run=0
     _check "$log" "FUSION-INSTALLER: PAYLOAD ok" "a telepítendő .fupd a pendrive-on" || ok_run=0
     _check "$log" "FUSION-INSTALLER: RESULT ok" "a telepítő lemezlistája és felülete" || ok_run=0
     _check "$log" "FUSION-INST: GUARD .*nem egyezik.* | .*telepítő pendrive | .*DATA megőrzésével csak" "védelem: megerősítés, a telepítő pendrive, a DATA-megőrzés feltétele" || ok_run=0
@@ -212,13 +212,13 @@ _test_installer() {
     _check "$log" "FUSION-M1: SLOT A" "A slot" || ok_run=0
     _check "$log" "FUSION-M7: BOOTCHECK ok: véglegesített rendszer" "a telepített rendszer véglegesített (nem próba)" || ok_run=0
     _check "$log" "FUSION-M1: FAILEDCOUNT 0" "a telepített rendszeren nincs hibás szolgáltatás" || ok_run=0
-    _check "$log" "FUSION-M6: SHELL ready=yes" "Fusion Desktop a telepített rendszeren" || ok_run=0
-    # T3: mentés és telepítő pendrive a futó FusionOS-ből; indítás az új pendrive-ról; új telepítés a mentésből
+    _check "$log" "FUSION-M6: SHELL ready=yes" "Fúzió Desktop a telepített rendszeren" || ok_run=0
+    # T3: mentés és telepítő pendrive a futó Fúzióból; indítás az új pendrive-ról; új telepítés a mentésből
     _check "$log" "FUSION-T3: BACKUP rc=0 .*complete=True" "DATA mentése egy külső lemezre (fusion-backup)" || ok_run=0
     _check "$log" "FUSION-T3: LIST targets=[1-9] backups=1" "a mentés a listában" || ok_run=0
-    _check "$log" "FUSION-T3: MEDIA rc=0 .*parts=FUSION_IESP,FUSION_ISYS,FUSION_IPAY guard=1" "telepítő pendrive a FusionOS-ből (.fupd-ből), gépelt megerősítéssel" || ok_run=0
+    _check "$log" "FUSION-T3: MEDIA rc=0 .*parts=FUSION_IESP,FUSION_ISYS,FUSION_IPAY guard=1" "telepítő pendrive a Fúzióból (.fupd-ből), gépelt megerősítéssel" || ok_run=0
     _check "$log" "FUSION-T3: BOOTNEXT ok" "indítás az új telepítő pendrive-ról (UEFI BootNext)" || ok_run=0
-    _check "$log" "FUSION-T3: MEDIA-BOOT FUSIONMEDIA" "a FusionOS-ben készült telepítő pendrive elindul" || ok_run=0
+    _check "$log" "FUSION-T3: MEDIA-BOOT FUSIONMEDIA" "a Fúzióban készült telepítő pendrive elindul" || ok_run=0
     _check "$log" "FUSION-T3: RESTORE rc=0 .*marker=mentett wifi=1" "új telepítés a mentésből, Wi-Fi átvétele" || ok_run=0
     _check "$log" "FUSION-M1: BOOTDISK sda MARKER mentett" "a visszaállított rendszer elindul (a mentett DATA-val)" || ok_run=0
     grep -a 'FUSION-T3: [A-Z]' "$log" | sed 's/^/      /' >&2
@@ -236,7 +236,7 @@ step_test() {
     [ -r "$(rootfs_img)" ] || die "nincs rendszerkép — előbb: build/fusion-build all"
     local out="$OUT_DIR/test" fails=0 cfg vga bus want log drv desk ok_run
 
-    step "Egységtesztek (rendszer nélkül): Hardware Layer, Fusion API"
+    step "Egységtesztek (rendszer nélkül): Hardware Layer, Fúzió API"
     sh "$FUSION_ROOT/tests/hwprobe-test.sh" > "$out.unit.log" 2>&1 || { cat "$out.unit.log"; die "hwprobe-test sikertelen"; }
     python3 "$FUSION_ROOT/tests/fusion-api-test.py" >> "$out.unit.log" 2>&1 || { cat "$out.unit.log"; die "fusion-api-test sikertelen"; }
     grep '^Eredmény' "$out.unit.log" | sed 's/^/    /'
@@ -274,7 +274,7 @@ step_test() {
             # 0.0.47: a USB-lemezes futás 1800 mp-nél a végén vágta el — a USB-lemez lassabb)
             QEMU_EXTRA=(); QEMU_HOTPLUG=0; QEMU_TIMEOUT=3000
         fi
-        step "QEMU EFI boot → FusionOS: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
+        step "QEMU EFI boot → Fúzió: -vga $vga, lemez: $bus (várt profil: $want)$serinfo"
         _qemu_run "$cfg" "$vga" "$bus" "$log" "FUSION-M1: SYSTEM UP"
         ok_run=1
         _check "$log" "FUSION-M1: SYSTEM UP state=running" "systemd fut, hibátlanul" || ok_run=0
@@ -292,17 +292,17 @@ step_test() {
         _check "$log" "FUSION-M1: ROOTOWNER root UNSAFE 0" "a gyökér a root tulajdona, nincs 'unsafe path' figyelmeztetés" || ok_run=0
         _check "$log" "FUSION-M1: FAILEDCOUNT 0" "nincs hibás szolgáltatás" || ok_run=0
         if [ "$desk" -eq 1 ]; then
-            _check "$log" "FUSION-M2: XORG up" "Fusion Desktop: Xorg fut" || ok_run=0
+            _check "$log" "FUSION-M2: XORG up" "Fúzió Desktop: Xorg fut" || ok_run=0
             _check "$log" "FUSION-M2: GL renderer=[^ ]" "OpenGL renderer" || ok_run=0
             _check "$log" "FUSION-M2: WM jwm" "ablakkezelő" || ok_run=0
             _check "$log" "FUSION-M2: XKB hu" "magyar billentyűzet az X-ben" || ok_run=0
-            # M6: Fusion Shell — mindkét mérőváltozat: panel (dock, 40 px foglalás), Start menü
-            # M6: Fusion Desktop — Shell (panel, Start menü, értesítés), Fájlkezelő, Beállítások
-            _check "$log" "FUSION-M6: SHELL ready=yes .*panel=1 .*menu=1" "Fusion Shell: panel és Start menü" || ok_run=0
+            # M6: Fúzió Shell — mindkét mérőváltozat: panel (dock, 40 px foglalás), Start menü
+            # M6: Fúzió Desktop — Shell (panel, Start menü, értesítés), Fájlkezelő, Beállítások
+            _check "$log" "FUSION-M6: SHELL ready=yes .*panel=1 .*menu=1" "Fúzió Shell: panel és Start menü" || ok_run=0
             _check "$log" 'FUSION-M6: USERDIRS XDG_DOWNLOAD_DIR="$HOME/Letöltések" dir=van' "Letöltések mappa (XDG)" || ok_run=0
             _check "$log" "FUSION-M6: FLATPAK-DL path=/home/fusion/Letöltések host=/home/fusion/Letöltések/fusion-flatpak-letoltes.AppImage" "Flatpak-program letöltése a valódi Letöltések mappába" || ok_run=0
             _check "$log" "FUSION-M6: X11 _NET_WM_WINDOW_TYPE_DOCK strut=40" "panel: dock, 40 px foglalás" || ok_run=0
-            _check "$log" "FUSION-M6: NOTIFY rc=0 last=FusionOS önteszt toasts=[1-9]" "értesítés a D-Buson (org.freedesktop.Notifications) → buborék" || ok_run=0
+            _check "$log" "FUSION-M6: NOTIFY rc=0 last=Fúzió önteszt toasts=[1-9]" "értesítés a D-Buson (org.freedesktop.Notifications) → buborék" || ok_run=0
             _check "$log" "FUSION-FILES: RESULT ok" "Fájlkezelő: másolás, mozgatás, törlés, archívumok, keresés, összehasonlítás" || ok_run=0
             _check "$log" "FUSION-M6: FILES window=1" "Fájlkezelő ablak" || ok_run=0
             _check "$log" "FUSION-WIFI: FUSION-SETTINGS: WIFI ok=True device=wlan[0-9] state=connected ssid=FusionTeszt networks=.*FusionTeszt\\*" "Beállítások → Wi-Fi: állapot és hálózatlista (iwd a D-Buson)" || ok_run=0
@@ -312,17 +312,17 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: UPDATE version=$FUSION_VERSION slot=A entries=A:ok\* files=0 error=-" "Beállítások → Rendszerfrissítés: állapot (sudo fusion-admin update-status)" || ok_run=0
             _check "$log" "FUSION-TASKS: RESULT ok" "Feladatkezelő: lefagyott ablak felismerése és bezárása" || ok_run=0
-            _check "$log" "FUSION-DISKS: GUARD ok" "Lemezkezelő: a FusionOS saját lemeze nem módosítható" || ok_run=0
+            _check "$log" "FUSION-DISKS: GUARD ok" "Lemezkezelő: a Fúzió saját lemeze nem módosítható" || ok_run=0
             _check "$log" "FUSION-DISKS: RESULT ok" "Lemezkezelő: lemezlista (sudo), felület" || ok_run=0
             _check "$log" "FUSION-SETTINGS: REPORT dir=/home/fusion/Letöltések" "Beállítások → Hibajelentés" || ok_run=0
             _check "$log" "FUSION-J3: RENDER set=ok mode=software pss=[0-9]*MB back=ok file=gpu" "felület rajzolása: szoftveres ↔ grafikus kártya (Beállítások → Kijelző)" || ok_run=0
             _check "$log" "FUSION-J3: PAM lastlog=0 login=0" "nincs pam_lastlog-hiba a naplóban" || ok_run=0
-            _check "$log" "FUSION-API: USER version=1 profile=generic-kms roles=laser,printer present=[a-z,-]* ROOT generic-kms (ok, driver: none)" "Fusion API (M8): a fusion csomag felhasználóként és rootként" || ok_run=0
-            _check "$log" "FUSION-API: NOTIFY ok" "Fusion API: értesítés a fusion-notify-on át" || ok_run=0
+            _check "$log" "FUSION-API: USER version=1 profile=generic-kms roles=laser,printer present=[a-z,-]* ROOT generic-kms (ok, driver: none)" "Fúzió API (M8): a fusion csomag felhasználóként és rootként" || ok_run=0
+            _check "$log" "FUSION-API: NOTIFY ok" "Fúzió API: értesítés a fusion-notify-on át" || ok_run=0
             # M8b: a fusion parancssor, sémák, feladat-protokoll
             _check "$log" "FUSION-CLI: JSON api-version=ok system=ok hardware=ok devices=ok volumes=ok power=ok jobs=ok schema=ok programs list=ok" "fusion CLI: minden lekérdezés JSON-ja a leírás szerint" || ok_run=0
             _check "$log" "FUSION-CLI: VERSION $FUSION_VERSION 1 generic-kms" "fusion system: verzió, API, kijelzőprofil" || ok_run=0
-            _check "$log" "FUSION-LASER: STATE ok present=[TF][a-z]* dev=" "Lézer állapot (M8d): a szerep a Fusion API-ból" || ok_run=0
+            _check "$log" "FUSION-LASER: STATE ok present=[TF][a-z]* dev=" "Lézer állapot (M8d): a szerep a Fúzió API-ból" || ok_run=0
             _check "$log" "FUSION-LASER: QML ok" "Lézer állapot: a felület betöltődik" || ok_run=0
             _check "$log" "FUSION-TRASH: count=2 auto=30 removed=1 left=friss.txt, count=1 auto=0 after=0" "Lomtár: automatikus ürítés 30 nap után, kikapcsolható, teljes ürítés" || ok_run=0
             _check "$log" "FUSION-PROGWIN: window=1 wait=" "a Programkezelő külön ablakban" || ok_run=0
@@ -349,7 +349,7 @@ step_test() {
             _check "$log" "FUSION-G1: VASKROM-LINK /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py menu=True" "Vas & Króm: indító és Start menü (Játékok)" || ok_run=0
             _check "$log" "FUSION-J8: MODULES uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm fw=[1-9][0-9]* groups=2 qtmm=ok" "kamera- és Bluetooth-modulok, Intel BT-firmware, csoportok, Qt Multimedia" || ok_run=0
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
-            _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fusion-színek, magyar menü" || ok_run=0
+            _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fúzió-színek, magyar menü" || ok_run=0
             _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
             _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
             _check "$log" "FUSION-T1: DEVTERM window=1 .*menu=True" "Fejlesztő terminál (Start → Rendszer)" || ok_run=0
@@ -361,7 +361,7 @@ step_test() {
             _check "$log" "FUSION-APPM: SANDBOX ok" "homokozó (bubblewrap) a fusion felhasználóként" || ok_run=0
             _check "$log" "FUSION-APPM: CA ok" "tanúsítványok a HTTPS-hez (ca-certificates)" || ok_run=0
             _check "$log" "FUSION-APPM: PROGRAMS-DIR ok" "/data/programs a fusion felhasználóé" || ok_run=0
-            _check "$log" "FUSION-APPM: PORTAL ok conf=ok" "asztali portálok telepítve, FusionOS-beállítás" || ok_run=0
+            _check "$log" "FUSION-APPM: PORTAL ok conf=ok" "asztali portálok telepítve, Fúzió-beállítás" || ok_run=0
             _check "$log" "FUSION-M6: PORTAL filechooser=v u [0-9]" "a portál elindul és fájlválasztót kínál (D-Bus)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: STORE categories=10 text=ok" "Programbolt: kategóriák, leírás-átalakítás" || ok_run=0
             _check "$log" "FUSION-SOUND: KERNEL cards=[1-9] hda=1" "hang: HDA-hangkártya a kernelben" || ok_run=0
@@ -378,16 +378,16 @@ step_test() {
             _check "$log" 'FUSION-DEV: STATUS {"node": "v22.99.0", "npm": "10.99.0", "wrangler": "4.99.0", "box": {"exists": [a-z]*.*}} owner=fusion path=/data/dev/node/bin/node /home/fusion/.local/bin/wrangler' "fejlesztői eszközök: Node.js a DATA-ra (ellenőrzőösszeggel), npm-csomag a saját mappába, PATH" || ok_run=0
             _check "$log" "FUSION-DEV: REMOVED 0" "Node.js eltávolítása" || ok_run=0
         fi
-        _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: FusionOS-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a FusionOS saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
+        _check "$log" "FUSION-M6: GUARD rc=1 fusion-admin: Fúzió-partíció\\|FUSION-M6: GUARD rc=1 fusion-admin: a Fúzió saját lemeze" "a rendszer saját kötete nem csatolható" || ok_run=0
         if [ "$cfg" = std-usb ]; then
-            _check "$log" "FUSION-M6: MEDIA none" "a FusionOS saját USB-lemeze nem csatolódik automatikusan" || ok_run=0
+            _check "$log" "FUSION-M6: MEDIA none" "a Fúzió saját USB-lemeze nem csatolódik automatikusan" || ok_run=0
         fi
         if [ "$ser" = 1 ]; then
             _check "$log" "FUSION-DEVBOX: CREATE rc=0 KÉSZ: Fejlesztődoboz" "Fejlesztődoboz: létrehozás (debootstrap, Ubuntu 24.04)" || ok_run=0
             _check "$log" "FUSION-DEVBOX: RUN user=fusion root=0 os=24.04 apt=[0-9.]* git=[0-9.]* home=/home/fusion shared=igen" "Fejlesztődoboz: parancs a felhasználó nevében, sudo, apt, git, közös saját mappa" || ok_run=0
             _check "$log" "FUSION-DEVBOX: REMOVE KÉSZ: a Fejlesztődoboz törölve left=nincs" "Fejlesztődoboz: törlés" || ok_run=0
             # 0.0.40: kamera (vivid), Bluetooth (btvirt a teszt-pendrive-ról), nyomtatás (CUPS, PDF) — csak ebben a futásban
-            _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fusion API listája (V4L2)" || ok_run=0
+            _check "$log" "FUSION-J8: CAMERAS 1 vivid-000-vid-cap:virtuális" "kamera: a Fúzió API listája (V4L2)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA FRAMES ok" "Kamera program: élőkép (Qt Multimedia, FFmpeg)" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA CAPTURE ok" "Kamera program: fénykép az élőképből" || ok_run=0
             _check "$log" "FUSION-J8: CAMERA VIDEO ok .*h264" "Kamera: videófelvétel (H.264, MP4)" || ok_run=0
@@ -417,7 +417,7 @@ step_test() {
             _check "$log" "FUSION-M4:   *CAM: MediaFrameSourceGroup.FindAllAsync OK" "Windows kamera-felsoroló (WinRT) — LightBurn 2.x induláshoz" || ok_run=0
             _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
             _check "$log" "FUSION-M4: SYSTRAY showsystray=1 notray=1" "a Wine saját tálcaablaka kikapcsolva" || ok_run=0
-            # Fusion Programkezelő: leírás-alapú programok (Windows: fwr, Linux: archívum), társítás, eltávolítás
+            # Fúzió Programkezelő: leírás-alapú programok (Windows: fwr, Linux: archívum), társítás, eltávolítás
             _check "$log" "FUSION-PROG: SYNC win64 prefix=/data/fwr/lightburn port=laser icon=icon.png" "a régi helyű LightBurn leírást kap, újratelepítés nélkül" || ok_run=0
             _check "$log" "FUSION-PROG: ASSOC-LBRN lightburn" "a .lbrn fájlt a LightBurn nyitja" || ok_run=0
             _check "$log" "FUSION-PROG: WIN rc=0 name=FusionTeszt exe=C:.Program Files.FusionTeszt.fusionteszt.exe icon=icon.png owner=fusion" "általános Windows-telepítő: a program a parancsikonból felismerve, ikon a programból" || ok_run=0
@@ -450,7 +450,7 @@ step_test() {
             if command -v mkntfs >/dev/null; then
                 _check "$log" "FUSION-M6: MEDIA FUSIONNTFS fs=ntfs3 uid=1000 file=- write=ok" "USB NTFS (ntfs3): automatikus csatolás, írható" || ok_run=0; fi
             _check "$log" "FUSION-M6: EJECT rc=0 left=biztonságosan eltávolítható" "biztonságos eltávolítás (fusion-admin eject, a fusion felhasználóként)" || ok_run=0
-            _check "$log" "FUSION-M6: SHELL-MEDIA\s*\$" "a Fusion Shell észleli a leválasztást" || ok_run=0
+            _check "$log" "FUSION-M6: SHELL-MEDIA\s*\$" "a Fúzió Shell észleli a leválasztást" || ok_run=0
             # Lemezkezelő: valódi műveletek az üres USB-lemezen (a felhasználóként, a segéden át)
             _check "$log" "FUSION-DISK: LIST found removable=True system=False table=- parts=0" "Lemezkezelő: az üres USB-lemez a listában" || ok_run=0
             _check "$log" "FUSION-DISK: CONFIRM rc=1 .*nem egyezik" "lemezíró művelet csak a lemez nevével" || ok_run=0
@@ -460,7 +460,7 @@ step_test() {
             _check "$log" "FUSION-DISK: CREATE rc=0,0 parts=1:ext4:linux,2:exfat:Közös write=ab" "két új partíció (ext4 + exFAT), írhatók" || ok_run=0
             _check "$log" "FUSION-DISK: REFORMAT rc=0 fs=ntfs type=0[xX]0*7" "partíció újraformázása (NTFS, típuskód)" || ok_run=0
             _check "$log" "FUSION-DISK: WIPE rc=0 table=gpt parts=0 media=\s*\$" "a teljes lemez törlése (csatolt kötetekkel), új GPT" || ok_run=0
-            _check "$log" "FUSION-DISK: GUARD fusion-disk: a FusionOS saját lemeze .* | fusion-disk: a FusionOS saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
+            _check "$log" "FUSION-DISK: GUARD fusion-disk: a Fúzió saját lemeze .* | fusion-disk: a Fúzió saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
             _check "$log" "FUSION-STORE: SET rc=0 mounted=/run/media/fusion/Tárhely link=/run/media/fusion/Tárhely write=ok conf=1 service=enabled" "Adatlemez: belső lemez formázása (ext4), beállítás, csatolás, ~/Tárhely" || ok_run=0
             _check "$log" "FUSION-STORE: REMOUNT rc=0 mounted=/run/media/fusion/Tárhely file=ok" "Adatlemez: újracsatolás indításkor (fusion-disk storage-mount)" || ok_run=0
             _check "$log" "FUSION-STORE: GUARD .*cserélhető eszköz.* | .*saját lemeze" "Adatlemez: pendrive és a rendszerlemez nem lehet" || ok_run=0
@@ -516,14 +516,14 @@ step_test() {
         warn "SIKERTELEN — napló: $log"; fails=$((fails + 1))
     fi
 
-    # két FusionOS-lemez (pl. SSD + pendrive): a második lemezről indul; a slot és a DATA is
+    # két Fúzió-lemez (pl. SSD + pendrive): a második lemezről indul; a slot és a DATA is
     # onnan kell jöjjön (a fusion-init a systemd-boot LoaderDevicePartUUID-ja alapján választ)
     FUSION_VARIANT="test" step_build >/dev/null
     FUSION_VARIANT="test" FUSION_IMAGE_MARKER="masodik" step_image >/dev/null
     mv "$out/fusionos.img" "$out/fusionos-masodik.img"
     FUSION_VARIANT="test" FUSION_IMAGE_MARKER="elso" step_image >/dev/null     # disk0 = "elso"
     log="$out/qemu-ketlemez.log"
-    step "QEMU EFI boot → két FusionOS-lemez, indítás a másodikról (SATA 2. port)"
+    step "QEMU EFI boot → két Fúzió-lemez, indítás a másodikról (SATA 2. port)"
     # shellcheck disable=SC2054  # a vesszők a QEMU-argumentumok részei
     QEMU_EXTRA=(-drive "file=$out/fusionos-masodik.img,format=raw,if=none,id=disk1,snapshot=on"
                 -device "ide-hd,drive=disk1,bus=ahci0.1,bootindex=0"); QEMU_HOTPLUG=0; QEMU_TIMEOUT=900
@@ -561,7 +561,7 @@ step_test() {
     else
         warn "SIKERTELEN — napló: $log"; fails=$((fails + 1))
     fi
-    # a teszt-image visszaállítása a FusionOS alapértelmezésre
+    # a teszt-image visszaállítása a Fúzió alapértelmezésre
     FUSION_VARIANT="test" step_build >/dev/null
     FUSION_VARIANT="test" step_image >/dev/null
 

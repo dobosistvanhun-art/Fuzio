@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS — a Terminál indítása (LXTerminal: jobb gombos Másolás / Beillesztés, fülek)
+# Fúzió — a Terminál indítása (LXTerminal: jobb gombos Másolás / Beillesztés, fülek)
 #   fusion-terminal [-t cím] [--working-directory=MAPPA] [-e parancs …]
 # Sötét GTK-téma csak a terminálnak (a rendszer többi GTK-programját — pl. a Firefoxot — nem érinti).
 # Ha az LXTerminal hiányzik, xterm indul ugyanezekkel a beállításokkal.

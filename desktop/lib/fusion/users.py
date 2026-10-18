@@ -7,7 +7,7 @@ a fusion-admin kapun át; a jogosultságot a hívó felhasználó szerint az dö
     passwd(név, régi, új)                        (ok, üzenet) — a saját jelszóhoz a régi kell
     delete(név, remove_home=False) / set_admin(név, be) / autologin(név | "none")
 
-A FusionOS alapfelhasználója (fusion / fusion) nem törölhető, a jelszava és a jogai nem módosíthatók.
+A Fúzió alapfelhasználója (fusion / fusion) nem törölhető, a jelszava és a jogai nem módosíthatók.
 """
 import json
 import subprocess

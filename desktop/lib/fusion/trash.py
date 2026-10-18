@@ -1,4 +1,4 @@
-"""Lomtár (freedesktop.org Trash-szabvány) — a Fusion API felülete a fusion_trash modulhoz
+"""Lomtár (freedesktop.org Trash-szabvány) — a Fúzió API felülete a fusion_trash modulhoz
 
     state()              {size, count, autoDays, autoChoices}
     set_auto_days(n)     automatikus ürítés: n napnál régebbi elemek (0 = kikapcsolva; 7, 30, 90)

@@ -1,4 +1,4 @@
-"""programok (a Fusion Programkezelő) — a Fusion API felülete a fusion_programs modulhoz (M8d)
+"""programok (a Fúzió Programkezelő) — a Fúzió API felülete a fusion_programs modulhoz (M8d)
 
     list_programs()          a telepített programok összefoglalója: [{id, name, type, typeName, devices, folders, …}]
     info(id)                 egy program összefoglalója, vagy None

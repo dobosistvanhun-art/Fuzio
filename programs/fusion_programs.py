@@ -1,4 +1,4 @@
-"""FusionOS — Fusion Programkezelő (Fusion Program Runtime): a háttérrész
+"""Fúzió — Fúzió Programkezelő (Fúzió Program Runtime): a háttérrész
 
 Egy program = egy leírás a DATA-n: /data/programs/<id>/program.fusion (kulcs = érték).
 A felület (Beállítások → Programkezelő, Start menü, Fájlkezelő) és a parancssor (fusion-programs,
@@ -87,7 +87,7 @@ def _log(log, msg):
 # leírás (manifest)
 # ---------------------------------------------------------------------------
 def read_kv(path):
-    """a leírók (program.fusion, *.fwr) olvasása — a Fusion API egyetlen kulcs=érték olvasójával"""
+    """a leírók (program.fusion, *.fwr) olvasása — a Fúzió API egyetlen kulcs=érték olvasójával"""
     return _fkv.read(path)
 
 
@@ -97,7 +97,7 @@ def write_manifest(m):
     order = ["id", "name", "type", "version", "comment", "exec", "exe", "appid", "icon", "categories",
              "open", "mime", "windows", "prefix", "installed", "source", "recipe"]
     keys = order + sorted(k for k in m if k not in order)
-    lines = ["# FusionOS — Fusion Programkezelő: programleírás (a Programkezelő írja)"]
+    lines = ["# Fúzió — Fúzió Programkezelő: programleírás (a Programkezelő írja)"]
     for k in keys:
         if k == "dir":
             continue
@@ -1119,7 +1119,7 @@ def sync_desktop():
     for f in glob.glob(os.path.join(APPS_DIR, "fusion-*.desktop")):
         if f not in keep:
             os.unlink(f)
-    # mimeapps.list: csak a Fusion-bejegyzések alapértelmezései (a felhasználó választása elsőbbséget kap)
+    # mimeapps.list: csak a Fúzió-bejegyzések alapértelmezései (a felhasználó választása elsőbbséget kap)
     user = _assoc_user()
     # a kiterjesztéssel megadott választás (.svg → program) a MIME-típusára is vonatkozik
     for k, pid in list(user.items()):
@@ -1223,7 +1223,7 @@ def open_with_choices(path):
 
 def assoc(path, explicit_only=False):
     """melyik program nyitja meg a fájlt: [(id, név)], az alapértelmezett elöl
-    explicit_only: csak a Fusion-társítás (open = kiterjesztés) vagy a felhasználó választása számít,
+    explicit_only: csak a Fúzió-társítás (open = kiterjesztés) vagy a felhasználó választása számít,
     a programok MIME-típus-igénye nem (pl. ne a Firefox nyisson meg minden képet)"""
     low = path.lower()
     ext = "." + low.rsplit(".", 1)[1] if "." in os.path.basename(low) else ""

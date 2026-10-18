@@ -50,7 +50,7 @@ SettingsPage {
             FButton { text: "Böngésző"; icon: "web"; onClicked: settings.driveOpenUrl(p.loginUrl) }
         }
         Text { width: parent.width; padding: 14; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12
-               text: "A bejelentkezés a böngészőben (Firefox) történik, a Google saját oldalán — a jelszót a FusionOS nem látja. "
+               text: "A bejelentkezés a böngészőben (Firefox) történik, a Google saját oldalán — a jelszót a Fúzió nem látja. "
                      + "A hozzáférést az rclone kéri (a Google ezen a néven mutatja); a jegy csak ezen a gépen, a DATA-n tárolódik. "
                      + "Visszavonás: itt „Leválasztás”, vagy a Google-fiók biztonsági beállításaiban." }
     }

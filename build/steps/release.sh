@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # images — tesztelőknek kiadható, Rufusszal / balenaEtcherrel pendrive-ra írható képfájlok (root nélkül)
 #
-#   fusionos-<verzió>-pendrive.img.xz   a FusionOS a pendrive-ról fut (16 GB-os vagy nagyobb pendrive)
-#   fusionos-<verzió>-telepito.img.xz   telepítő pendrive: a Fusion Telepítő egy belső lemezre telepít (4 GB+)
+#   fuzio-<verzió>-pendrive.img.xz   a Fúzió a pendrive-ról fut (16 GB-os vagy nagyobb pendrive)
+#   fuzio-<verzió>-telepito.img.xz   telepítő pendrive: a Fúzió Telepítő egy belső lemezre telepít (4 GB+)
 #   SHA256SUMS, OLVASSEL-tesztelok.txt
 # A kimenet: build/out/release/kiadas/ — a .img a lemezkép bájtra pontos másolata (DD-mód), xz-vel tömörítve.
 
@@ -10,7 +10,7 @@ step_images() {
     not_root
     need xz sha256sum
     local out; out=$(variant_dir)
-    local dst="$out/kiadas" name="fusionos-${FUSION_VERSION}-${FUSION_MILESTONE}"
+    local dst="$out/kiadas" name="fuzio-${FUSION_VERSION}-${FUSION_MILESTONE}"
     [ -r "$out/fusionos.img" ] || die "előbb: build/fusion-build all (hiányzik: $out/fusionos.img)"
     [ -r "$out/fusionos-telepito.img" ] || die "előbb: build/fusion-build all (hiányzik: $out/fusionos-telepito.img)"
     mkdir -p "$dst"
@@ -34,17 +34,17 @@ step_images() {
 _images_readme() {  # <fájl> <név>
     local mib; mib=$(image_total_mib)
     cat > "$1" <<EOF
-FusionOS ${FUSION_VERSION} (${FUSION_MILESTONE}) — pendrive-képfájlok tesztelőknek
+Fúzió ${FUSION_VERSION} (${FUSION_MILESTONE}) — pendrive-képfájlok tesztelőknek
 =====================================================================
 
 Két fájl van, válaszd ki, mire kell:
 
 1) $2-pendrive.img.xz
-   A FusionOS a pendrive-ról fut, a gép lemezéhez nem nyúl.
+   A Fúzió a pendrive-ról fut, a gép lemezéhez nem nyúl.
    Pendrive: legalább 16 GB (a kép ${mib} MiB). A pendrive teljes tartalma törlődik.
 
 2) $2-telepito.img.xz
-   Telepítő pendrive: a „Fusion Telepítő” a gép egyik lemezére telepíti a FusionOS-t.
+   Telepítő pendrive: a „Fúzió Telepítő” a gép egyik lemezére telepíti a Fúziót.
    A kiválasztott lemez TÖRLŐDIK (gépelt megerősítés után). Pendrive: legalább 4 GB.
 
 Felírás (a .img.xz fájlt nem kell kicsomagolni):
@@ -54,7 +54,7 @@ Felírás (a .img.xz fájlt nem kell kicsomagolni):
   - Linux parancssorból: xz -dc $2-pendrive.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 
 Indítás:
-  - A gépen UEFI-mód kell, a Secure Boot legyen KIKAPCSOLVA (a FusionOS nincs aláírva).
+  - A gépen UEFI-mód kell, a Secure Boot legyen KIKAPCSOLVA (a Fúzió nincs aláírva).
   - Bekapcsoláskor a gép indítómenüje (HP: F9, Dell: F12, Lenovo: F12, ASUS: F8 vagy Esc) → a pendrive.
   - Az első indítás 1–2 perc is lehet; a felhasználó: fusion, jelszó: fusion.
 

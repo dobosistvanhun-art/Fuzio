@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — a Fusion API parancssora: fusion <terület> <művelet> [--json]  (részletek: fusion help)"""
+"""Fúzió — a Fúzió API parancssora: fusion <terület> <művelet> [--json]  (részletek: fusion help)"""
 import os
 import sys
 

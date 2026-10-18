@@ -1,7 +1,7 @@
-# FusionOS — amíg a szerepet kapott eszköz (pl. lézer, 3D nyomtató) csatlakozik, a gép nem alszik el,
-# a fedél lecsukására sem (a kijelzőt a Fusion Shell kapcsolja ki). Az eszköz kihúzásakor magától leáll.
+# Fúzió — amíg a szerepet kapott eszköz (pl. lézer, 3D nyomtató) csatlakozik, a gép nem alszik el,
+# a fedél lecsukására sem (a kijelzőt a Fúzió Shell kapcsolja ki). Az eszköz kihúzásakor magától leáll.
 [Unit]
-Description=FusionOS — %i csatlakoztatva: a gép ébren marad
+Description=Fúzió — %i csatlakoztatva: a gép ébren marad
 BindsTo=dev-fusion-%i.device
 After=dev-fusion-%i.device
 

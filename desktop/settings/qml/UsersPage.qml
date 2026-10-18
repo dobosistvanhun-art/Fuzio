@@ -46,7 +46,7 @@ SettingsPage {
                     value: (modelData.fullname ? modelData.fullname + "  ·  " : "")
                            + (modelData.admin ? "rendszergazda" : "felhasználó")
                            + (modelData.autologin ? "  ·  automatikus belépés" : "")
-                           + (modelData.base ? "  ·  a FusionOS alapfelhasználója (jelszó: fusion — rögzített)" : "")
+                           + (modelData.base ? "  ·  a Fúzió alapfelhasználója (jelszó: fusion — rögzített)" : "")
                     valueColor: modelData.admin ? Theme.text : Theme.dim
                     FButton { visible: !modelData.base && (modelData.name === p.st.caller || p.st.callerAdmin)
                               text: "Jelszó"; flat: true; onClicked: { p.msg = ""; p.pwFor = modelData.name; p.delFor = "" } }

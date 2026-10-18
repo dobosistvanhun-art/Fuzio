@@ -1,8 +1,8 @@
-"""FusionOS — Fusion API (Python-csomag `fusion`), 1-es változat
+"""Fúzió — Fúzió API (Python-csomag `fusion`), 1-es változat
 
-Az M8 szerint (claude/M8-Fusion-API-terv.md): a FusionOS saját képességeinek egyetlen, közös belépési pontja a
-Fusion-programoknak és a szkripteknek. A Linux-szabványos részeket (fájlok, hálózat-protokollok, systemd, Qt) nem
-fedi el; csak ott ad saját felületet, ahol a FusionOS-nek saját tudása van.
+Az M8 szerint (claude/M8-Fusion-API-terv.md): a Fúzió saját képességeinek egyetlen, közös belépési pontja a
+Fúzió-programoknak és a szkripteknek. A Linux-szabványos részeket (fájlok, hálózat-protokollok, systemd, Qt) nem
+fedi el; csak ott ad saját felületet, ahol a Fúziónak saját tudása van.
 
     fusion.kv          kulcs = érték fájlok (program.fusion, *.role, *.profile, *.fwr, display.env)
     fusion.hardware    a Hardware Layer állapota (csak olvas)
@@ -50,7 +50,7 @@ PROGRAMS_LIB = _programs_lib()
 
 
 def add_paths():
-    """a régi, nem csomagba tartozó Fusion-modulok (fusion_ui, fusion_programs …) elérése"""
+    """a régi, nem csomagba tartozó Fúzió-modulok (fusion_ui, fusion_programs …) elérése"""
     for p in (DESKTOP_LIB, PROGRAMS_LIB):
         if p not in sys.path:
             sys.path.insert(0, p)

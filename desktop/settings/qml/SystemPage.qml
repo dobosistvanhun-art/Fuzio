@@ -14,7 +14,7 @@ SettingsPage {
     Connections { target: settings; function onResult(tag, r) { if ((tag === "system" || tag === "trash-empty") && r.version) p.s = r } }
     Section {
         title: "FUSIONOS"
-        InfoRow { icon: "info"; label: "Verzió"; value: "FusionOS " + p.s.version + (p.s.milestone ? " (" + p.s.milestone + ")" : "") }
+        InfoRow { icon: "info"; label: "Verzió"; value: "Fúzió " + p.s.version + (p.s.milestone ? " (" + p.s.milestone + ")" : "") }
         InfoRow { label: "Rendszerkép"; value: (p.s.image || "?") + "   ·   slot: " + p.s.slot + "   ·   lemez: " + p.s.bootdisk; mono: true }
         InfoRow { label: "Kernel (driveralap)"; value: p.s.kernel || ""; mono: true }
         InfoRow { label: "Bekapcsolva"; value: p.s.uptime || "" }

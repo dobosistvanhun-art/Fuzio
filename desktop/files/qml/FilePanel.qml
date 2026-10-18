@@ -1,4 +1,4 @@
-// FusionOS — Fájlkezelő: egy panel (meghajtó, útvonal, oszlopfejléc, lista, állapotsor)
+// Fúzió — Fájlkezelő: egy panel (meghajtó, útvonal, oszlopfejléc, lista, állapotsor)
 import QtQuick
 import QtQuick.Controls
 import FusionUI

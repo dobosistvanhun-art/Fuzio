@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Google Drive parancssorból
+"""Fúzió — Google Drive parancssorból
 
     fusion-drive                 állapot
     fusion-drive open            a Drive a Fájlkezelőben (ha nincs bejelentkezve: Beállítások → Google Drive)

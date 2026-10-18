@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Beállítások (fusion-settings)
+"""Fúzió — Beállítások (fusion-settings)
 
     fusion-settings [oldal] [paraméter]
         oldal: wifi | bluetooth | display | devices | printers | printer | drive | sound | programs | store | desktop | users | system
@@ -64,7 +64,7 @@ def selftest():
           + (",".join(e["label"].replace(" ", "_") for e in bt["entries"] if e.get("current")) or "-"), flush=True)
     r = sb.report_files()
     print(f"FUSION-SETTINGS: REPORT dir={sb.report_dir()} files={len(r)}", flush=True)
-    # 0.0.40: Bluetooth, nyomtatók (CUPS), kamera — a Fusion API-n át
+    # 0.0.40: Bluetooth, nyomtatók (CUPS), kamera — a Fúzió API-n át
     from fusion import bluetooth as fbt, camera as fcam, printers as fprn
     a = fbt.adapter()
     print(f"FUSION-SETTINGS: BLUETOOTH present={a['present']} powered={a.get('powered')} service={a['service']} "

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — fusion-appmeasure: a Fusion Programkezelő Linux-formátumának mérése (döntés előtt)
+"""Fúzió — fusion-appmeasure: a Fúzió Programkezelő Linux-formátumának mérése (döntés előtt)
 
     fusion-appmeasure --check            előfeltételek (internet nélkül is): Flatpak, homokozó,
                                          portál, NVIDIA-verzió → a szükséges GL-kiegészítő neve
@@ -251,7 +251,7 @@ def report(results):
 
     def f(v, fmt):
         return fmt.format(v) if v is not None else "—"
-    lines = [f"Fusion Programkezelő — Firefox mérés ({time.strftime('%Y-%m-%d %H:%M')}, NVIDIA {nvidia_version() or '-'})",
+    lines = [f"Fúzió Programkezelő — Firefox mérés ({time.strftime('%Y-%m-%d %H:%M')}, NVIDIA {nvidia_version() or '-'})",
              "(Flatpak = Flathub; Mozilla-csomag = tarball a DATA-n)", ""]
     cols = [r["name"] for r in results]
     lines.append(f"{'':24}" + "".join(f"{c:>22}" for c in cols))
@@ -299,7 +299,7 @@ def main():
         ap.print_help()
         return 2
     if not os.environ.get("DISPLAY"):
-        sys.exit("fusion-appmeasure: a Fusion Desktopban (grafikus munkamenetben) kell futtatni")
+        sys.exit("fusion-appmeasure: a Fúzió Desktopban (grafikus munkamenetben) kell futtatni")
     if check() != 0:
         print("\nAz előfeltételek hiányosak — a mérés így is megpróbálja.", flush=True)
     log, results = [], []

@@ -8,7 +8,7 @@ import FusionUI
 SettingsPage {
     id: p
     title: "Rendszerfrissítés"
-    subtitle: "A FusionOS frissítése fájlból (.fupd) — a frissítés a másik rendszer-slotba kerül, a mostani tartalék marad"
+    subtitle: "A Fúzió frissítése fájlból (.fupd) — a frissítés a másik rendszer-slotba kerül, a mostani tartalék marad"
     property var s: ({ entries: [], files: [], version: "", slot: "", state: "" })
     property var job: ({ running: false, lines: [], rc: null, title: "" })
     property string msg: ""
@@ -46,7 +46,7 @@ SettingsPage {
 
     Section {
         title: "FUTÓ RENDSZER"
-        InfoRow { icon: "chip"; label: "Verzió"; value: "FusionOS " + p.s.version + (p.s.milestone ? " (" + p.s.milestone + ")" : "") + "   ·   slot: " + p.s.slot }
+        InfoRow { icon: "chip"; label: "Verzió"; value: "Fúzió " + p.s.version + (p.s.milestone ? " (" + p.s.milestone + ")" : "") + "   ·   slot: " + p.s.slot }
         InfoRow { label: "Indulás"; value: p.s.state || "—"; mono: true
                   valueColor: /^HIBA/.test(p.s.state) ? Theme.danger : /^VÉGLEGESÍTVE/.test(p.s.state) ? Theme.ok : Theme.text }
         InfoRow { visible: p.s.error !== undefined && p.s.error !== ""; label: "Hiba"; value: p.s.error || ""; valueColor: Theme.danger }
@@ -58,7 +58,7 @@ SettingsPage {
             InfoRow {
                 icon: modelData.running ? "check" : ""
                 label: "Slot " + modelData.slot + (modelData.running ? " — fut" : "")
-                value: "FusionOS " + modelData.version + "   ·   " + p.stateText(modelData) + "\n" + modelData.name
+                value: "Fúzió " + modelData.version + "   ·   " + p.stateText(modelData) + "\n" + modelData.name
                 valueColor: modelData.state === "bad" ? Theme.danger : Theme.text
             }
         }
@@ -102,7 +102,7 @@ SettingsPage {
                 FIcon { x: 14; anchors.verticalCenter: parent.verticalCenter; size: 26; name: "app-chip" }
                 Column {
                     x: 52; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 52 - 140
-                    Text { text: "FusionOS " + modelData.version + (modelData.milestone ? " (" + modelData.milestone + ")" : "") +
+                    Text { text: "Fúzió " + modelData.version + (modelData.milestone ? " (" + modelData.milestone + ")" : "") +
                                  (modelData.newer ? "" : "   — nem újabb a futó rendszernél")
                            color: modelData.newer ? Theme.text : Theme.dim; font.family: Theme.font; font.pixelSize: 14; font.bold: modelData.newer }
                     Text { width: parent.width; elide: Text.ElideMiddle; text: modelData.place + "/" + modelData.name + "   ·   " + modelData.size
@@ -120,7 +120,7 @@ SettingsPage {
                   onClicked: { var e = settings.updateInstall(p.chosen); p.msg = e ? "hiba: " + e : ""; if (!e) p.pending = true } }
         FButton { text: "Telepítő pendrive készítése…"; icon: "drive-usb"; visible: p.s.files.length > 0
                   enabled: p.chosen !== "" && !p.mjob.running && (p.s.files.find(f => f.path === p.chosen) || {}).media === true
-                  tip: (p.s.files.find(f => f.path === p.chosen) || {}).media === false ? "ebből a .fupd-ből nem készíthető telepítő (0.0.29 előtti)" : "a kijelölt .fupd-ből egy telepítő pendrive (Fusion Telepítő)"
+                  tip: (p.s.files.find(f => f.path === p.chosen) || {}).media === false ? "ebből a .fupd-ből nem készíthető telepítő (0.0.29 előtti)" : "a kijelölt .fupd-ből egy telepítő pendrive (Fúzió Telepítő)"
                   onClicked: { p.mdisks = []; settings.mediaDisks(); mediaDlg.open() } }
         Text { visible: p.msg !== ""; text: p.msg; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
     }

@@ -1,4 +1,4 @@
-// FusionOS — Start menü: keresés, programok, kikapcsolás. Egyszerű és gyors.
+// Fúzió — Start menü: keresés, programok, kikapcsolás. Egyszerű és gyors.
 import QtQuick
 import FusionUI
 

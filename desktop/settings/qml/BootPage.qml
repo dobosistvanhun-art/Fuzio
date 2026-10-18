@@ -21,9 +21,9 @@ SettingsPage {
         }
     }
     function kindText(e) {
-        if (e.managed) return "FusionOS — mérési / tartalék bejegyzés (a FusionOS tartja karban)"
-        if (e.kind === "fusion") return "FusionOS (ez a lemez)"
-        if (e.kind === "installer") return "FusionOS telepítő pendrive"
+        if (e.managed) return "Fúzió — mérési / tartalék bejegyzés (a Fúzió tartja karban)"
+        if (e.kind === "fusion") return "Fúzió (ez a lemez)"
+        if (e.kind === "installer") return "Fúzió telepítő pendrive"
         if (e.kind === "usb") return "USB-eszköz"
         if (e.kind === "firmware") return "a gép saját bejegyzése (hálózat, beépített eszköz)"
         if (/ubuntu|mint/i.test(e.label)) return "Linux Mint / Ubuntu (GRUB)"
@@ -90,7 +90,7 @@ SettingsPage {
         title: "TUDNIVALÓK"
         InfoRow { label: "Alapértelmezett"; value: "a sorrendben az első bejegyzés indul magától; a többi az F9 menüből (bekapcsoláskor) választható" }
         InfoRow { label: "Elárvult"; value: "a bejegyzés egy már nem létező lemezre vagy fájlra mutat (pl. egy régi pendrive) — nyugodtan törölhető" }
-        InfoRow { label: "Védett"; value: "a most futó rendszer bejegyzése és a gép saját bejegyzései nem törölhetők; a mérési bejegyzéseket a FusionOS kezeli" }
+        InfoRow { label: "Védett"; value: "a most futó rendszer bejegyzése és a gép saját bejegyzései nem törölhetők; a mérési bejegyzéseket a Fúzió kezeli" }
         InfoRow { label: "A Mint"; value: "a Mint törlése előtt ne törölje az ubuntu-bejegyzést — utána igen (a Mint lemezén az EFI-mappa is törölhető)" }
     }
 }

@@ -1,4 +1,4 @@
-"""FusionOS — Beállítások: háttérrész
+"""Fúzió — Beállítások: háttérrész
 
 Oldalak: Wi-Fi, Bluetooth, Kijelző, Eszközök (kamera is), Nyomtatók (CUPS), 3D nyomtató (Klipper), Programkezelő,
 Asztal, Rendszer.
@@ -86,7 +86,7 @@ def serial_props(dev):
 
 
 def devices():
-    roles = fdev.roles()        # Fusion API: szerepek, állapot, rögzített azonosító, mely programok érik el (COM)
+    roles = fdev.roles()        # Fúzió API: szerepek, állapot, rögzített azonosító, mely programok érik el (COM)
     serial = []
     for d in sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")):
         p = serial_props(d)
@@ -443,7 +443,7 @@ class Settings(QObject):
         if SAFE.match(output) and SAFE.match(mode):
             os.makedirs(ui.CONFIG, exist_ok=True)
             with open(DISPLAY_FILE, "w") as f:
-                f.write(f"# FusionOS — Beállítások → Kijelző\nxrandr --output {shlex.quote(output)} --mode {shlex.quote(mode)}\n")
+                f.write(f"# Fúzió — Beállítások → Kijelző\nxrandr --output {shlex.quote(output)} --mode {shlex.quote(mode)}\n")
 
     # --- Felület rajzolása (0.0.32): grafikus kártya (OpenGL) vagy szoftveres ---
     @pyqtSlot(result="QVariant")
@@ -461,7 +461,7 @@ class Settings(QObject):
             os.replace(ui.RENDER_FILE + ".tmp", ui.RENDER_FILE)
         except OSError as e:
             return f"nem menthető: {e}"
-        # a Fusion Shell (panel, Start menü, asztal) azonnal az új móddal indul újra; a többi Fusion-program a
+        # a Fúzió Shell (panel, Start menü, asztal) azonnal az új móddal indul újra; a többi Fúzió-program a
         # következő megnyitáskor
         ui.spawn(["fusion-shell", "restart"])
         return ""
@@ -687,7 +687,7 @@ class Settings(QObject):
 
     # a hosszú műveletek (telepítés, eltávolítás, frissítés) külön folyamatban futnak: a Beállítások
     # bezárása nem szakítja meg őket; a végén értesítés jön, a felület a naplót mutatja
-    # (a Fusion API feladat-protokollja: fusion.jobs — az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt)
+    # (a Fúzió API feladat-protokollja: fusion.jobs — az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt)
     def _job_state(self, kind="programs"):
         for pr in list(self._jobprocs.values()):
             pr.poll()                     # a saját indítású futtató begyűjtése (ne maradjon zombi)
@@ -1008,7 +1008,7 @@ class Settings(QObject):
         if not path.endswith(".fupd") or not os.path.isfile(path):
             return "nem .fupd frissítőfájl: " + path
         info = fupd_info(path) or {}
-        return self._job("Rendszerfrissítés: FusionOS " + info.get("version", "?"), [path], kind="update",
+        return self._job("Rendszerfrissítés: Fúzió " + info.get("version", "?"), [path], kind="update",
                          cmd=("sudo", "-n", ui.ADMIN, "update-apply"), app="Rendszerfrissítés", icon="update",
                          okpat="^KÉSZ:")
 
@@ -1046,7 +1046,7 @@ class Settings(QObject):
         info = fupd_info(fupd) or {}
         if not info.get("media"):
             return "ebből a .fupd-ből nem készíthető telepítő (0.0.29 előtti csomag)"
-        return self._job("Telepítő pendrive: FusionOS " + info.get("version", "?"), [fupd, disk, confirm], kind="media",
+        return self._job("Telepítő pendrive: Fúzió " + info.get("version", "?"), [fupd, disk, confirm], kind="media",
                          cmd=("sudo", "-n", ui.ADMIN, "installer-media"), app="Rendszerfrissítés", icon="drive-usb",
                          okpat="^KÉSZ:")
 
@@ -1116,7 +1116,7 @@ class Settings(QObject):
                    "wrangler-login": "wrangler login && wrangler whoami"}
         c = allowed.get(cmd)
         if c:
-            ui.spawn(["fusion-terminal", "-t", "FusionOS — " + cmd, "-e", "sh", "-c", c + "; echo; echo '(Enter: bezárás)'; read x"])
+            ui.spawn(["fusion-terminal", "-t", "Fúzió — " + cmd, "-e", "sh", "-c", c + "; echo; echo '(Enter: bezárás)'; read x"])
 
     @pyqtSlot(str)
     def spawn(self, cmd):

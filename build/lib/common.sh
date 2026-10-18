@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# FusionOS build — közös segédfüggvények. A fusion-build forrásolja be.
+# Fúzió build — közös segédfüggvények. A fusion-build forrásolja be.
 
 FUSION_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 BUILD_DIR="$FUSION_ROOT/build"

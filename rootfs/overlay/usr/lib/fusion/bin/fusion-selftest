@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 / FUSION-M2 sorokat.
+# Fúzió boot-teszt: a QEMU-teszt a soros konzolon keresi a FUSION-M1 / FUSION-M2 sorokat.
 # (Type=exec szolgáltatásként fut, így a boot befejeződhet, és itt megvárhatjuk.)
 systemctl is-system-running --wait >/dev/null 2>&1
 # --- M7: A/B frissítés próbája (a teszt DATA-ján .fusion-test-ab jelölő: lépés = good | bad | final) ---
@@ -44,12 +44,12 @@ if [ -e /data/.fusion-test-ab ]; then
             systemctl reboot --no-block ;;
         final)
             # UEFI-bejegyzések (F9 menü) a mérési bejegyzésekhez; indítás az egyikről, a systemd-boot nélkül
-            i=0; while [ $i -lt 60 ] && [ "$(efibootmgr 2>/dev/null | grep -c 'Fusion meres - ')" -lt 3 ]; do sleep 1; i=$((i + 1)); done
-            efibootmgr -v 2>/dev/null | grep 'Fusion meres - \|^BootOrder' | cut -c1-200 | sed 's/^/FUSION-AB:   /'
+            i=0; while [ $i -lt 60 ] && [ "$(efibootmgr 2>/dev/null | grep -c 'Fuzio meres - ')" -lt 3 ]; do sleep 1; i=$((i + 1)); done
+            efibootmgr -v 2>/dev/null | grep 'Fuzio meres - \|^BootOrder' | cut -c1-200 | sed 's/^/FUSION-AB:   /'
             fo=$(efibootmgr | sed -n 's/^BootOrder: \([0-9A-Fa-f]*\).*/\1/p')
-            if efibootmgr | grep -q "^Boot$fo\*\{0,1\} Fusion meres"; then fk=meres; else fk=eredeti; fi
-            echo "FUSION-AB: FW count=$(efibootmgr | grep -c 'Fusion meres - ') first=$fk"
-            bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Fusion meres - szoftveres felulet.*/\1/p' | head -n 1)
+            if efibootmgr | grep -q "^Boot$fo\*\{0,1\} Fuzio meres"; then fk=meres; else fk=eredeti; fi
+            echo "FUSION-AB: FW count=$(efibootmgr | grep -c 'Fuzio meres - ') first=$fk"
+            bn=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Fuzio meres - szoftveres felulet.*/\1/p' | head -n 1)
             if [ -n "$bn" ] && efibootmgr -q -n "$bn"; then
                 echo fw > /data/.fusion-test-ab; sync
                 echo "FUSION-AB: REBOOT"
@@ -64,7 +64,7 @@ if [ -e /data/.fusion-test-ab ]; then
     esac
     exit 0
 fi
-# --- T2: telepítő pendrive (fusion.installer): a Fusion Telepítő, majd valódi telepítés a teszt céllemezére
+# --- T2: telepítő pendrive (fusion.installer): a Fúzió Telepítő, majd valódi telepítés a teszt céllemezére
 #     (FUSIONTARGET): új telepítés → jelölő a DATA-n → újratelepítés a DATA megőrzésével → újraindítás a céllemezről
 if grep -qw 'fusion.installer' /proc/cmdline; then
     iurun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion \
@@ -74,7 +74,7 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
     systemctl --failed --no-legend --plain | sed 's/^/FUSION-INST:   /'
     i=0; w=0
     while [ $i -lt 180 ]; do
-        for x in $(iurun xwininfo -root -tree 2>/dev/null | grep -F 'FusionOS telepítő' | awk '{print $1}'); do
+        for x in $(iurun xwininfo -root -tree 2>/dev/null | grep -F 'Fúzió telepítő' | awk '{print $1}'); do
             iurun xwininfo -id "$x" 2>/dev/null | grep -q IsViewable && w=1
         done
         [ "$w" = 1 ] && break; sleep 1; i=$((i + 1))
@@ -84,7 +84,7 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
     k=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONTARGET" {print $1; exit}')
     bd=$(cat /run/fusion/boot-disk)
     echo "FUSION-INST: TARGET ${k:-nincs} boot=$bd"
-    # T3: ha a teszt mentőlemezén már van mentés, ez a 3. indítás — a FusionOS-ben készített telepítő pendrive-ról:
+    # T3: ha a teszt mentőlemezén már van mentés, ez a 3. indítás — a Fúzióban készített telepítő pendrive-ról:
     # új telepítés a mentésből (+ Wi-Fi átvétele), majd indítás a céllemezről
     j=0; while [ $j -lt 40 ] && [ -n "$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP"')" ] && ! ls /run/media/fusion/*/FusionOS-mentes/*.info.json >/dev/null 2>&1; do sleep 1; j=$((j + 1)); done
     bk=$(ls /run/media/fusion/*/FusionOS-mentes/*.tar.zst /run/media/fusion/*/FusionOS-mentes/*.tar.zst.000 2>/dev/null | head -n 1 | sed 's/\.000$//')
@@ -113,7 +113,7 @@ if grep -qw 'fusion.installer' /proc/cmdline; then
         grep -v '^PROGRESS' /tmp/inst-keep.out | sed 's/^/FUSION-INST:   /'
         mount -o ro "/dev/${k}4" /tmp/tdata; mk=$(cat /tmp/tdata/.fusion-test-marker 2>/dev/null); umount /tmp/tdata
         echo "FUSION-INST: KEEP rc=$rc secs=$(( $(date +%s) - t0 )) marker=${mk:-nincs}"
-        echo "FUSION-INST: UEFI $(efibootmgr 2>/dev/null | grep -c 'FusionOS')"
+        echo "FUSION-INST: UEFI $(efibootmgr 2>/dev/null | grep -cP '\s(FusionOS|Fuzio)(\t|\s*$)')"
     fi
     echo "FUSION-INST: DONE"
     # sikeres telepítés után a céllemezről indul tovább; különben kikapcsol (ne induljon újra a telepítő)
@@ -149,7 +149,7 @@ for u in $(systemctl --failed --no-legend --plain | awk '{print $1}'); do
     echo "FUSION-M1: --- napló: $u"
     journalctl -b -u "$u" --no-pager -o cat 2>/dev/null | tail -n 15 | sed 's/^/FUSION-M1:   /'
 done
-# --- M2: Fusion Desktop (Xorg, GL, Vulkan, ablakkezelő) ---
+# --- M2: Fúzió Desktop (Xorg, GL, Vulkan, ablakkezelő) ---
 xrun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority "$@"; }
 i=0
 if grep -qw 'fusion.desktop=0' /proc/cmdline; then
@@ -267,7 +267,7 @@ if [ -x /usr/lib/fusion/wine/bin/wine ]; then
         echo "FUSION-M4: SYSTRAY showsystray=$(grep -c '"ShowSystray"=dword:00000000' /data/fwr/fwr-check/user.reg 2>/dev/null) notray=$(grep -c '"NoTrayItemsDisplay"=dword:00000001' /data/fwr/fwr-check/user.reg 2>/dev/null)"
     fi
 fi
-# --- Fusion Programkezelő: általános Windows-telepítés (FusionTeszt), indítás fájllal, Linux-archívum,
+# --- Fúzió Programkezelő: általános Windows-telepítés (FusionTeszt), indítás fájllal, Linux-archívum,
 #     fájltársítás, régi helyű LightBurn átköltöztetése, eltávolítás ---
 prun() { runuser -u fusion -- env HOME=/home/fusion USER=fusion DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority \
          XDG_RUNTIME_DIR=/run/user/1000 PATH=/usr/local/bin:/usr/bin:/bin "$@"; }
@@ -312,7 +312,7 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     # 3) Linux-program archívumban (.desktop + X-Fusion-Open társítás)
     t=$(mktemp -d); mkdir -p "$t/fprobaprog"
     printf '#!/bin/sh\necho "$@" > /tmp/fusion-prog-native.txt\n' > "$t/fprobaprog/fprobaprog"; chmod 755 "$t/fprobaprog/fprobaprog"
-    printf '[Desktop Entry]\nType=Application\nName=Fusion Próba\nExec=fprobaprog %%F\nX-Fusion-Open=.fprb\n' > "$t/fprobaprog/fprobaprog.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Fúzió Próba\nExec=fprobaprog %%F\nX-Fusion-Open=.fprb\n' > "$t/fprobaprog/fprobaprog.desktop"
     tar czf /tmp/fprobaprog-1.0.tar.gz -C "$t" fprobaprog; chmod 644 /tmp/fprobaprog-1.0.tar.gz; rm -rf "$t"
     echo "FUSION-PROG: DETECT $(prun fusion-programs detect /tmp/fprobaprog-1.0.tar.gz) $(prun fusion-programs detect /usr/lib/fusion/programs/tests/fusionteszt-setup.exe)"
     prun fusion-programs install /tmp/fprobaprog-1.0.tar.gz 2>&1 | tail -n 2 | sed 's/^/FUSION-PROG:   /'
@@ -393,7 +393,7 @@ CFG
     systemctl restart fusion-klipper
     echo "FUSION-M5: DONE"
 fi
-# --- M6: Fusion Desktop — Fusion Shell (panel, Start menü, értesítések), Fájlkezelő, Beállítások ---
+# --- M6: Fúzió Desktop — Fúzió Shell (panel, Start menü, értesítések), Fájlkezelő, Beállítások ---
 urun() { runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 HOME=/home/fusion \
          USER=fusion DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus PATH=/usr/local/bin:/usr/bin:/bin "$@"; }
 # 1, ha a címet tartalmazó ablakok közül bármelyik látható (a Qt segédablakai is egyezhetnek a címre)
@@ -413,7 +413,7 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     echo "FUSION-M6: USERDIRS $(grep '^XDG_DOWNLOAD_DIR=' /home/fusion/.config/user-dirs.dirs 2>/dev/null) dir=$([ -d /home/fusion/Letöltések ] && echo van || echo nincs)"
     urun timeout 120 sh /usr/lib/fusion/programs/tests/flatpak-download-test.sh /tmp/fusion-fpdl 2>&1 | grep '^DL ' | sed 's/^/FUSION-M6: FLATPAK-/'
     # értesítés a szabványos D-Bus-szolgáltatáson át → buborék + a Shell állapotában
-    urun fusion-notify -i settings "FusionOS önteszt" "értesítés a D-Buson át"; nrc=$?
+    urun fusion-notify -i settings "Fúzió önteszt" "értesítés a D-Buson át"; nrc=$?
     sleep 2
     last=$(sed -n 's/.*"summary": "\([^"]*\)".*/\1/p' /run/user/1000/fusion-shell.state 2>/dev/null | head -n 1)
     echo "FUSION-M6: NOTIFY rc=$nrc last=$last toasts=$(sed -n 's/.*"toasts": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
@@ -436,7 +436,7 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     urun fusion-settings wifi; sleep 3
     echo "FUSION-M6: SETTINGS window=$sw wait=${i}s switched=$(winview 'Wi-Fi és hálózat')"
     echo "FUSION-M6: WINDOWS $(sed -n 's/.*"windows": \([0-9]*\).*/\1/p' /run/user/1000/fusion-shell.state)"
-    # 0.0.47: Terminál (LXTerminal a fusion-terminal-on át: jobb gombos menü, Fusion-színek), tálca-ikonok
+    # 0.0.47: Terminál (LXTerminal a fusion-terminal-on át: jobb gombos menü, Fúzió-színek), tálca-ikonok
     rm -f /tmp/fusion-term.out
     urun sh -c 'fusion-terminal -t FusionTermTeszt -e sh -c "echo \"TERM-OK \$PWD\" > /tmp/fusion-term.out; sleep 30" >/tmp/fusion-term.log 2>&1 &'
     i=0; tw=0; while [ $i -lt 30 ]; do tw=$(winview 'FusionTermTeszt'); [ "$tw" = 1 ] && break; sleep 1; i=$((i + 1)); done
@@ -454,7 +454,7 @@ if xrun xdpyinfo >/dev/null 2>&1 && [ -x /usr/lib/fusion/desktop/shell/fusion-sh
     # irányítópult: asztal típusú ablak a többi alatt
     dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')
     echo "FUSION-M6: DASHBOARD viewable=$([ -n "$dw" ] && urun xwininfo -id "$dw" | grep -c IsViewable) type=$([ -n "$dw" ] && urun xprop -id "$dw" _NET_WM_WINDOW_TYPE | grep -o '_NET_WM_WINDOW_TYPE_DESKTOP')"
-    # Fusion Programkezelő, mérési szakasz: Flatpak, homokozó, portál (internet nélkül ellenőrizhető rész)
+    # Fúzió Programkezelő, mérési szakasz: Flatpak, homokozó, portál (internet nélkül ellenőrizhető rész)
     echo "FUSION-M6: USERNS restrict=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)"
     echo "FUSION-M6: SESSION-ENV $(runuser -u fusion -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment 2>/dev/null | grep -c '^XDG_CURRENT_DESKTOP=FusionOS\|^DISPLAY=:0')"
     urun fusion-appmeasure --check 2>&1 | sed 's/^/FUSION-M6:   /'
@@ -632,7 +632,7 @@ if [ -n "$rf" ]; then
     echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
     grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'
 fi
-# --- memória (0.0.30): a Fusion-folyamatok PSS-e (arányos memória) és a megosztott (tmpfs) rész — tájékoztató ---
+# --- memória (0.0.30): a Fúzió-folyamatok PSS-e (arányos memória) és a megosztott (tmpfs) rész — tájékoztató ---
 memline=""
 for pid in $(pgrep -u fusion -f 'fusion_(shell|tasks_app|settings_app)\.py|fusion-(tasks|shell)' 2>/dev/null); do
     n=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -o 'fusion[_-][a-z_]*' | head -n 1)
@@ -640,11 +640,11 @@ for pid in $(pgrep -u fusion -f 'fusion_(shell|tasks_app|settings_app)\.py|fusio
     [ -n "$k" ] && memline="$memline $n=$((k / 1024))MB"
 done
 echo "FUSION-MEM: PSS${memline:- nincs} SHMEM $(awk '/^Shmem:/ {print int($2/1024) "MB"}' /proc/meminfo) USED $(awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {print int((t-a)/1024) "MB"}' /proc/meminfo)"
-# M8a: a Fusion API (`fusion` csomag) — felhasználóként és rootként is, a rendszer valódi állapotán
+# M8a: a Fúzió API (`fusion` csomag) — felhasználóként és rootként is, a rendszer valódi állapotán
 api=$(urun python3 -c "import fusion; from fusion import hardware, devices; d = hardware.display(); r = devices.roles(); print('version=%d profile=%s roles=%s present=%s' % (fusion.API_VERSION, d['profile'], ','.join(x['role'] for x in r), ','.join(x['role'] for x in devices.present() if x['present']) or '-'))" 2>&1 | tail -n 1)
 apir=$(python3 -c "import fusion.hardware as h; print(h.summary())" 2>&1 | tail -n 1)
 echo "FUSION-API: USER $api ROOT $apir"
-echo "FUSION-API: NOTIFY $(urun fusion-notify -u low -i settings "Fusion API" "értesítés a fusion.notify-on át" && echo ok || echo HIBA)"
+echo "FUSION-API: NOTIFY $(urun fusion-notify -u low -i settings "Fúzió API" "értesítés a fusion.notify-on át" && echo ok || echo HIBA)"
 # M8b: a `fusion` parancssor — minden lekérdezés JSON-kimenete a leírás (docs/api/cli.md) szerinti kulcsokkal
 urun sh -c 'for c in "api-version" "system" "hardware" "devices" "volumes" "power" "jobs" "schema" "programs list"; do
     printf "%s\t" "$c"; fusion $c --json 2>&1 | tr -d "\n"; echo; done' > /tmp/fusion-cli.txt
@@ -686,7 +686,7 @@ if urun xdpyinfo >/dev/null 2>&1; then
     echo "FUSION-PROGWIN: window=$(winview "Programkezelő") wait=${i}s settings=$(winview "Beállítások")"
     pkill -u fusion -f 'fusion_settings.py programs' 2>/dev/null
 fi
-# M8d: a Lézer állapot próba-program (csak a Fusion API-n át) — önteszt a valódi eszközréteggel
+# M8d: a Lézer állapot próba-program (csak a Fúzió API-n át) — önteszt a valódi eszközréteggel
 urun env QT_QPA_PLATFORM=offscreen fusion-laser --selftest 2>&1 | grep '^FUSION-LASER:'
 # feladat-protokoll: a Beállítások hibajelentése a fusion.jobs-on át; az állapot a $XDG_RUNTIME_DIR/fusion/jobs alatt
 jr=$(urun python3 -c "import sys; sys.path.insert(0, '/usr/lib/fusion/desktop/settings'); sys.path.insert(0, '/usr/lib/fusion/desktop/lib')
@@ -720,7 +720,7 @@ mods=""; for x in uvcvideo btusb btintel btrtl hci_vhci bnep hidp rfcomm; do mod
 echo "FUSION-J8: MODULES$mods fw=$(ls /usr/lib/firmware/intel/ibt-hw-37.7* 2>/dev/null | wc -l) groups=$(id -nG fusion | tr ' ' '\n' | grep -cx 'bluetooth\|lpadmin') qtmm=$(python3 -c 'import PyQt6.QtMultimedia; print("ok")' 2>&1 | tail -n 1)"
 # a kamera-, Bluetooth- és nyomtatópróba csak a teszt-pendrive-os futásban (std + SATA) — a többiben az idő kevés
 if [ -f /tmp/fusion-test-stick ]; then
-# kamera: virtuális teszt-kamera (vivid, csak képrögzítő csomópont) — lista a Fusion API-ból, fénykép a Kamera programmal
+# kamera: virtuális teszt-kamera (vivid, csak képrögzítő csomópont) — lista a Fúzió API-ból, fénykép a Kamera programmal
 modprobe vivid n_devs=1 node_types=0x1 2>/dev/null; udevadm settle --timeout=10
 echo "FUSION-J8: CAMERAS $(urun fusion cameras --json | python3 -c 'import json,sys; c=json.load(sys.stdin); print(len(c), ",".join(x["name"] + ":" + x["bus"] for x in c))' 2>&1 | tail -n 1)"
 # szoftveres felülettel (FUSION_UI_RENDER=software): a Kamera ekkor is OpenGL-lel rajzol (ZBook 0.0.41: fekete élőkép)
@@ -822,7 +822,7 @@ p1=$(shpss)
 r2=$(rset gpu)
 echo "FUSION-J3: RENDER set=$r1 mode=$m1 pss=${p1:-?}MB back=$r2 file=$(cat /home/fusion/.config/fusion/render 2>/dev/null)"
 echo "FUSION-J3: PAM lastlog=$(journalctl -b --no-pager -o cat 2>/dev/null | grep -c pam_lastlog) login=$(grep -c pam_lastlog /etc/pam.d/login)"
-# --- T3: DATA mentése és telepítő pendrive készítése a futó FusionOS-ből (a telepítő-teszt 2. indítása) ---
+# --- T3: DATA mentése és telepítő pendrive készítése a futó Fúzióból (a telepítő-teszt 2. indítása) ---
 t3b=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONBACKUP" {print $1; exit}')
 t3m=$(lsblk -dno NAME,SERIAL | awk '$2 == "FUSIONMEDIA" {print $1; exit}')
 if [ -n "$t3b" ] && [ -n "$t3m" ] && [ ! -e /data/.fusion-test-restored ]; then

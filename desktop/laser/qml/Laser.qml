@@ -1,5 +1,5 @@
-// FusionOS — Lézer állapot (M8d): a szerep állapota, a rögzítés, melyik program melyik COM-porton éri el,
-// a program indítása — minden adat a Fusion API-ból (fusion.devices, fusion.programs)
+// Fúzió — Lézer állapot (M8d): a szerep állapota, a rögzítés, melyik program melyik COM-porton éri el,
+// a program indítása — minden adat a Fúzió API-ból (fusion.devices, fusion.programs)
 import QtQuick
 import QtQuick.Controls
 import FusionUI

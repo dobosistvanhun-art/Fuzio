@@ -1,4 +1,4 @@
-# FusionOS — Wi-Fi: DHCP a systemd-networkd-vel (a kapcsolódást az iwd végzi).
+# Fúzió — Wi-Fi: DHCP a systemd-networkd-vel (a kapcsolódást az iwd végzi).
 # Ha a vezetékes is él, az a preferált (kisebb útvonal-metrika).
 [Match]
 Type=wlan

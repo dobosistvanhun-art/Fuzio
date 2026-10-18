@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Feladatkezelő (Ctrl+Alt+Del)
+"""Fúzió — Feladatkezelő (Ctrl+Alt+Del)
 
     fusion-tasks              az ablak (ha már fut: előre hozza)
     fusion-tasks --selftest   önteszt: egy válaszoló és egy „lefagyott” próbaablak felismerése, bezárása

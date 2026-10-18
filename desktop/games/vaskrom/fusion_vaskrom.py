@@ -18,7 +18,7 @@ from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot  # no
 
 try:
     import fusion_ui as ui
-except ImportError:                       # a FusionOS-en kívül (fejlesztés, Windows-változat)
+except ImportError:                       # a Fúzión kívül (fejlesztés, Windows-változat)
     ui = None
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
@@ -376,7 +376,7 @@ def main():
         return sound_probe()
     if ui:
         app, engine = ui.create_app("fusion-vaskrom", "Vas & Króm", "game")
-    else:                                     # a FusionOS-en kívül (Windows-változat, fejlesztés)
+    else:                                     # a Fúzión kívül (Windows-változat, fejlesztés)
         os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
         from PyQt6.QtGui import QFontDatabase, QGuiApplication, QIcon
         from PyQt6.QtQml import QQmlApplicationEngine

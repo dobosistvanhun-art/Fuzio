@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — fusion-disk: a Fusion Lemezkezelő rendszeroldali része (root, a fusion-admin hívja)
+"""Fúzió — fusion-disk: a Fúzió Lemezkezelő rendszeroldali része (root, a fusion-admin hívja)
 
     fusion-disk list [--smart]                                  lemezek, partíciók, szabad helyek (JSON)
     fusion-disk format-disk <lemez> <gpt|dos> <fs|none> <címke> <megerősítés>
@@ -18,12 +18,12 @@
 
 fs: vfat (FAT32) | exfat | ntfs | ext4. A megerősítés a lemez kernelneve (pl. sdc) — a felhasználó gépeli be.
 
-Adatlemez (0.0.48): egy belső (nem cserélhető) lemez egy partíciója, amelyet a FusionOS minden induláskor csatol —
-a FusionOS saját lemezén (DATA) kívüli tárhely. A beállítás a DATA-n van (/data/system/storage.json), a partíciót
+Adatlemez (0.0.48): egy belső (nem cserélhető) lemez egy partíciója, amelyet a Fúzió minden induláskor csatol —
+a Fúzió saját lemezén (DATA) kívüli tárhely. A beállítás a DATA-n van (/data/system/storage.json), a partíciót
 az UUID-ja azonosítja; ha a partíciót újraformázzák vagy törlik, a beállítás magától megszűnik.
 
 Általános szabályok, eszköztípustól függetlenül (a Hardware Layer általános marad):
-  - a FusionOS saját lemeze (/run/fusion/boot-disk) csak megtekinthető; egy másik FusionOS-lemez
+  - a Fúzió saját lemeze (/run/fusion/boot-disk) csak megtekinthető; egy másik Fúzió-lemez
     (pl. régi telepítő pendrive) FUSION_* partíciói külön nem módosíthatók, csak a teljes lemez törölhető;
   - csak teljes lemez (SATA, NVMe, USB, SD-kártya) — loop, RAM-lemez, optikai meghajtó nem;
   - a /run/media alá csatolt köteteket a művelet előtt leválasztja; amit a rendszer máshol használ
@@ -61,10 +61,10 @@ FS = {
 }
 ESP_GUID = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
 FRIENDLY_PARTLABEL = {
-    "FUSION_ESP": "FusionOS indítópartíció (EFI)",
-    "FUSION_A": "FusionOS rendszer — A slot",
-    "FUSION_B": "FusionOS rendszer — B slot",
-    "FUSION_DATA": "FusionOS adatok (DATA)",
+    "FUSION_ESP": "Fúzió indítópartíció (EFI)",
+    "FUSION_A": "Fúzió rendszer — A slot",
+    "FUSION_B": "Fúzió rendszer — B slot",
+    "FUSION_DATA": "Fúzió adatok (DATA)",
 }
 
 
@@ -371,7 +371,7 @@ def collect(smart=False):
             "sector": sector_size(name),
         }
         if system:
-            info["locked"] = "a FusionOS saját lemeze — csak megtekinthető"
+            info["locked"] = "a Fúzió saját lemeze — csak megtekinthető"
         elif d.get("ro"):
             info["locked"] = "írásvédett"
         elif any(p["locked"] for p in parts):
@@ -415,7 +415,7 @@ def find_part(name):
 
 def check_disk_writable(d, confirm=None):
     if d["system"]:
-        raise DiskError(f"a FusionOS saját lemeze ({d['name']}) — nem módosítható")
+        raise DiskError(f"a Fúzió saját lemeze ({d['name']}) — nem módosítható")
     if d["ro"]:
         raise DiskError(f"a lemez írásvédett: {d['name']}")
     if confirm is not None and confirm.strip() != d["name"]:
@@ -427,7 +427,7 @@ def check_part_writable(d, p, confirm=None):
     if p["locked"]:
         raise DiskError(f"{p['name']}: {p['locked']}")
     if p["fusionpart"]:
-        raise DiskError(f"{p['name']}: egy másik FusionOS-telepítés partíciója ({p['partlabel']}) — "
+        raise DiskError(f"{p['name']}: egy másik Fúzió-telepítés partíciója ({p['partlabel']}) — "
                         "külön nem módosítható, csak a teljes lemez törölhető")
     if p["extended"]:
         raise DiskError(f"{p['name']}: kiterjesztett partíció (MBR) — a benne lévő logikai partíciók kezelhetők")
@@ -775,11 +775,11 @@ def storage_forget(p):
 def cmd_storage_set(part):
     d, p = find_part(part)
     if d["system"]:
-        raise DiskError("a FusionOS saját lemeze nem lehet Adatlemez (az ott a DATA)")
+        raise DiskError("a Fúzió saját lemeze nem lehet Adatlemez (az ott a DATA)")
     if d["removable"]:
         raise DiskError(f"{d['name']}: cserélhető eszköz (pendrive, kártya) — Adatlemez csak belső lemez lehet")
     if p["fusionpart"]:
-        raise DiskError(f"{p['name']}: egy másik FusionOS-telepítés partíciója ({p['partlabel']})")
+        raise DiskError(f"{p['name']}: egy másik Fúzió-telepítés partíciója ({p['partlabel']})")
     if p["locked"]:
         raise DiskError(f"{p['name']}: {p['locked']}")
     if p["fstype"] not in STORAGE_FS:

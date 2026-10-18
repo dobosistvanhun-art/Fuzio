@@ -1,11 +1,11 @@
-"""FusionOS — Programbolt: a Flathub katalógusa (böngészés, keresés, részletek)
+"""Fúzió — Programbolt: a Flathub katalógusa (böngészés, keresés, részletek)
 
 A Programkezelő része: a bolt csak a katalógust mutatja, a telepítést ugyanaz a háttér végzi
 (fusion-programs install flathub:<azonosító>), mint a Programkezelőben.
 
 Forrás: a Flathub nyilvános API-ja (https://flathub.org/api/v2) — magyar fordítással, ahol van
 (locale=hu). Az ikonok és képernyőképek a ~/.cache/fusion/store mappába kerülnek (gyorsítótár).
-Nincs fiók, nincs központi Fusion-szerver.
+Nincs fiók, nincs központi Fúzió-szerver.
 """
 import hashlib
 import html
@@ -21,10 +21,10 @@ import urllib.request
 API = os.environ.get("FUSION_STORE_API", "https://flathub.org/api/v2")
 LOCALE = "hu"
 CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "fusion", "store")
-UA = "FusionOS-Programbolt/1.0"
+UA = "Fuzio-Programbolt/1.0"
 PER_PAGE = 30
 
-# a Flathub fő kategóriái (az API kisbetűs nevei) — magyar név, Fusion-ikon
+# a Flathub fő kategóriái (az API kisbetűs nevei) — magyar név, Fúzió-ikon
 CATEGORIES = [
     ("graphics", "Grafika", "file-image"),
     ("office", "Iroda", "file-text"),

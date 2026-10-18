@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-#  Fusion Hardware Layer — fusion-hwprobe tesztek hamis sysfs-fákkal.
+#  Fúzió Hardware Layer — fusion-hwprobe tesztek hamis sysfs-fákkal.
 #  Futtatás:  sh tests/hwprobe-test.sh        (bash vagy busybox sh is jó)
 #             SHELL_UNDER_TEST="busybox sh" sh tests/hwprobe-test.sh
 # =============================================================================

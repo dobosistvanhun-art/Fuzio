@@ -1,4 +1,4 @@
-// FusionOS — Beállítások: főablak (bal oldalt az oldalak, jobbra a tartalom)
+// Fúzió — Beállítások: főablak (bal oldalt az oldalak, jobbra a tartalom)
 import QtQuick
 import QtQuick.Controls
 import FusionUI

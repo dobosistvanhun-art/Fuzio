@@ -125,7 +125,7 @@ def list_jobs():
     return [state(n) for n in names]
 
 
-def start(name, title, cmd, app="FusionOS", icon="settings", okpat="", env=None):
+def start(name, title, cmd, app="Fúzió", icon="settings", okpat="", env=None):
     """a feladat indítása külön folyamatban → (hibaszöveg | "", Popen | None)
     A hívó tartsa meg a Popen-t és hívja a poll()-t (ne maradjon zombi), vagy hagyja a init-re."""
     fj, fl = _paths(name)
@@ -191,11 +191,11 @@ def _run(name):
             pat = re.compile(j["okpat"]) if j.get("okpat") else None
             ok = [x for x in lines if pat and pat.search(x)]
             notify.send(j.get("title", name) + ": kész", ok[-1] if ok else "", icon=j.get("icon") or "",
-                        app=j.get("app") or "FusionOS")
+                        app=j.get("app") or "Fúzió")
         else:
             err = lines[-1] if lines else f"kilépési kód: {rc}"
             notify.send(j.get("title", name) + ": sikertelen", err.split(": ", 1)[-1], icon=j.get("icon") or "",
-                        app=j.get("app") or "FusionOS", urgency="critical")
+                        app=j.get("app") or "Fúzió", urgency="critical")
     except Exception:          # az értesítés hiánya nem teheti tönkre a feladat eredményét
         pass
     return rc

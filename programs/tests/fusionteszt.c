@@ -1,4 +1,4 @@
-/* FusionOS — FusionTeszt: a Fusion Programkezelő Windows-telepítési próbája (a QEMU-tesztben)
+/* Fúzió — FusionTeszt: a Fúzió Programkezelő Windows-telepítési próbája (a QEMU-tesztben)
  *
  *   fusionteszt-setup.exe   telepítőként: C:\Program Files\FusionTeszt\fusionteszt.exe +
  *                           Start menü parancsikonok (FusionTeszt, Uninstall FusionTeszt) — mint egy

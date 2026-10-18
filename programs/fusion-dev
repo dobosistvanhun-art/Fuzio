@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — fejlesztői eszközök (Node.js LTS, Wrangler)
+"""Fúzió — fejlesztői eszközök (Node.js LTS, Wrangler)
 
     fusion-dev                    állapot
     fusion-dev install node       Node.js LTS (nodejs.org, ellenőrzőösszeggel) → /data/dev/node
@@ -12,7 +12,7 @@
     fusion-dev box status|create|remove
     fusion-dev box run <parancs…> egy parancs a dobozban (az aktuális mappában, ha a saját mappán belül van)
 
-A rendszerkép nem változik (csak olvasható): minden a DATA-n van, root nélkül. Ami apt-tal települ (pl. a FusionOS
+A rendszerkép nem változik (csak olvasható): minden a DATA-n van, root nélkül. Ami apt-tal települ (pl. a Fúzió
 buildjének eszközei), az a Fejlesztődobozba kerül (rendszergazdai fiók kell). A parancsok a munkamenetben
 (Terminál) a PATH-on vannak: /data/dev/node/bin és ~/.local/bin. Bejelentkezés a Cloudflare-be:
 `wrangler login` (a böngészőben).

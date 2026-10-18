@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Fusion Telepítő (a telepítő pendrive-on, telepítő módban indul a Fusion Shell helyett)
+"""Fúzió — Fúzió Telepítő (a telepítő pendrive-on, telepítő módban indul a Fúzió Shell helyett)
 
     fusion-installer              az ablak
     fusion-installer --selftest   önteszt: a csomag, a lemezlista (sudo fusion-admin install list), a felület
@@ -35,7 +35,7 @@ def load_list():
         x["kindText"] = KIND.get(x["kind"], x["kind"])
         f = x.get("fusion")
         if f:
-            x["content"] = "FusionOS" + (" " + f["version"] if f.get("version") else "") + \
+            x["content"] = "Fúzió" + (" " + f["version"] if f.get("version") else "") + \
                 (f" — DATA: {ui.human_size(f['dataUsed'])} foglalt" if f.get("dataUsed") is not None else "")
         elif x.get("otheros"):
             x["content"] = "másik operációs rendszer (EFI-partíció) — pl. Linux Mint vagy Windows"
@@ -175,7 +175,7 @@ def selftest():
     sysd = [x["name"] for x in d.get("disks", []) if not x["eligible"] and x["reason"] == "ez a telepítő pendrive"]
     check("DISKS", d.get("disks") and len(sysd) == 1, f"választható={','.join(el) or '-'} telepítő={','.join(sysd) or '-'} {d.get('error', '')}")
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    app, engine = ui.create_app("fusion-installer", "FusionOS telepítő", "disks")
+    app, engine = ui.create_app("fusion-installer", "Fúzió telepítő", "disks")
     be = Backend()
     engine.rootContext().setContextProperty("inst", be)
     engine.load(QUrl.fromLocalFile(os.path.join(HERE, "qml", "Installer.qml")))
@@ -187,7 +187,7 @@ def selftest():
 def main():
     if sys.argv[1:2] == ["--selftest"]:
         return selftest()
-    app, engine = ui.create_app("fusion-installer", "FusionOS telepítő", "disks")
+    app, engine = ui.create_app("fusion-installer", "Fúzió telepítő", "disks")
     be = Backend()
     engine.rootContext().setContextProperty("inst", be)
     ui.load(engine, os.path.join(HERE, "qml", "Installer.qml"))

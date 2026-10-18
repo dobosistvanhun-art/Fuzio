@@ -1,4 +1,4 @@
-// FusionOS — Fájlkezelő: egyszerű szövegszerkesztő (F4) — konfigurációk, G-kód, jegyzetek
+// Fúzió — Fájlkezelő: egyszerű szövegszerkesztő (F4) — konfigurációk, G-kód, jegyzetek
 import QtQuick
 import QtQuick.Controls
 import FusionUI

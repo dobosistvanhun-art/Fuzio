@@ -1,5 +1,5 @@
-// FusionOS — Lemezkezelő: lemezek, partíciók, állapot; formázás, címke, új partíció, törlés
-// (a lemezíró műveletekhez a lemez nevét be kell gépelni; a FusionOS saját lemeze csak megtekinthető)
+// Fúzió — Lemezkezelő: lemezek, partíciók, állapot; formázás, címke, új partíció, törlés
+// (a lemezíró műveletekhez a lemez nevét be kell gépelni; a Fúzió saját lemeze csak megtekinthető)
 import QtQuick
 import QtQuick.Controls
 import FusionUI
@@ -75,7 +75,7 @@ FWindow {
                                    font.family: Theme.font; font.pixelSize: 13; font.bold: true }
                             Text { width: parent.width; elide: Text.ElideRight; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11
                                    text: modelData.name + " · " + modelData.sizeText + " · " + modelData.kindText +
-                                         (modelData.system ? " · FusionOS" : "") }
+                                         (modelData.system ? " · Fúzió" : "") }
                         }
                         FIcon { visible: modelData.system; anchors.right: parent.right; anchors.rightMargin: 12
                                 anchors.verticalCenter: parent.verticalCenter; size: 16; name: "lock" }
@@ -133,9 +133,9 @@ FWindow {
                         id: warnTxt; x: 40; y: 9; width: parent.width - 52; wrapMode: Text.Wrap; color: Theme.text
                         font.family: Theme.font; font.pixelSize: 12
                         text: !win.disk ? "" : win.disk.system
-                              ? "A FusionOS saját lemeze: csak megtekinthető. A rendszer frissítése a Beállítások → Rendszerfrissítés oldalon történik."
+                              ? "A Fúzió saját lemeze: csak megtekinthető. A rendszer frissítése a Beállítások → Rendszerfrissítés oldalon történik."
                               : win.disk.fusion
-                              ? "Ezen a lemezen egy másik FusionOS-telepítés van (pl. régi telepítő pendrive). A FusionOS-partíciók külön nem módosíthatók; a teljes lemez törölhető."
+                              ? "Ezen a lemezen egy másik Fúzió-telepítés van (pl. régi telepítő pendrive). A Fúzió-partíciók külön nem módosíthatók; a teljes lemez törölhető."
                               : win.disk.otheros
                               ? "Ezen a lemezen EFI-partíció van — valószínűleg egy másik operációs rendszer (pl. Linux Mint, Windows) is rajta van. Csak akkor módosítsa, ha biztos benne."
                               : "Egy partícióját a rendszer használja (" + win.disk.inuse + "), ezért a lemez egésze nem törölhető."
@@ -378,8 +378,8 @@ FWindow {
                     width: parent.width; wrapMode: Text.Wrap; color: Theme.dim; font.family: Theme.font; font.pixelSize: 11
                     text: ({ vfat: "Minden eszköz olvassa (Windows, Mac, régi készülékek, 3D-nyomtató, lézer). Egy fájl legfeljebb 4 GB; a címke legfeljebb 11 karakter, ékezet nélkül.",
                              exfat: "Pendrive-ra ajánlott: nagy fájlok, Windows és Mac is olvassa.",
-                             ntfs: "Windows-lemez; a FusionOS is írja-olvassa.",
-                             ext4: "Linux / FusionOS adatlemez; Windows alatt nem olvasható.",
+                             ntfs: "Windows-lemez; a Fúzió is írja-olvassa.",
+                             ext4: "Linux / Fúzió adatlemez; Windows alatt nem olvasható.",
                              none: "Csak üres partíciós tábla; a partíciókat utána hozhatja létre." })[opDlg.fs] || ""
                 }
             }

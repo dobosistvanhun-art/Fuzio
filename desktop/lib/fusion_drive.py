@@ -1,4 +1,4 @@
-"""FusionOS — Google Drive a Fájlkezelőben (rclone, FUSE-csatolás)
+"""Fúzió — Google Drive a Fájlkezelőben (rclone, FUSE-csatolás)
 
 A Drive egy kötetként látszik: ~/GoogleDrive — a Fájlkezelő, a LightBurn (ha a mappát látja) és minden
 program úgy kezeli, mint egy mappát. A csatolást a fusion-drive.service felhasználói szolgáltatás végzi
@@ -6,7 +6,7 @@ program úgy kezeli, mint egy mappát. A csatolást a fusion-drive.service felha
 a háttérben feltöltődik). Bejelentkezés: a böngészőben (Google OAuth, az rclone saját azonosítójával);
 a hozzáférési jegy a felhasználó beállításai közt marad (~/.config/fusion/rclone.conf, csak a fusion olvassa).
 
-A Fusion-felület csak ezt a modult hívja: connect / disconnect / status / start / stop.
+A Fúzió-felület csak ezt a modult hívja: connect / disconnect / status / start / stop.
 """
 import json
 import os

@@ -1,4 +1,4 @@
-# FusionOS rendszerkép — csomaglista (Ubuntu 24.04 noble, minbase fölé)
+# Fúzió rendszerkép — csomaglista (Ubuntu 24.04 noble, minbase fölé)
 # Egy sor = egy csomag. A # utáni rész megjegyzés.
 
 # init, eszközkezelés, munkamenetek
@@ -13,7 +13,7 @@ kmod
 linux-modules-@KERNEL_ABI@
 
 # hálózat: vezetékes és Wi-Fi DHCP (systemd-networkd); Wi-Fi: iwd (jelenlegi megoldás,
-# a NetworkManager/iwd végleges döntése a Fusion Desktop felületével együtt)
+# a NetworkManager/iwd végleges döntése a Fúzió Desktop felületével együtt)
 iwd
 # a Wi-Fi állapota a hibajelentésben (energiatakarékosság, kapcsolat) — 0.0.36
 iw
@@ -54,7 +54,7 @@ libgl1-mesa-dri
 libglx-mesa0
 libegl-mesa0
 libvulkan1
-# M2 ideiglenes asztal (a Fusion Shell az M6-ban váltja): ablakkezelő, terminál, betűk
+# M2 ideiglenes asztal (a Fúzió Shell az M6-ban váltja): ablakkezelő, terminál, betűk
 jwm
 xterm
 # a Terminál (0.0.47): jobb gombos menü (Másolás, Beillesztés), fülek — VTE (GTK3 már van a képben), ~1,3 MB
@@ -64,7 +64,7 @@ fonts-dejavu-core
 mesa-utils
 vulkan-tools
 
-# Fusion Windows Runtime (M4): a Wine futásidejű könyvtárai (a Wine maga forrásból
+# Fúzió Windows Runtime (M4): a Wine futásidejű könyvtárai (a Wine maga forrásból
 # fordul, build/steps/wine.sh; 32 bites Linux-könyvtár nem kell — WoW64)
 libfreetype6
 libfontconfig1
@@ -103,7 +103,7 @@ python3-gi
 gir1.2-gtk-3.0
 gir1.2-webkit2-4.1
 
-# M6 — Fusion Desktop (Qt 6 / Qt Quick, a mérés alapján): Fusion Shell (panel, Start menü,
+# M6 — Fúzió Desktop (Qt 6 / Qt Quick, a mérés alapján): Fúzió Shell (panel, Start menü,
 # értesítések), Fájlkezelő, Beállítások — Python + QML, közös FusionUI modul
 python3-xlib
 x11-utils
@@ -120,7 +120,7 @@ libqt6svg6
 # a fusion-admin: foglalt kötet kiírása (fuser); a Wi-Fi-t a Beállítások a D-Buson kérdezi (busctl)
 psmisc
 
-# M6 — Fusion Programkezelő, mérési szakasz: Linux-programok Flatpakként (Flathub), homokozó, portálok
+# M6 — Fúzió Programkezelő, mérési szakasz: Linux-programok Flatpakként (Flathub), homokozó, portálok
 # (a Firefox-mérés: fusion-appmeasure; a döntés a mérés után)
 flatpak
 xdg-utils
@@ -140,7 +140,7 @@ xdg-desktop-portal
 xdg-desktop-portal-gtk
 fuse3
 
-# Fusion Lemezkezelő (2026-10-05, István döntése a mérés alapján — saját, a fusion-admin-ra építve):
+# Fúzió Lemezkezelő (2026-10-05, István döntése a mérés alapján — saját, a fusion-admin-ra építve):
 # partíciós tábla (parted, sgdisk), formázás (FAT32, exFAT, NTFS; ext4: e2fsprogs), címke, lemezállapot (SMART)
 parted
 fdisk
@@ -177,7 +177,7 @@ libnss-mdns
 printer-driver-hpcups
 printer-driver-gutenprint
 printer-driver-cups-pdf
-# 0.0.46: Fejlesztődoboz (Ubuntu 24.04 a DATA-n, systemd-nspawn) — a FusionOS buildje Mint nélkül
+# 0.0.46: Fejlesztődoboz (Ubuntu 24.04 a DATA-n, systemd-nspawn) — a Fúzió buildje Mint nélkül
 debootstrap
 systemd-container
 ubuntu-keyring

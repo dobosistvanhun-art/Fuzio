@@ -1,4 +1,4 @@
-// FusionOS — Fájlkezelő: megtekintés (F3) — szöveg, kép, archívum tartalma, bináris (hexa)
+// Fúzió — Fájlkezelő: megtekintés (F3) — szöveg, kép, archívum tartalma, bináris (hexa)
 import QtQuick
 import QtQuick.Controls
 import FusionUI

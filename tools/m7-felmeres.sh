@@ -1,23 +1,23 @@
 #!/bin/bash
-# FusionOS — M7 (A/B frissítés) előtti felmérés. NEM MÓDOSÍT SEMMIT; személyes adatot nem ír ki
+# Fúzió — M7 (A/B frissítés) előtti felmérés. NEM MÓDOSÍT SEMMIT; személyes adatot nem ír ki
 # (Wi-Fi-hálózatnevek, saját fájlnevek helyett csak darabszám és méret).
 #
-#   FusionOS-en (Terminál, sudo nélkül):   bash m7-felmeres.sh
+#   Fúzión (Terminál, sudo nélkül):   bash m7-felmeres.sh
 #       → a bootloader adatai (systemd-boot változat, funkciók: boot-számlálás), slot, ESP
-#   Minten (a FusionOS-lemez DATA-ja csak olvashatóan):   sudo bash m7-felmeres.sh /dev/sdb
+#   Minten (a Fúzió-lemez DATA-ja csak olvashatóan):   sudo bash m7-felmeres.sh /dev/sdb
 #       → mi van a DATA írható rendszerrétegében (overlay), mekkora, mi változott az /etc-ben
 #
 # A kimenetet (m7-felmeres.txt) kérem visszaküldeni.
 set -u
 OUT="$PWD/m7-felmeres.txt"
 exec > >(tee "$OUT") 2>&1
-echo "== FusionOS M7-felmérés  $(date '+%Y-%m-%d %H:%M')  ($(uname -r))"
+echo "== Fúzió M7-felmérés  $(date '+%Y-%m-%d %H:%M')  ($(uname -r))"
 
 EV=/sys/firmware/efi/efivars
 LG=4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
 efistr() { [ -r "$EV/$1-$LG" ] && cat "$EV/$1-$LG" | tail -c +5 | tr -d '\000'; }   # az efivarfs nem léptethető
 if [ -r /usr/lib/fusion/fusion-release ] || [ -r /etc/fusion-release ]; then
-    echo "-- FusionOS: $(. /usr/lib/fusion/fusion-release 2>/dev/null; echo "${FUSION_VERSION:-?} (${FUSION_MILESTONE:-?})")"
+    echo "-- Fúzió: $(. /usr/lib/fusion/fusion-release 2>/dev/null; echo "${FUSION_VERSION:-?} (${FUSION_MILESTONE:-?})")"
     echo "slot: $(cat /run/fusion/slot 2>/dev/null)   boot-lemez: $(cat /run/fusion/boot-disk 2>/dev/null)"
     echo "bootloader: $(efistr LoaderInfo)"
     echo "firmware:   $(efistr LoaderFirmwareInfo)  (UEFI $(efistr LoaderFirmwareType))"
@@ -41,10 +41,10 @@ fi
 # --- Minten: a DATA csak olvashatóan (noload: a napló sem íródik vissza) ---
 dev=${1:-}
 [ "$(id -u)" -eq 0 ] || { echo "Minten root kell:  sudo bash $0 /dev/sdX"; exit 1; }
-[ -b "$dev" ] || { echo "add meg a FusionOS-lemezt, pl.: sudo bash $0 /dev/sdb"; exit 1; }
+[ -b "$dev" ] || { echo "add meg a Fúzió-lemezt, pl.: sudo bash $0 /dev/sdb"; exit 1; }
 data=${M7_DATA_DEV:-$(lsblk -lnpo NAME,PARTLABEL "$dev" | awk '$2=="FUSION_DATA"{print $1}')}   # M7_*_DEV: csak fejlesztői próbához
 esp=${M7_ESP_DEV:-$(lsblk -lnpo NAME,PARTLABEL "$dev" | awk '$2=="FUSION_ESP"{print $1}')}
-[ -n "$data" ] || { echo "$dev nem FusionOS-lemez (nincs FUSION_DATA)"; exit 1; }
+[ -n "$data" ] || { echo "$dev nem Fúzió-lemez (nincs FUSION_DATA)"; exit 1; }
 lsblk -o NAME,SIZE,FSTYPE,PARTLABEL "$dev"
 m=$(mktemp -d); e=$(mktemp -d)
 cleanup() { umount "$m" 2>/dev/null; umount "$e" 2>/dev/null; rmdir "$m" "$e"; }

@@ -1,20 +1,23 @@
-# FusionOS
+# Fúzió
+
+*(Korábbi neve: FusionOS — a 0.0.52-től Fúzió, mert a FusionOS nevet más cégek már használják.
+A belső parancsok, a `fusion-…` nevek és a fusion felhasználó változatlanok.)*
 
 Saját felhasználói és rendszerabsztrakcióval rendelkező operációs rendszer.
-A Linux kernel itt infrastruktúra és driver-alap, nem a FusionOS identitása.
+A Linux kernel itt infrastruktúra és driver-alap, nem a Fúzió identitása.
 Célgép: HP ZBook 15 G2 (Quadro K1100M, diszkrét mód).
 
-**Állapot: M6 — Fusion Desktop** (folyamatban).
+**Állapot: M6 — Fúzió Desktop** (folyamatban).
 Lezárva: M4 (LightBurn 2.1 + COM3 + GRBL), M5 (Klipper), M0 (build-környezet, EFI-boot), M1 (alaprendszer), M2 (grafika, NVIDIA 470 — ZBook:
 OpenGL 4.6, Vulkan 1.2.175), M3 (USB/hardverréteg — ZBook: `/dev/fusion/laser` → `Grbl 1.1h`).
 
-## M6 — Fusion Desktop
+## M6 — Fúzió Desktop
 
 A felületi technika a ZBookon mért adatok alapján: **Qt 6 / Qt Quick (QML)**, Python háttérrésszel
 (a mérés és a döntés: `docs/M6-meres.md`). Az ablakokat a JWM kezeli (FusionDark, saját tálca nélkül).
 Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 
-- **Fusion Shell** (`fusion-shell`): panel (Start, tálca, lézer/nyomtató/meghajtó jelzés, Wi-Fi, értesítések,
+- **Fúzió Shell** (`fusion-shell`): panel (Start, tálca, lézer/nyomtató/meghajtó jelzés, Wi-Fi, értesítések,
   óra + naptár), Start menü (keresés programokra és beállításokra, kikapcsolás), értesítések a szabványos
   `org.freedesktop.Notifications` szolgáltatással (`fusion-notify`, `notify-send`), értesítésközpont
 - **Fájlkezelő** (`fusion-files`): kétpaneles; F3–F8, Tab, jelölés, vágólap, húzás, keresés (Alt+F7),
@@ -27,26 +30,29 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **Lomtár** (Fájlkezelő): a törlés a szabványos lomtárba tesz (Ctrl+Z visszavonás, visszaállítás az eredeti helyre, Shift+Del végleges törlés); Drive-panel mellett sem lassú. Ellenőrzés: `docs/M6j-startmenu-fejlesztes.md`
 - **Letöltések** mappa (XDG — a Flatpak-programok, pl. a Firefox ide mentenek) és **Megnyitás ezzel…** (Shift+Enter, „mindig ezzel”) a Fájlkezelőben. Ellenőrzés: `docs/M6k-letoltes-tarsitas.md`
 - **A/B frissítés** (M7): az új rendszer a nem aktív slotba kerül és próbaként indul (systemd-boot boot-számlálás, 3 lehetőség); sikeres indulás után véglegesül, különben magától a korábbi indul. `fusion-update`, Minten `fusion-build update` (A/B) és `--hibas-proba`. Ellenőrzés: `docs/M7a-ab-frissites.md`
-- **Rendszerfrissítés fájlból** (Beállítások → Rendszerfrissítés): `.fupd` a Letöltésekből / pendrive-ról, újraindítás a FusionOS-be, értesítés véglegesítéskor / visszaálláskor. **Feladatkezelő** (Ctrl+Alt+Del): „nem válaszol” felismerés, bezárás, kényszerített bezárás. Ellenőrzés: `docs/M7b-frissites-feladatkezelo.md`, lezárás: `docs/M7c-lezaras.md`
-- **Lemezkezelő** (Start → Lemezkezelő; `fusion-disks`): lemezek és partíciók, állapot (SMART), formázás (FAT32, exFAT, NTFS, ext4), címke, partíció létrehozása / törlése — gépelt megerősítéssel; a FusionOS saját lemeze csak megtekinthető. **Hibajelentés** (Beállítások → Hibajelentés; `fusion-report`): a rendszer állapota egy maszkolt szövegfájlban, nem küld adatot sehova. Ellenőrzés: `docs/T1-lemezkezelo-hibajelentes.md`
-- **Telepítő pendrive** (T2; Minten: `sudo build/fusion-build installer /dev/sdX`): a **Fusion Telepítő** — új telepítés egy lemezre, vagy egy meglévő FusionOS újratelepítése a DATA (programok, Wi-Fi, beállítások) megőrzésével; Mint nélkül, bármelyik gépen. Ellenőrzés: `docs/T2-telepito.md`. **T3:** telepítő pendrive a FusionOS-ből is (Rendszerfrissítés → „Telepítő pendrive készítése…”), **Mentés** (Beállítások → Mentés: a DATA egy külső lemezre), visszaállítás a telepítőben, Wi-Fi átvétele — `docs/T3-mentes-telepito.md`
+- **Rendszerfrissítés fájlból** (Beállítások → Rendszerfrissítés): `.fupd` a Letöltésekből / pendrive-ról, újraindítás a Fúzióba, értesítés véglegesítéskor / visszaálláskor. **Feladatkezelő** (Ctrl+Alt+Del): „nem válaszol” felismerés, bezárás, kényszerített bezárás. Ellenőrzés: `docs/M7b-frissites-feladatkezelo.md`, lezárás: `docs/M7c-lezaras.md`
+- **Lemezkezelő** (Start → Lemezkezelő; `fusion-disks`): lemezek és partíciók, állapot (SMART), formázás (FAT32, exFAT, NTFS, ext4), címke, partíció létrehozása / törlése — gépelt megerősítéssel; a Fúzió saját lemeze csak megtekinthető. **Hibajelentés** (Beállítások → Hibajelentés; `fusion-report`): a rendszer állapota egy maszkolt szövegfájlban, nem küld adatot sehova. Ellenőrzés: `docs/T1-lemezkezelo-hibajelentes.md`
+- **Telepítő pendrive** (T2; Minten: `sudo build/fusion-build installer /dev/sdX`): a **Fúzió Telepítő** — új telepítés egy lemezre, vagy egy meglévő Fúzió újratelepítése a DATA (programok, Wi-Fi, beállítások) megőrzésével; Mint nélkül, bármelyik gépen. Ellenőrzés: `docs/T2-telepito.md`. **T3:** telepítő pendrive a Fúzióból is (Rendszerfrissítés → „Telepítő pendrive készítése…”), **Mentés** (Beállítások → Mentés: a DATA egy külső lemezre), visszaállítás a telepítőben, Wi-Fi átvétele — `docs/T3-mentes-telepito.md`
 - **0.0.30 (j1) javító kör**: gyors Programkezelő-lista, nagyobb / csoportosított / görgethető Programok az asztalon, PSS-memória a Feladatkezelőben, `build/fusion-build cache-export` (a rögzített csomagok mentése), mérési boot-bejegyzések (Intel grafika, Nouveau, szoftveres felület) — `docs/J1-javitasok.md`
 - **0.0.31 (j2)**: a mérési boot-bejegyzéseket a rendszer maga pótolja, és UEFI-bejegyzésként (F9: „Fusion meres - …”) is felveszi; az asztali Programok a tálca felett ér véget — `docs/J2-boot-bejegyzesek.md`
 - **0.0.32 (j3)**: Beállítások → Kijelző → Felület rajzolása (grafikus kártya / szoftveres); az Xorg csak a kiválasztott adaptert használja; pam_lastlog-hiba javítva — `docs/J3-felulet-rajzolas.md`
 - **0.0.33 (j4)**: rendszerkép-írás 32 MiB-os adagokban, kiesett pendrive = azonnali, érthető hiba; a Rendszerfrissítés oldal nem vár a pendrive-ra; tisztább naplók — `docs/J4-pendrive-iras.md`
-- **0.0.34 (m8a)**: Fusion API 1. lépés — a `fusion` Python-csomag (kv, hardware, devices, notify, x11, permissions), a kettőzések megszüntetése, látható változás nélkül — `docs/M8a-rendrakas.md`
+- **0.0.34 (m8a)**: Fúzió API 1. lépés — a `fusion` Python-csomag (kv, hardware, devices, notify, x11, permissions), a kettőzések megszüntetése, látható változás nélkül — `docs/M8a-rendrakas.md`
 - **0.0.35 (m8a1)**: a pendrive-ok helye `/run/media/fusion/<címke>` — így a Flatpak-programok (PrusaSlicer …) fájlválasztójában is eszközként látszanak — `docs/M8a1-pendrive-flatpak.md`
-- **0.0.36 (m8b)**: Windows-programok (LightBurn) fájlválasztója: Adatok (D:, a DATA felhasználói mappái), pendrive (E:), Asztal-hivatkozások, Dokumentumok → Projektek, a „/” elrejtve; hibajelentés: WI-FI szakasz (iwd, kernel, energiatakarékosság) — `docs/J5-lightburn-fajlok-wifi.md`; M8b: a Fusion API leírása (`docs/api/`), `fusion` parancs `--json`-nal, leíró-sémák, feladat-protokoll — `docs/M8b-leiras-cli.md`
-- **0.0.37 (m8d)**: Lézer állapot (Start → Műhely) — az első program kizárólag a Fusion API-n át; akkumulátor az Asztal Rendszer kártyáján, a hibajelentésben és a `fusion power` parancsban — `docs/M8d-lezer-allapot.md`
+- **0.0.36 (m8b)**: Windows-programok (LightBurn) fájlválasztója: Adatok (D:, a DATA felhasználói mappái), pendrive (E:), Asztal-hivatkozások, Dokumentumok → Projektek, a „/” elrejtve; hibajelentés: WI-FI szakasz (iwd, kernel, energiatakarékosság) — `docs/J5-lightburn-fajlok-wifi.md`; M8b: a Fúzió API leírása (`docs/api/`), `fusion` parancs `--json`-nal, leíró-sémák, feladat-protokoll — `docs/M8b-leiras-cli.md`
+- **0.0.37 (m8d)**: Lézer állapot (Start → Műhely) — az első program kizárólag a Fúzió API-n át; akkumulátor az Asztal Rendszer kártyáján, a hibajelentésben és a `fusion power` parancsban — `docs/M8d-lezer-allapot.md`
 - **0.0.38 (j6)**: a Programkezelő külön ablakban (fülek: Programkezelő, Programbolt); a Lomtár automatikus ürítése (Beállítások → Rendszer: ki / 7 / 30 / 90 nap), `fusion trash` — `docs/J6-programkezelo-lomtar.md`
 - **0.0.39 (j7)**: Terminál: Ctrl+V / Ctrl+Shift+V beillesztés, Ctrl+Shift+C másolás, többsoros beillesztés; Printables „Open in PrusaSlicer” a Firefoxból (URL-séma, Linux-receptek) — `docs/J7-terminal-printables.md`
 - **0.0.40 (j8)**: beépített kamera (Kamera program, Eszközök és kamera), Bluetooth (Beállítások → Bluetooth: párosítás, fejhallgató, egér, billentyűzet), papírnyomtatók (Beállítások → Nyomtatók: CUPS, driverless, PDF-nyomtató); `fusion cameras | bluetooth | printers` — `docs/J8-kamera-bluetooth-nyomtato.md`
 - **0.0.41 (m9a)**: jogosultságok első lépése — `input` csoport ki, hibajelentés: JOGOSULTSÁGOK, Programkezelő: Védelem, leíró: `allow.files` / `allow.net` / `sandbox`, `fusion permissions` (Klipper és LightBurn változatlan) — `docs/M9a-jogosultsagok.md`
 - **0.0.42 (j9)**: Kamera: élőkép szoftveres felületnél is (a Kamera mindig OpenGL-lel rajzol), jobb képminőség (a legjobb formátum 1280×720-ig) — `docs/J8-kamera-bluetooth-nyomtato.md`
+- **0.0.52 (r2)**: új név: **Fúzió** (korábban FusionOS) — a boot-menüben, a Telepítőben, a Beállításokban, az értesítésekben és a képfájlokban (`fuzio-<verzió>-pendrive.img.xz`); az UEFI-bejegyzés új neve „Fuzio” (a régi „FusionOS” bejegyzést is felismeri), a mérési bejegyzések „Fuzio meres - …” néven cserélődnek induláskor; a parancsok, mappák, a frissítés és a mentések változatlanok
+- **0.0.51 (r1)**: Vas & Króm: a rajzolt (Gemini) motorok, Windows-változat (`windows/build-windows.sh`); tesztelői pendrive-képfájlok (`build/fusion-build images`); Programkezelő: hordozható Windows-program ZIP-ből; a rendszerkép újraépítése tartalom alapján dől el
+- **0.0.50 (g3)**: Vas & Króm: a Gemini-rajzok feldolgozása (fényezés, lángok), új jelenetek
 - **0.0.49 (g2)**: Vas & Króm — új motorrajzok (típusonként saját forma, részletes blokk, küllős / öntött kerekek), új jelenetek (garázs, kocsma, bontó, versenypálya), megbízhatóbb hangkimenet és `fusion-vaskrom --hangproba` — `docs/G2-vas-es-krom-grafika-hang.md`
 - **0.0.48 (k2)**: Adatlemez (Lemezkezelő: egy belső lemez partíciója minden induláskor csatolva, `~/Tárhely` — a Mint lemeze), Fejlesztő terminál a Start menüben (Rendszer), a Rendszerfrissítés a saját build kimenetét (`build/out/release`) is megtalálja — `docs/K2-adatlemez.md`
 - **0.0.47 (k1)**: kényelmi kiadás — jobb gombos szövegmenü minden szövegmezőben (Visszavonás, Kivágás, Másolás, Beillesztés, Törlés, Mindent kijelöl), új Terminál (LXTerminal a `fusion-terminal`-on át: jobb gombos Másolás / Beillesztés, fülek, Fusion-színek; az xterm tartalék marad), a tálcán a futó programok saját ikonjai (Programkezelő-ikon vagy az ablak `_NET_WM_ICON`-ja); a build a Fejlesztődobozban is fut — `docs/K1-kenyelem.md`
-- **0.0.46 (f1)**: Fejlesztődoboz (Ubuntu 24.04 a DATA-n apt-tal, systemd-nspawn — a FusionOS buildje Mint nélkül), Beállítások → Indítás (UEFI-bejegyzések: alapértelmezett, egyszeri indítás, elárvult bejegyzések törlése) — `docs/F1-fejlesztodoboz-inditas.md`
+- **0.0.46 (f1)**: Fejlesztődoboz (Ubuntu 24.04 a DATA-n apt-tal, systemd-nspawn — a Fúzió buildje Mint nélkül), Beállítások → Indítás (UEFI-bejegyzések: alapértelmezett, egyszeri indítás, elárvult bejegyzések törlése) — `docs/F1-fejlesztodoboz-inditas.md`
 - **0.0.45 (g1b)**: Vas & Króm: hang (kiszámolt motorhang a hengerszámhoz és a kipufogóhoz, kipörgés, lámpa, váltás; Garázs → Berúgás), pénz (kezdés $3000, mindig van olcsó felújítandó motor, szerelőmunka) — `docs/G1-vas-es-krom.md`
 - **0.0.44 (g1)**: Vas & Króm — beépített motoros játék (garázs, Moto Apró, katalógus, bontó, kocsma, drag-verseny 402 m-en, a Király); Start menü → Játékok — `docs/G1-vas-es-krom.md`
 - **0.0.43 (j10)**: Kamera: videófelvétel hanggal (MP4); Beállítások → Felhasználók (új felhasználó, jelszó, rendszergazda, automatikus belépés — fusion/fusion marad); apt: nem kell — `docs/J10-video-felhasznalok.md`
@@ -57,7 +63,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
   hangerő-billentyűk, Beállítások → Hang, `fusion-sound`
 - **Irányítópult** az asztalon: lézer, 3D nyomtató (Klipper, nyomtatás állása, hőmérsékletek), hálózat,
   rendszer, meghajtók, programok — Beállítások → Asztal
-- **Fusion Programkezelő** (Start → Programkezelő; `fusion-programs`, `fusion-run`): minden program egy
+- **Fúzió Programkezelő** (Start → Programkezelő; `fusion-programs`, `fusion-run`): minden program egy
   leírás a DATA-n (`/data/programs/<id>/program.fusion`) — telepítés fájlból (Windows .exe/.msi, AppImage,
   Linux-archívum, Flatpak) és a Flathubról, eltávolítás, frissítés, Start menü, ikon, fájltársítás,
   Windows-programoknál eszköz-hozzáférés (COM3 lézer, COM4 nyomtató). A Linux-programok fő formátuma a
@@ -74,7 +80,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - `sudo build/fusion-build update /dev/sdb` — rendszerfrissítés: ESP + A slot újraírva, a DATA
   (LightBurn, Wi-Fi, nyomtató-adatok) megmarad
 - a fusion-init a boot-lemezről veszi a slotot és a DATA-t (systemd-boot `LoaderDevicePartUUID`),
-  így több FusionOS-lemez (SSD + pendrive) sem keveredik
+  így több Fúzió-lemez (SSD + pendrive) sem keveredik
 
 Részletek: `docs/SSD-telepites.md`.
 
@@ -95,15 +101,15 @@ Kézi ellenőrzés: `docs/M5-ellenorzes.md`.
 
 ## M4 — cél és a jelenlegi megvalósítás
 
-**Követelmény:** a Windows-os LightBurn x64 fusson a FusionOS alatt, és a valódi GRBL
+**Követelmény:** a Windows-os LightBurn x64 fusson a Fúzió alatt, és a valódi GRBL
 lézervezérlőt USB-n keresztül **COM3**-ként érje el.
 
 | Réteg | Mi ez | Státusz |
 | --- | --- | --- |
-| USB/hardverréteg (M3) | `/dev/fusion/laser` a lézer szerephez kötve | FusionOS-rész, lezárva |
+| USB/hardverréteg (M3) | `/dev/fusion/laser` a lézer szerephez kötve | Fúzió-rész, lezárva |
 | COM3 → `/dev/fusion/laser` | a Windows-program portja a Fusion szerepre mutat | M4-követelmény |
 | `fwr` + profil (`fwr/profiles/lightburn.fwr`) | a program indítása, portok, meghajtók egy helyen | M4 proof-of-concept |
-| **Wine 11.0 (WoW64), forrásból** + `fwr/wine-patches/` | a Windows-program tényleges futtatója | **kísérleti M4-megoldás — nem a FusionOS végleges architektúrája** |
+| **Wine 11.0 (WoW64), forrásból** + `fwr/wine-patches/` | a Windows-program tényleges futtatója | **kísérleti M4-megoldás — nem a Fúzió végleges architektúrája** |
 
 Használat (M4 PoC):
 - `fwr install lightburn <telepítő.exe>` · `fwr launch lightburn` · `fwr list` · `fwr check`
@@ -117,7 +123,7 @@ Használat (M4 PoC):
 **Wi-Fi** (Intel Wireless 7260, `iwlwifi`): `fusion-wifi list` · `fusion-wifi connect "<hálózat>"` ·
 `fusion-wifi`. A kapcsolódást az iwd végzi, a címet a systemd-networkd adja; a megjegyzett
 hálózatok a DATA-n maradnak. A vezetékes kapcsolat, ha van, elsőbbséget kap. (iwd: jelenlegi
-megoldás; a NetworkManager/iwd végleges döntése a Fusion Desktop felületével együtt.)
+megoldás; a NetworkManager/iwd végleges döntése a Fúzió Desktop felületével együtt.)
 
 Kézi ellenőrzés: `docs/M4-ellenorzes.md`.
 
@@ -149,20 +155,20 @@ Kézi ellenőrzés: `docs/M3-ellenorzes.md`.
 
 ## Mit tud az M2 (lezárva)
 
-- A FusionOS a **Fusion Desktopra** indul: a tty1-en automatikus belépés (`fusion`),
-  majd X11 + ideiglenes ablakkezelő (**JWM**, a Fusion Shell az M6-ban váltja) és egy
+- A Fúzió a **Fúzió Desktopra** indul: a tty1-en automatikus belépés (`fusion`),
+  majd X11 + ideiglenes ablakkezelő (**JWM**, a Fúzió Shell az M6-ban váltja) és egy
   terminál a hardverprofillal.
 - **NVIDIA 470.256.02** (Kepler, Quadro K1100M): a kernelmodul a buildben fordul a rögzített
   kernelhez, eldobható build-chrootban; a rendszerképbe csak a kész modulok és a
   felhasználói könyvtárak (GL/GLX/EGL/Vulkan, Xorg-driver, `nvidia-smi`) kerülnek.
-- A grafikus szerver beállítását a **Fusion Hardware Layer** adja a hardverprofilból:
+- A grafikus szerver beállítását a **Fúzió Hardware Layer** adja a hardverprofilból:
   modulparaméterek (pl. `nvidia-drm modeset=1`), Xorg-driver, modulútvonal, Xorg root-jog.
   Virtuális gépen és ismeretlen grafikán Mesa (llvmpipe) / modesetting.
 - Magyar billentyűzet a grafikus felületen is.
 - Az M1 alaprendszere változatlan: csak olvasható EROFS rendszerkép, a változások a
   FUSION_DATA-ra kerülnek, magyar nyelv, hálózat, tiszta leállítás.
 
-A boot menüben a FusionOS és a diagnosztika mellett fejlesztői **mérési bejegyzések** is
+A boot menüben a Fúzió és a diagnosztika mellett fejlesztői **mérési bejegyzések** is
 vannak (KMS nélkül, Xorg root-joggal, szöveges konzol) — `build.conf`: `BOOT_MEASURE_ENTRIES`.
 
 A kézi ellenőrzés és a nyitott döntésekhez tartozó mérések: `docs/M2-ellenorzes.md`.
@@ -189,8 +195,8 @@ Ha a letöltés „Unable to locate package” hibát ad: `sudo apt update`.
 | `fetch` | Ubuntu 6.8.0-142 kernel + modulok, busybox, konzolfont, NVIDIA 470 csomagok (root nélkül, SHA256-tal) |
 | `drivers` | NVIDIA 470 kernelmodul fordítása a rögzített kernelhez (root; az `all` magától hívja) |
 | `wine` | kísérleti M4-futtató: Wine 11.0 (WoW64) fordítása (root; első alkalommal ~1 óra; az `all` magától hívja) |
-| `rootfs [--force]` | a FusionOS rendszerkép (EROFS) — root kell; az `all` sudo-val hívja, ha a forrás változott |
-| `build` | két initramfs + két UKI (FusionOS, diagnosztika) + ESP |
+| `rootfs [--force]` | a Fúzió rendszerkép (EROFS) — root kell; az `all` sudo-val hívja, ha a forrás változott |
+| `build` | két initramfs + két UKI (Fúzió, diagnosztika) + ESP |
 | `image` | GPT lemezkép: ESP, A slot (rendszerkép), B (üres), DATA |
 | `vdi` | lemezkép → VDI |
 | `vm [--usb]` | FusionOS-dev VM létrehozása / lemezcsere (`--usb`: lézer és nyomtató átadása, Extension Pack kell) |
@@ -213,7 +219,7 @@ UEFI → systemd-boot (ESP) → UKI: kernel 6.8.0-142 + fusion-init (initramfs)
        /usr  = a rendszerkép /usr-je, csak olvasható
     6. switch_root → systemd
   systemd → fusion-hardware.service (Hardware Layer: driver + Xorg-beállítás)
-          → getty@tty1 (automatikus belépés) → fusion-session → Xorg + JWM (Fusion Desktop)
+          → getty@tty1 (automatikus belépés) → fusion-session → Xorg + JWM (Fúzió Desktop)
 ```
 
 Hiba esetén a fusion-init érthető magyar üzenettel és mentőhéjjal áll meg.
@@ -234,7 +240,7 @@ csatlakozik, 10–256 GiB közötti, nincs rajta a futó rendszer, és a felhasz
 az eszköz nevét. A rendszerkép felírása után **visszaolvasással ellenőrzi** a slotot
 (gyorsítótár ürítése után), így egy hibás vagy hamis kapacitású pendrive azonnal kiderül.
 
-## Fusion Hardware Layer
+## Fúzió Hardware Layer
 
 `hardware/fusion-hwprobe` + `hardware/profiles/*.profile`
 
@@ -267,18 +273,18 @@ egyszerre bedugott eszközök, assign, forget).
 
 ## Automatikus teszt (`build/fusion-build test`)
 
-QEMU + OVMF, KVM nélkül is (lassabb). A FusionOS-t háromféleképp indítja
+QEMU + OVMF, KVM nélkül is (lassabb). A Fúziót háromféleképp indítja
 (std VGA + SATA, VMware SVGA + SATA, std VGA + USB-pendrive), és a soros konzolon ellenőrzi:
 systemd „running”, gyökér-overlay, /usr csak olvasható (EROFS), /data ext4, A slot,
 hardverprofil és driver, getty, magyar locale és billentyűzet, `fusion` felhasználó,
-machine-id, nincs hibás szolgáltatás; std VGA-n a Fusion Desktopot is (Xorg, OpenGL,
+machine-id, nincs hibás szolgáltatás; std VGA-n a Fúzió Desktopot is (Xorg, OpenGL,
 ablakkezelő, magyar kiosztás az X-ben). Az std + SATA futásban egy emulált USB-soros eszköz
 (FTDI) is van: `/dev/fusion/laser` létrejön, a `fusion` felhasználó root nélkül megnyitja,
 és a teszt a QEMU monitorán át **kihúzza és visszadugja** — a név ugyanúgy visszatér.
 A Wi-Fi-t virtuális rádiókkal (`mac80211_hwsim`) teszteli: az egyik hozzáférési pont, a másikról
 a `fusion` felhasználó jelszóval kapcsolódik (`fusion-wifi connect`).
 Ugyanitt egy háromkötetes emulált USB-pendrive (FAT32, exFAT, NTFS) automatikus csatolását, írhatóságát
-és a biztonságos eltávolítást is ellenőrzi; std VGA-n a Fusion Desktopot (panel, Start menü, értesítés
+és a biztonságos eltávolítást is ellenőrzi; std VGA-n a Fúzió Desktopot (panel, Start menü, értesítés
 a D-Buson, a Fájlkezelő műveletei és ablaka, a Beállítások oldalai és ablaka).
 Ugyanebben a futásban az `fwr check` is lefut: a Windows-program csak a COM3-at látja a
 SERIALCOMM-ban, megnyitja, és a kiírt sor megérkezik az emulált eszközre; az OpenGL a Wine-on
@@ -292,13 +298,13 @@ nem vár. A VMSVGA támogatott környezete a VirtualBox.
 
 ```
 build/        fusion-build, lépések (steps/), konfiguráció (config/)
-rootfs/       a rendszerkép: csomaglista, testreszabás, FusionOS fájlok (overlay/)
-hardware/     Fusion Hardware Layer: fusion-hwprobe + profilok
+rootfs/       a rendszerkép: csomaglista, testreszabás, Fúzió fájlok (overlay/)
+hardware/     Fúzió Hardware Layer: fusion-hwprobe + profilok
 devices/      Fusion eszközréteg: fusion-devd (fusion-devices) + szerepek (roles/)
 fwr/          M4 PoC: fwr, profilok, diagnosztikai Windows-programok; wine-patches/ = kísérleti
-desktop/      M6: Fusion Desktop — lib/ (közös Python), qml/FusionUI (téma, elemek), icons/, shell/, files/, settings/
+desktop/      M6: Fúzió Desktop — lib/ (közös Python), qml/FusionUI (téma, elemek), icons/, shell/, files/, settings/
 printer/      M5: fusion-printer, szolgáltatások, Moonraker- és nginx-beállítás, alapkonfiguráció (defaults/)
-initramfs/    fusion/init (FusionOS), m0/init (diagnosztika)
+initramfs/    fusion/init (Fúzió), m0/init (diagnosztika)
 tests/        automatikus tesztek
 tools/        fusion-hardware-discovery.sh (Phase 0)
 docs/         ellenőrzőlisták
@@ -316,7 +322,7 @@ docs/         ellenőrzőlisták
 
 ## Licenc
 
-A FusionOS forrása **MIT-licenc** alatt szabadon használható, módosítható és terjeszthető, a forrás
+A Fúzió forrása **MIT-licenc** alatt szabadon használható, módosítható és terjeszthető, a forrás
 megjelölésével (a `LICENSE` fájl szerzői jogi sorának megtartásával). A kész rendszerképekben lévő külső
 programokra (Linux, Ubuntu-csomagok, Qt, Wine, NVIDIA-illesztő …) a saját licencük vonatkozik.
 A Vas & Króm motorrajzai AI-generáltak — `desktop/games/vaskrom/art-src/OLVASSEL.md`.
@@ -324,4 +330,4 @@ A Vas & Króm motorrajzai AI-generáltak — `desktop/games/vaskrom/art-src/OLVA
 ## Letöltés tesztelőknek
 
 A kész, pendrive-ra írható képfájlok (Rufus / balenaEtcher) és a Vas & Króm Windows-változata a
-[Releases](https://github.com/dobosistvanhun-art/FusionOS/releases) oldalon vannak.
+[Releases](https://github.com/dobosistvanhun-art/Fuzio/releases) oldalon vannak.

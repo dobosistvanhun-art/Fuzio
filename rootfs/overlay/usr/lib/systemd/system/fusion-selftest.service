@@ -1,5 +1,5 @@
 [Unit]
-Description=FusionOS automatikus boot-teszt (csak fusion.test kernelparaméterrel)
+Description=Fúzió automatikus boot-teszt (csak fusion.test kernelparaméterrel)
 ConditionKernelCommandLine=fusion.test
 After=multi-user.target
 

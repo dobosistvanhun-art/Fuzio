@@ -1,10 +1,10 @@
 #!/bin/sh
 # =============================================================================
-#  FusionOS M0 — boot-teszt init (initramfs, busybox)
+#  Fúzió M0 — boot-teszt init (initramfs, busybox)
 #
 #  Célja: bizonyítani, hogy a pendrive/VM EFI-ből bootol, a systemd-boot
-#  betölti a Fusion UKI-t, a kernel elindul, a Fusion Hardware Layer azonosítja
-#  a grafikát, és a FusionOS partíciók megtalálhatók.
+#  betölti a Fúzió UKI-t, a kernel elindul, a Fúzió Hardware Layer azonosítja
+#  a grafikát, és a Fúzió partíciók megtalálhatók.
 #  Semmit nem ír a lemezekre.
 # =============================================================================
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -75,7 +75,7 @@ say "Kernel:          $(uname -r)"
 if [ -d /sys/firmware/efi ]; then
     say "Rendszerindítás: UEFI ($(cat /sys/firmware/efi/fw_platform_size 2>/dev/null)-bit)"
 else
-    say "Rendszerindítás: Legacy BIOS (a FusionOS UEFI-t céloz!)"
+    say "Rendszerindítás: Legacy BIOS (a Fúzió UEFI-t céloz!)"
 fi
 LDR=$(efivar LoaderInfo)
 ENT=$(efivar LoaderEntrySelected)
@@ -84,15 +84,15 @@ say "Betöltött UKI:   ${ENT:-ismeretlen}"
 say "Gép:             $(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
 say ""
 
-# Fusion Hardware Layer
+# Fúzió Hardware Layer
 /usr/lib/fusion/hardware/fusion-hwprobe > /run/fusion-hwprobe.txt 2>&1
 while IFS= read -r l; do say "$l"; done < /run/fusion-hwprobe.txt
 # shellcheck disable=SC1091
 . /run/fusion/hardware/display.env 2>/dev/null
 say ""
 
-# FusionOS partíciók (GPT név szerint, nem eszköznév szerint)
-say "FusionOS partíciók:"
+# Fúzió partíciók (GPT név szerint, nem eszköznév szerint)
+say "Fúzió partíciók:"
 FOUND=0
 for want in FUSION_ESP FUSION_A FUSION_B FUSION_DATA; do
     hit=""

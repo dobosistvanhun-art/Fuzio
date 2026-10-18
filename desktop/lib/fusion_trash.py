@@ -1,4 +1,4 @@
-"""FusionOS — Lomtár (a freedesktop.org Trash-szabvány szerint, így más programokkal is közös)
+"""Fúzió — Lomtár (a freedesktop.org Trash-szabvány szerint, így más programokkal is közös)
 
     saját mappa és a DATA:      ~/.local/share/Trash/{files,info}
     cserélhető meghajtó (USB):  <a meghajtó gyökere>/.Trash-<uid>/{files,info}
@@ -265,6 +265,6 @@ def set_auto_days(days):
 
 
 def auto_purge():
-    """a beállítás szerinti automatikus ürítés (a Fusion Shell indításkor és 6 óránként hívja) → törölt elemek száma"""
+    """a beállítás szerinti automatikus ürítés (a Fúzió Shell indításkor és 6 óránként hívja) → törölt elemek száma"""
     d = auto_days()
     return purge_older(d) if d > 0 else 0

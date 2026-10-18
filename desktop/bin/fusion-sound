@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — hang parancssorból (a hangerő-billentyűk is ezt hívják)
+"""Fúzió — hang parancssorból (a hangerő-billentyűk is ezt hívják)
 
     fusion-sound                 állapot: kiszolgáló, kimenetek, bemenetek, hangerő
     fusion-sound up | down       hangerő ±5% (legfeljebb 100%)

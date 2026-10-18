@@ -1,4 +1,4 @@
-# FusionOS M1: vezetékes hálózat DHCP-vel (a ZBook I217-LM / VirtualBox NAT)
+# Fúzió M1: vezetékes hálózat DHCP-vel (a ZBook I217-LM / VirtualBox NAT)
 [Match]
 Type=ether
 Name=en* eth*

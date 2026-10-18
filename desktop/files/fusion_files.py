@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Fájlkezelő (fusion-files): kétpaneles, billentyűzettel gyors fájlkezelés
+"""Fúzió — Fájlkezelő (fusion-files): kétpaneles, billentyűzettel gyors fájlkezelés
 
     fusion-files [bal mappa] [jobb mappa]
     fusion-files --selftest <üres munkakönyvtár>     a műveletek ellenőrzése felület nélkül

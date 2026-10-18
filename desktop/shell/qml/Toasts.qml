@@ -1,4 +1,4 @@
-// FusionOS — értesítés-buborékok (jobb alsó sarok, a panel fölött)
+// Fúzió — értesítés-buborékok (jobb alsó sarok, a panel fölött)
 import QtQuick
 import FusionUI
 
@@ -28,7 +28,7 @@ Rectangle {
                            font.pixelSize: 13; font.bold: true; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
                     Text { width: parent.width; visible: text !== ""; text: modelData.body; color: Theme.dim; font.family: Theme.font
                            font.pixelSize: 12; wrapMode: Text.Wrap; maximumLineCount: 4; elide: Text.ElideRight; textFormat: Text.PlainText }
-                    Text { text: (modelData.app && modelData.app !== "FusionOS" ? modelData.app + " · " : "") + modelData.time
+                    Text { text: (modelData.app && modelData.app !== "FusionOS" && modelData.app !== "Fúzió" ? modelData.app + " · " : "") + modelData.time
                            color: "#6e7681"; font.family: Theme.font; font.pixelSize: 10 }
                     Row {
                         visible: modelData.actions.length > 0; spacing: 6; topPadding: 4

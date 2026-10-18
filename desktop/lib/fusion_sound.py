@@ -1,6 +1,6 @@
-"""FusionOS — hang: a hangkiszolgáló (PipeWire, PulseAudio-felülettel) kezelése
+"""Fúzió — hang: a hangkiszolgáló (PipeWire, PulseAudio-felülettel) kezelése
 
-A Fusion Shell (panel, hangerő-felugró), a Beállítások → Hang és a fusion-sound parancs ezt használja.
+A Fúzió Shell (panel, hangerő-felugró), a Beállítások → Hang és a fusion-sound parancs ezt használja.
 A kiszolgáló felé a szabványos PulseAudio-protokollon beszél (pactl) — így ugyanaz működne PulseAudióval is;
 a programok (Flatpak is) ugyanezen a felületen játszanak le.
 A pactl kimenete LC_ALL=C mellett kerül feldolgozásra (a JSON-kimenete a nem ASCII neveken elakad).

@@ -3,7 +3,7 @@
 #
 # NVIDIA 470: a modul a nvidia-kernel-source csomagból fordul, pontosan a UKI
 # kernelének (KERNEL_ABI) fejléceivel, egy eldobható mmdebstrap build-chrootban.
-# A FusionOS rendszerképbe csak a kész .ko fájlok kerülnek (fordító, fejlécek nem).
+# A Fúzió rendszerképbe csak a kész .ko fájlok kerülnek (fordító, fejlécek nem).
 # Root kell (mmdebstrap, chroot); a rootfs lépés hívja, ha a modulok hiányoznak.
 
 nvidia_ko_dir() { printf '%s/drivers/nvidia-%s-%s' "$CACHE_DIR" "$NVIDIA_VERSION" "$KERNEL_ABI"; }

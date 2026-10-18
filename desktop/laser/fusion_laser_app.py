@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — Lézer állapot (M8d): az első Fusion-natív próba-program, KIZÁRÓLAG a Fusion API-n át.
+"""Fúzió — Lézer állapot (M8d): az első Fúzió-natív próba-program, KIZÁRÓLAG a Fúzió API-n át.
 
 Bizonyítja, hogy az API elég egy valódi programhoz: a szerep állapota (fusion.devices), melyik program melyik
 COM-porton éri el (fusion.devices / fusion.programs), a program indítása (fusion.programs), a felület
@@ -14,8 +14,8 @@ import sys
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
-from fusion import devices, programs  # noqa: E402  — a Fusion API
-import fusion_ui as ui  # noqa: E402               — a Fusion API felület-része (Qt)
+from fusion import devices, programs  # noqa: E402  — a Fúzió API
+import fusion_ui as ui  # noqa: E402               — a Fúzió API felület-része (Qt)
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot  # noqa: E402
 
 

@@ -1,4 +1,4 @@
-// FusionOS — irányítópult az asztalon: egy pillantásra minden fontos állapot
+// Fúzió — irányítópult az asztalon: egy pillantásra minden fontos állapot
 // (lézer, 3D nyomtató, hálózat, rendszer, meghajtók) és gyorsindítás. Nem csicsás: kártyák, szöveg, sávok.
 import QtQuick
 import FusionUI

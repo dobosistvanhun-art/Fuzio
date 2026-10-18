@@ -1,4 +1,4 @@
-// FusionOS — hang felugró (a panel hangszóró-jelére): hangerő, némítás, kimenet, mikrofon
+// Fúzió — hang felugró (a panel hangszóró-jelére): hangerő, némítás, kimenet, mikrofon
 import QtQuick
 import QtQuick.Controls
 import FusionUI

@@ -1,4 +1,4 @@
-// FusionOS — Fusion Shell: panel (a képernyő alján)
+// Fúzió — Fúzió Shell: panel (a képernyő alján)
 // Start | tálca (nyitott ablakok) | eszközök, meghajtók, Wi-Fi, értesítések, óra
 import QtQuick
 import FusionUI

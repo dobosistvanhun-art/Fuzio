@@ -1,4 +1,4 @@
-// FusionOS — Feladatkezelő (Ctrl+Alt+Del): futó programok, „nem válaszol”, bezárás; folyamatok
+// Fúzió — Feladatkezelő (Ctrl+Alt+Del): futó programok, „nem válaszol”, bezárás; folyamatok
 import QtQuick
 import QtQuick.Controls
 import FusionUI

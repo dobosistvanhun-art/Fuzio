@@ -129,7 +129,7 @@ SettingsPage {
                             FButton { text: "Mégse"; flat: true; onClicked: p.confirm = "" }
                         }
                     }
-                    InfoRow { label: "Típus"; value: row.m.typeName + (row.m.type === "win64" ? " — futtató: Fusion Windows Runtime (fwr)" : row.m.type === "flatpak" ? " — homokozóban fut" : "") }
+                    InfoRow { label: "Típus"; value: row.m.typeName + (row.m.type === "win64" ? " — futtató: Fúzió Windows Runtime (fwr)" : row.m.type === "flatpak" ? " — homokozóban fut" : "") }
                     InfoRow { visible: row.m.appid !== ""; label: "Flatpak-azonosító"; value: row.m.appid; mono: true }
                     InfoRow { visible: row.m.exe !== ""; label: "Program"; value: row.m.exe; mono: true }
                     InfoRow { label: "Helye"; value: row.m.dir + (row.m.prefix && row.m.prefix.indexOf(row.m.dir + "/") !== 0 ? "\nWindows-környezet: " + row.m.prefix : ""); mono: true }
@@ -239,7 +239,7 @@ SettingsPage {
     }
     // --- Fejlesztődoboz ---
     Section {
-        title: "FEJLESZTŐDOBOZ (Ubuntu 24.04 a DATA-n, apt-tal — pl. a FusionOS buildjéhez)"
+        title: "FEJLESZTŐDOBOZ (Ubuntu 24.04 a DATA-n, apt-tal — pl. a Fúzió buildjéhez)"
         InfoRow {
             icon: "terminal"; label: "Fejlesztődoboz"
             value: !p.devLoaded ? "…" : p.box.exists ? ("kész — Ubuntu " + p.box.suite + ", " + Math.round((p.box.size || 0) / 1048576) + " MiB, létrehozva " + p.box.created
@@ -254,7 +254,7 @@ SettingsPage {
             FButton { visible: p.boxConfirm === "del"; text: "Törlés — biztosan? (a saját mappája megmarad)"; danger: true
                       onClicked: { settings.devboxRemove(); p.boxConfirm = "" } }
         }
-        InfoRow { label: "Használat"; value: "a dobozban a saját mappája közös; telepítés: sudo apt install …   ·   parancssorból: fusion-dev box   ·   FusionOS-build: cd ~/Projektek/fusionos && build/fusion-build deps --install && build/fusion-build all" }
+        InfoRow { label: "Használat"; value: "a dobozban a saját mappája közös; telepítés: sudo apt install …   ·   parancssorból: fusion-dev box   ·   Fúzió-build: cd ~/Projektek/fusionos && build/fusion-build deps --install && build/fusion-build all" }
         Column {
             visible: p.boxJob.title !== "" && (p.boxJob.running || p.boxJob.rc !== null) && p.boxJob.recent === true
             x: 14; width: parent.width - 28; spacing: 4; topPadding: 6; bottomPadding: 6

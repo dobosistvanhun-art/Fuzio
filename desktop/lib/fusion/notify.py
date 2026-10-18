@@ -1,6 +1,6 @@
-"""értesítések — a szabványos org.freedesktop.Notifications szolgáltatáson át (a Fusion Shell valósítja meg)
+"""értesítések — a szabványos org.freedesktop.Notifications szolgáltatáson át (a Fúzió Shell valósítja meg)
 
-    fusion.notify.send(cím, szöveg="", ikon="", app="FusionOS", urgency="normal", timeout_ms=-1)
+    fusion.notify.send(cím, szöveg="", ikon="", app="Fúzió", urgency="normal", timeout_ms=-1)
 
 Parancssor (fusion-notify): [-i ikon] [-u low|normal|critical] [-a program] [-t ms] <cím> [szöveg]
 """
@@ -21,7 +21,7 @@ def _env():
     return env
 
 
-def send(summary, body="", icon="", app="FusionOS", urgency="normal", timeout_ms=-1):
+def send(summary, body="", icon="", app="Fúzió", urgency="normal", timeout_ms=-1):
     """True, ha a Shell átvette"""
     u = URGENCY.get(urgency, 1) if isinstance(urgency, str) else int(urgency)
     try:
@@ -49,6 +49,6 @@ def main(argv=None):
         tmo = int(o.get("-t", "-1"))
     except ValueError:
         tmo = -1
-    ok = send(args[0], args[1] if len(args) > 1 else "", o.get("-i", ""), o.get("-a", "FusionOS"),
+    ok = send(args[0], args[1] if len(args) > 1 else "", o.get("-i", ""), o.get("-a", "Fúzió"),
               o.get("-u", "normal"), tmo)
     return 0 if ok else 1

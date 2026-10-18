@@ -1,13 +1,13 @@
 #!/bin/sh
 # =============================================================================
-#  Fusion Hardware Layer — fusion-hwprobe (grafikus hardver azonosítása)
+#  Fúzió Hardware Layer — fusion-hwprobe (grafikus hardver azonosítása)
 #
 #  Általános, adatvezérelt azonosítás: a PCI-eszközök osztálya, gyártó- és
 #  eszközazonosítója alapján a hardverprofilok (profiles/*.profile) közül
 #  választja ki a legjobban illőt. A kódban nincs gép- vagy hipervizor-
 #  specifikus ág: új hardver támogatása = új profilfájl.
 #
-#  Ebből nő ki később a Fusion Hardware API.
+#  Ebből nő ki később a Fúzió Hardware API.
 #
 #  POSIX sh — busybox ash és bash alatt is fut.
 #
@@ -284,7 +284,7 @@ if [ -n "$CHOSEN" ]; then
             MPD_FILE="fusion-hardware-options.conf"
             if mkdir -p "$MPD" 2>/dev/null; then
                 {
-                    echo "# Fusion Hardware Layer — generált fájl (profil: $(profile_get "$CHOSEN" id))"
+                    echo "# Fúzió Hardware Layer — generált fájl (profil: $(profile_get "$CHOSEN" id))"
                     for m in $MODS; do
                         o=$(module_opts "$m" "$MODOPTS")
                         [ -n "$o" ] && echo "options $(modnorm "$m") $o"
@@ -370,7 +370,7 @@ case "$DRIVER_STATE" in loaded|none|warning) ;; *) XORG_DRIVER="" ;; esac
 
 if [ "$APPLY" -eq 1 ] && mkdir -p "$HW_DIR" 2>/dev/null; then
     {
-        echo "# Fusion Hardware Layer — generált fájl, ne szerkeszd"
+        echo "# Fúzió Hardware Layer — generált fájl, ne szerkeszd"
         echo "# profil: $(profile_get "${CHOSEN:-/dev/null}" id)  adapter: ${BEST_SLOT:--}"
         if [ -n "$XORG_DRIVER" ]; then
             mp=$(profile_get "$CHOSEN" display.xorg_module_path)
@@ -433,7 +433,7 @@ if [ "$PRINT_ENV" -eq 1 ]; then
     printf '%s' "$ENV_OUT"
 fi
 
-say "Fusion Hardware Layer — grafika"
+say "Fúzió Hardware Layer — grafika"
 if [ "$ADAPTER_COUNT" -eq 0 ]; then
     say "  Grafikus PCI-adapter: nincs"
 else

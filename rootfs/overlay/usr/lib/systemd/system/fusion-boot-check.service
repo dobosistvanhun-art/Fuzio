@@ -1,6 +1,6 @@
 [Unit]
-Description=FusionOS — a sikeres indulás ellenőrzése (A/B frissítés: próba-indítás véglegesítése)
-# a boot után fut (nem tartja fel): megvárja a rendszert és a Fusion Desktopot
+Description=Fúzió — a sikeres indulás ellenőrzése (A/B frissítés: próba-indítás véglegesítése)
+# a boot után fut (nem tartja fel): megvárja a rendszert és a Fúzió Desktopot
 After=multi-user.target data.mount
 ConditionPathExists=/sys/firmware/efi/efivars
 

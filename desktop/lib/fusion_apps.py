@@ -1,11 +1,11 @@
-"""FusionOS — egységes programlista (Start menü, irányítópult, keresés)
+"""Fúzió — egységes programlista (Start menü, irányítópult, keresés)
 
 Források:
-  - /usr/lib/fusion/desktop/apps.json   a Fusion Desktop saját és a rendszer programjai
-  - a Fusion Programkezelő leírásai      /data/programs/<id>/program.fusion (Windows és Linux)
+  - /usr/lib/fusion/desktop/apps.json   a Fúzió Desktop saját és a rendszer programjai
+  - a Fúzió Programkezelő leírásai      /data/programs/<id>/program.fusion (Windows és Linux)
   - az ismert Windows-programok receptjei (fwr), amelyek még nincsenek telepítve:
                                          „telepítés” bejegyzés → Programkezelő
-Minden bejegyzés: id, name, desc, icon (Fusion-csempe), iconFile (a program saját ikonja, ha van),
+Minden bejegyzés: id, name, desc, icon (Fúzió-csempe), iconFile (a program saját ikonja, ha van),
 exec, type (fusion|linux|web|windows), installed, search_only, pid (Programkezelő-azonosító).
 """
 import json
@@ -14,7 +14,7 @@ import sys
 
 APPS_FILE = os.environ.get("FUSION_APPS", "")
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-import fusion  # noqa: E402  (Fusion API: a modulok helye egy helyen — fusion.PROGRAMS_LIB)
+import fusion  # noqa: E402  (Fúzió API: a modulok helye egy helyen — fusion.PROGRAMS_LIB)
 fusion.add_paths()
 try:
     import fusion_programs as fp

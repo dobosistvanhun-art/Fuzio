@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-"""FusionOS — Kamera: a beépített webkamera (vagy USB-kamera) élőképe, fénykép és videó készítése
+"""Fúzió — Kamera: a beépített webkamera (vagy USB-kamera) élőképe, fénykép és videó készítése
 
 Qt Multimedia, FFmpeg-háttérrel (a kamerát közvetlenül, V4L2-n olvassa). Mérés (0.0.40, QEMU, vivid): a Qt 6.4
 GStreamer-háttere Pythonból összeomlik (QMediaCaptureSession.setCamera), X alatt a QML-élőkép sem adott képkockát;
-az FFmpeg-háttér mindkét úton hibátlan. Az eszközlista a Fusion API-ból (fusion.camera) is elérhető.
+az FFmpeg-háttér mindkét úton hibátlan. Az eszközlista a Fúzió API-ból (fusion.camera) is elérhető.
 A képek a Képek mappába kerülnek (XDG_PICTURES_DIR, alapértelmezés: ~/Képek), a videók a Videók mappába.
 
 Videó: a Qt 6.4 FFmpeg-hátterének rögzítője üres fájlt ír (mérés 0.0.42, QEMU, vivid: 44–48 bájt). Ezért a felvétel

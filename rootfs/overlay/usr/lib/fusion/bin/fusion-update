@@ -1,11 +1,11 @@
 #!/usr/bin/python3
-"""FusionOS — A/B rendszerfrissítés (M7)
+"""Fúzió — A/B rendszerfrissítés (M7)
 
     fusion-update status              slotok és boot-bejegyzések (aktív, próba, hibás, tartalék)
     fusion-update apply <fájl.fupd|mappa>
                                       frissítés az INAKTÍV slotba (a futó rendszerhez nem nyúl);
                                       a csomagban: fusion-update.manifest, rootfs.erofs, uki-A.efi, uki-B.efi
-    fusion-update reboot              újraindítás — a következő indítás is a FusionOS (UEFI BootNext)
+    fusion-update reboot              újraindítás — a következő indítás is a Fúzió (UEFI BootNext)
     fusion-update boot-check          (fusion-boot-check.service) a sikeres indulás ellenőrzése;
                                       próba-indításnál siker esetén véglegesít, hiba esetén újraindít
 
@@ -84,7 +84,7 @@ def trial_entry():
 
 def set_bootnext():
     """a következő indítás is a mostani UEFI-bejegyzésről (BootNext = BootCurrent) — ha a firmware
-    alapértelmezése más rendszer (pl. a Mint), a próba-indítások így is a FusionOS-be térnek vissza"""
+    alapértelmezése más rendszer (pl. a Mint), a próba-indítások így is a Fúzióba térnek vissza"""
     g = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
     try:
         with open(f"{EFIVARS}/BootCurrent-{g}", "rb") as f:
@@ -202,7 +202,7 @@ def status():
             d["menu"] = sorted(os.path.basename(c)[:-5] for c in glob.glob(os.path.join(esp, "loader", "entries", "*.conf")))
         v = run(["efibootmgr"], check=False).stdout if os.path.isdir("/sys/firmware/efi") else ""
         d["firmware"] = [m.group(1).strip() for m in re.finditer(r"^Boot[0-9A-Fa-f]{4}\*?\s+([^\t]+)", v, re.M)
-                         if m.group(1).startswith(("FusionOS", FW_PREFIX))]
+                         if m.group(1).startswith(("FusionOS", "Fuzio", FW_PREFIX) + OLD_FW_PREFIXES)]
     return d
 
 
@@ -240,7 +240,7 @@ class Source:
         try:
             self.tar = tarfile.open(self.path, "r:")
         except (tarfile.TarError, OSError) as e:
-            raise UpdateError(f"nem FusionOS-frissítőfájl ({e})")
+            raise UpdateError(f"nem Fúzió-frissítőfájl ({e})")
         self.members = {os.path.basename(m.name): m for m in self.tar.getmembers() if m.isfile()}
 
     def open(self, name):
@@ -346,7 +346,7 @@ def cmd_apply(path):
     src = Source(path)
     meta, files = read_manifest(src)
     ver = meta.get("FUSION_VERSION", "?")
-    say(f"frissítőcsomag: FusionOS {ver} ({meta.get('FUSION_MILESTONE', '?')}) — {os.path.basename(src.path)}")
+    say(f"frissítőcsomag: Fúzió {ver} ({meta.get('FUSION_MILESTONE', '?')}) — {os.path.basename(src.path)}")
     try:
         blessed = open(STATE).read().startswith("VÉGLEGESÍTVE")
     except OSError:
@@ -407,13 +407,13 @@ def cmd_apply(path):
             added = add_missing_entries(src, esp, os.path.basename(final))
             if added:
                 say("új boot-bejegyzés: " + ", ".join(added))
-    say(f"KÉSZ: FusionOS {ver} a(z) {target} slotban. Újraindítás után próbaként indul; ha rendben elindul,")
+    say(f"KÉSZ: Fúzió {ver} a(z) {target} slotban. Újraindítás után próbaként indul; ha rendben elindul,")
     say(f"véglegessé válik — ha {TRIES}× nem, magától a mostani ({cur}) rendszer indul.")
     return 0
 
 
 def cmd_reboot():
-    """újraindítás úgy, hogy a következő indítás is a FusionOS legyen (a firmware alapértelmezése lehet a Mint)"""
+    """újraindítás úgy, hogy a következő indítás is a Fúzió legyen (a firmware alapértelmezése lehet a Mint)"""
     set_bootnext()
     os.execvp("systemctl", ["systemctl", "reboot"])
 
@@ -427,7 +427,8 @@ def desktop_expected():
 
 
 MEASURE_FILE = "/usr/lib/fusion/boot/measure-entries"
-FW_PREFIX = "Fusion meres - "
+FW_PREFIX = "Fuzio meres - "
+OLD_FW_PREFIXES = ("Fusion meres - ",)     # 0.0.51-ig: induláskor új névvel cserélődnek
 
 
 def measure_defs():
@@ -513,7 +514,7 @@ def maintain_entries():
 
 
 def firmware_entries(want):
-    """UEFI-bejegyzések „Fusion meres - …” néven: a systemd-boot nélkül, közvetlenül a UKI-t indítják a
+    """UEFI-bejegyzések „Fuzio meres - …” néven: a systemd-boot nélkül, közvetlenül a UKI-t indítják a
     kiegészített parancssorral (Secure Boot nélkül a systemd-stub a betöltési paramétereket használja)"""
     if not os.path.isdir("/sys/firmware/efi") or subprocess.run(["sh", "-c", "command -v efibootmgr"],
                                                                  capture_output=True).returncode:
@@ -531,7 +532,7 @@ def firmware_entries(want):
     order = re.search(r"^BootOrder:\s*(\S+)", v, re.M)
     order = order.group(1).split(",") if order else []
     have = {}
-    for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+(" + re.escape(FW_PREFIX) + r"[^\t]*?)\s*(?:\t(.*))?$", v, re.M):
+    for m in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+((?:" + "|".join(map(re.escape, (FW_PREFIX,) + OLD_FW_PREFIXES)) + r")[^\t]*?)\s*(?:\t(.*))?$", v, re.M):
         have.setdefault(m.group(2).strip(), []).append((m.group(1), (m.group(3) or "").lower()))
     changed = []
     wanted = {w[0] for w in want}
@@ -628,7 +629,7 @@ def checks():
         while time.time() < end and not os.path.exists("/run/user/1000/fusion-shell.ready"):
             time.sleep(2)
         if not os.path.exists("/run/user/1000/fusion-shell.ready"):
-            return False, f"a Fusion Desktop {DESKTOP_WAIT} mp alatt nem indult el"
+            return False, f"a Fúzió Desktop {DESKTOP_WAIT} mp alatt nem indult el"
     return True, f"rendben (rendszer: {sysstate}{', felület fut' if desktop_expected() else ''})"
 
 
@@ -673,7 +674,7 @@ def cmd_boot_check():
     pe = te or parse(entry)
     slot = current_slot()
     if not pe:
-        set_state(f"ok: nem FusionOS-bejegyzés ({entry or 'ismeretlen'}), slot {slot}")
+        set_state(f"ok: nem Fúzió-bejegyzés ({entry or 'ismeretlen'}), slot {slot}")
         safe_maintain()
         return 0
     if not pe["trial"]:
@@ -687,7 +688,7 @@ def cmd_boot_check():
                     st = e["base"].rsplit("-", 1)[-1]
                     if e["bad"] and st.isdigit() and (not mystamp.isdigit() or st > mystamp) and not noticed(e["name"]):
                         notice("A frissítés nem indult el",
-                               f"A FusionOS {e['base'].split('-')[0]} {TRIES} próbálkozásra sem indult el, ezért a korábbi "
+                               f"A Fúzió {e['base'].split('-')[0]} {TRIES} próbálkozásra sem indult el, ezért a korábbi "
                                f"rendszer ({pe['base'].split('-')[0]}) fut. Részletek: Beállítások → Rendszerfrissítés.",
                                e["name"])
                 stale = any(not os.path.exists(os.path.join(esp, l.split()[1].lstrip("/")))
@@ -725,7 +726,7 @@ def cmd_boot_check():
         pe = real
         n = fix_entries(esp, pe["id"], slot)
     set_state(f"VÉGLEGESÍTVE: {pe['id']} (slot {slot}) — {why}" + (f"; {n} tartalék bejegyzés frissítve" if n else ""))
-    notice("Rendszerfrissítés kész", f"A FusionOS {pe['base'].split('-')[0]} rendben elindult, és véglegessé vált "
+    notice("Rendszerfrissítés kész", f"A Fúzió {pe['base'].split('-')[0]} rendben elindult, és véglegessé vált "
            f"(slot {slot}). A korábbi rendszer tartaléknak megmaradt.")
     safe_maintain()
     # egyirányú DATA-átalakítások csak ezután (a visszaállított régi rendszer is értse a DATA-t)

@@ -1,4 +1,4 @@
-"""a Fusion-felület közös beállításai, Qt nélkül (a Qt-s rész: fusion_ui) — M8b
+"""a Fúzió-felület közös beállításai, Qt nélkül (a Qt-s rész: fusion_ui) — M8b
 
     render_mode()     „gpu” (OpenGL, alapértelmezés) vagy „software” (processzoros rajzolás)
     render_forced()   a kernel parancssora (mérési boot-bejegyzés) dönt-e

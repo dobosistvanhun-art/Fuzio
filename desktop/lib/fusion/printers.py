@@ -257,7 +257,7 @@ def enable(name, program="fusion"):
     return ok, "" if ok else _err(rc or rc2, out + out2, err or err2)
 
 
-TEST_TEXT = """FusionOS — próbaoldal
+TEST_TEXT = """Fúzió — próbaoldal
 
 Nyomtató: {name}
 Ha ez az oldal olvasható, a nyomtató működik.
@@ -272,9 +272,9 @@ def test_page(name):
         return False, "érvénytelen név", ""
     f = next((t for t in TESTPRINT if os.path.isfile(t)), None)
     if f:
-        rc, out, err = _run(["lp", "-d", name, "-t", "FusionOS-probaoldal", f])
+        rc, out, err = _run(["lp", "-d", name, "-t", "Fúzió-probaoldal", f])
     else:
-        rc, out, err = _run(["lp", "-d", name, "-t", "FusionOS-probaoldal", "-o", "document-format=text/plain", "-"],
+        rc, out, err = _run(["lp", "-d", name, "-t", "Fúzió-probaoldal", "-o", "document-format=text/plain", "-"],
                             inp=TEST_TEXT.format(name=name))
     m = re.search(r"request id is (\S+)", out)
     return rc == 0, "" if rc == 0 else _err(rc, out, err), m.group(1) if m else ""

@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-"""FusionOS — Fejlesztődoboz (root; a felhasználó a `fusion-dev box …` → `fusion-admin devbox …` úton éri el)
+"""Fúzió — Fejlesztődoboz (root; a felhasználó a `fusion-dev box …` → `fusion-admin devbox …` úton éri el)
 
 Egy Ubuntu 24.04 (noble) alaprendszer a DATA-n (/data/dev/box), benne apt — a fejlesztéshez kellő eszközök
-(pl. a FusionOS buildje: mmdebstrap, fordítók, QEMU) ide kerülnek, nem a csak olvasható rendszerképbe.
+(pl. a Fúzió buildje: mmdebstrap, fordítók, QEMU) ide kerülnek, nem a csak olvasható rendszerképbe.
 A doboz a systemd-nspawn-nal indul: saját fájlrendszer, közös hálózat (npm, wrangler login, apt), a felhasználó
-saját mappája közös, a /dev/kvm átadva (QEMU-tesztek). A FusionOS frissítése nem érinti; törölhető.
+saját mappája közös, a /dev/kvm átadva (QEMU-tesztek). A Fúzió frissítése nem érinti; törölhető.
 
     fusion-devbox status [--json]
     fusion-devbox create                      létrehozás (debootstrap, internet kell; ~5–10 perc)
@@ -29,7 +29,7 @@ SUITE = "noble"
 MIRROR = os.environ.get("FUSION_DEVBOX_MIRROR", "http://archive.ubuntu.com/ubuntu")
 SECURITY = os.environ.get("FUSION_DEVBOX_SECURITY", "http://security.ubuntu.com/ubuntu")
 INCLUDE = "sudo,ca-certificates,curl,git,nano,less,xz-utils,gnupg,locales,bash-completion"
-MIN_FREE = 3 << 29                      # 1,5 GiB: az alaprendszer ~0,5 GB; a FusionOS buildjéhez ~30 GB kell
+MIN_FREE = 3 << 29                      # 1,5 GiB: az alaprendszer ~0,5 GB; a Fúzió buildjéhez ~30 GB kell
 NAME = "fejleszto"
 
 
@@ -111,11 +111,11 @@ def configure(root):
           "Components: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n")
     write(os.path.join(root, "etc/hostname"), NAME + "\n")
     write(os.path.join(root, "etc/hosts"), f"127.0.0.1 localhost\n127.0.1.1 {NAME}\n::1 localhost ip6-localhost\n")
-    # a dobozon belül a rendszergazda (a FusionOS sudo csoportja) jelszó nélkül sudo-zhat: a doboz az övé
+    # a dobozon belül a rendszergazda (a Fúzió sudo csoportja) jelszó nélkül sudo-zhat: a doboz az övé
     write(os.path.join(root, "etc/sudoers.d/fusion-doboz"), "%sudo ALL=(ALL:ALL) NOPASSWD: ALL\n", 0o440)
     write(os.path.join(root, "etc/profile.d/fusion-doboz.sh"),
-          '# FusionOS Fejlesztődoboz\nexport FUSION_BOX=1\ncase "$-" in *i*) PS1="(doboz) $PS1" ;; esac\n'
-          '[ -n "$FUSION_BOX_HELLO" ] && { echo "FusionOS Fejlesztődoboz — Ubuntu 24.04, apt: sudo apt install …; '
+          '# Fúzió Fejlesztődoboz\nexport FUSION_BOX=1\ncase "$-" in *i*) PS1="(doboz) $PS1" ;; esac\n'
+          '[ -n "$FUSION_BOX_HELLO" ] && { echo "Fúzió Fejlesztődoboz — Ubuntu 24.04, apt: sudo apt install …; '
           'kilépés: exit"; unset FUSION_BOX_HELLO; }\n')
     write(os.path.join(root, "etc/default/locale"), "LANG=C.UTF-8\n")
 
@@ -125,7 +125,7 @@ def create():
         raise BoxError("a Fejlesztődoboz már létezik (" + BOX + ")")
     for t in ("debootstrap", "systemd-nspawn"):
         if not shutil.which(t):
-            raise BoxError(f"hiányzik: {t} (régebbi FusionOS?)")
+            raise BoxError(f"hiányzik: {t} (régebbi Fúzió?)")
     os.makedirs(DEV, exist_ok=True)
     for p in (TMP, BOX):                       # egy félbemaradt próbálkozás maradéka
         if os.path.isdir(p) and not (p == BOX and marker()):
@@ -168,7 +168,7 @@ def create():
 
 
 def sync_users(root):
-    """a FusionOS felhasználói (uid ≥ 1000) ugyanazzal az uid/gid-del a dobozban is; a rendszergazdák a sudo csoportban"""
+    """a Fúzió felhasználói (uid ≥ 1000) ugyanazzal az uid/gid-del a dobozban is; a rendszergazdák a sudo csoportban"""
     def read(name):
         try:
             return [ln.rstrip("\n").split(":") for ln in open(os.path.join(root, "etc", name)) if ln.strip()]

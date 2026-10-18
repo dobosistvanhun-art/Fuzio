@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# vdi / vm — fejlesztői VirtualBox-környezet (a FusionOS buildtől független fejlesztői eszköz).
+# vdi / vm — fejlesztői VirtualBox-környezet (a Fúzió buildtől független fejlesztői eszköz).
 
 VM_NAME="${FUSION_VM_NAME:-FusionOS-dev}"
 VM_CTL="SATA"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# FusionOS — próba: egy Flatpak-program (homokozóban, xdg-download joggal — mint a Firefox) „letölt” egy fájlt;
+# Fúzió — próba: egy Flatpak-program (homokozóban, xdg-download joggal — mint a Firefox) „letölt” egy fájlt;
 # a fájlnak a valódi Letöltések mappába kell kerülnie (és nem a homokozó ideiglenes ~/Downloads mappájába).
 # Hálózat nélkül: a futtatókörnyezet a rendszer saját dash-ából és libc-jéből készül, helyi tárolóból települ.
 #   flatpak-download-test.sh <munkamappa>     (a fusion felhasználóként, a munkamenetben)

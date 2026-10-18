@@ -1,10 +1,10 @@
-"""jogosultságok (M9) — a program leírójában rögzített jogok, és a Fusion API kapuja
+"""jogosultságok (M9) — a program leírójában rögzített jogok, és a Fúzió API kapuja
 
 Minden API-hívás, amely eszközt, rendszerműveletet vagy más program adatát érinti, a `check`-en megy át.
 Képességek: "device:<szerep>", "files:<mappa>", "net", "system:<művelet>" (pl. system:bluetooth, system:printers),
 "programs:manage".
 
-    caller()          a hívó program azonosítója: FUSION_PROGRAM_ID, vagy "fusion" (a FusionOS saját programjai, a
+    caller()          a hívó program azonosítója: FUSION_PROGRAM_ID, vagy "fusion" (a Fúzió saját programjai, a
                       felhasználó szkriptjei és a terminál)
     of(leírás)        egy program jogai: {devices, folders, net, sandbox, enforcement, protection}
     summary(id)       ugyanez azonosító alapján (None, ha nincs ilyen program)
@@ -97,7 +97,7 @@ def summary(pid, with_flatpak=False):
 
 
 def check(program, capability):
-    """a FusionOS saját programjai (és a felhasználó szkriptjei) mindent elérnek; egy telepített program a leírása
+    """a Fúzió saját programjai (és a felhasználó szkriptjei) mindent elérnek; egy telepített program a leírása
     szerint; ismeretlen program semmit"""
     if program in TRUSTED:
         return True

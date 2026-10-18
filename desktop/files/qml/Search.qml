@@ -1,4 +1,4 @@
-// FusionOS — Fájlkezelő: keresés (Alt+F7) — név minta és/vagy szöveg a fájlokban
+// Fúzió — Fájlkezelő: keresés (Alt+F7) — név minta és/vagy szöveg a fájlokban
 import QtQuick
 import QtQuick.Controls
 import FusionUI

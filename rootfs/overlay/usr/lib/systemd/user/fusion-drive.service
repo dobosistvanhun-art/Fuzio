@@ -1,7 +1,7 @@
-# FusionOS — Google Drive a Fájlkezelőben: rclone-csatolás a ~/GoogleDrive mappába
+# Fúzió — Google Drive a Fájlkezelőben: rclone-csatolás a ~/GoogleDrive mappába
 # (Beállítások → Google Drive kapcsolja be / ki; a bejelentkezés jegye: ~/.config/fusion/rclone.conf)
 [Unit]
-Description=FusionOS — Google Drive (rclone mount)
+Description=Fúzió — Google Drive (rclone mount)
 ConditionPathExists=%h/.config/fusion/rclone.conf
 StartLimitIntervalSec=0
 

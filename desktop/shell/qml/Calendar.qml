@@ -1,4 +1,4 @@
-// FusionOS — naptár (az órára kattintva); a hét hétfővel kezdődik
+// Fúzió — naptár (az órára kattintva); a hét hétfővel kezdődik
 import QtQuick
 import FusionUI
 

@@ -1,2 +1,2 @@
-# FusionOS — fájlrendszert hordozó kötetek: a fusion-admin eldönti, cserélhető-e (és nem rendszerkötet)
+# Fúzió — fájlrendszert hordozó kötetek: a fusion-admin eldönti, cserélhető-e (és nem rendszerkötet)
 ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="fusion-automount@%k.service"

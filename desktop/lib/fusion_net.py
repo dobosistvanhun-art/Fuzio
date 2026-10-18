@@ -1,4 +1,4 @@
-"""FusionOS — hálózat (Wi-Fi) a Fusion Desktop programjainak
+"""Fúzió — hálózat (Wi-Fi) a Fúzió Desktop programjainak
 
 A Wi-Fi-t az iwd kezeli; ez a modul a rendszerbuszon (D-Bus, net.connman.iwd) kérdezi,
 a busctl JSON-kimenetével — nincs képernyőszöveg-értelmezés. Jelszavas új hálózathoz

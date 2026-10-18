@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fusion API (M8) — egységtesztek a `fusion` csomagra, rendszer nélkül (ideiglenes mappákkal).
+"""Fúzió API (M8) — egységtesztek a `fusion` csomagra, rendszer nélkül (ideiglenes mappákkal).
 Futtatás: python3 tests/fusion-api-test.py   (a build `test` lépése is futtatja, a QEMU előtt)"""
 import os
 import sys
@@ -27,7 +27,7 @@ def check(name, cond, extra=""):
         print(f"  HIBA  {name} {extra}")
 
 
-print("Fusion API egységtesztek")
+print("Fúzió API egységtesztek")
 check("API_VERSION", fusion.API_VERSION == 1)
 # kv
 d = kv.parse("# megj\n a = 1 \nb=két szó\n\nnincs-egyenlő\nport.COM3 = laser\n")
@@ -66,7 +66,7 @@ check("devices.present", [x["role"] for x in devices.present() if x["present"]] 
 # értesítés: a parancssor ellenőrzi a paramétereket (Shell nélkül a küldés nem sikerül, de nem száll el)
 check("notify.main paraméter nélkül → 2", notify.main([]) == 2)
 check("notify.send Shell nélkül → False", notify.send("x") in (False, True))
-check("permissions.check: a FusionOS saját hívója engedélyezett", permissions.check("fusion", "device:laser"))
+check("permissions.check: a Fúzió saját hívója engedélyezett", permissions.check("fusion", "device:laser"))
 # --- M8b: sémák, elsőbbségi szabály, feladat-protokoll, parancssor ---
 from fusion import cli, jobs, schema, ui  # noqa: E402
 import contextlib  # noqa: E402

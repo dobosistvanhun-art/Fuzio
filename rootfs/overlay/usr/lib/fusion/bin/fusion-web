@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# FusionOS — fusion-web: egy webes alkalmazás saját ablakban (böngésző-keret nélkül)
+# Fúzió — fusion-web: egy webes alkalmazás saját ablakban (böngésző-keret nélkül)
 #
 #   fusion-web [--title CÍM] <url>
 #
@@ -21,7 +21,7 @@ from gi.repository import Gtk, WebKit2  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser(prog="fusion-web")
-    ap.add_argument("--title", default="FusionOS")
+    ap.add_argument("--title", default="Fúzió")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=800)
     ap.add_argument("url")

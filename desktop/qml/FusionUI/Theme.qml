@@ -1,4 +1,4 @@
-// FusionOS — FusionDark téma (a Fusion Desktop minden programja ezt használja)
+// Fúzió — FusionDark téma (a Fúzió Desktop minden programja ezt használja)
 // GUI-elv: gyors, egyszerű, informatív; nincs áttetszőség, felesleges animáció, erőltetett kerekítés.
 pragma Singleton
 import QtQuick

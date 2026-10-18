@@ -1,4 +1,4 @@
-"""FusionOS — Feladatkezelő: futó programok és folyamatok, „nem válaszol” felismerés, bezárás
+"""Fúzió — Feladatkezelő: futó programok és folyamatok, „nem válaszol” felismerés, bezárás
 
 Programok = a látható ablakok (X11 _NET_CLIENT_LIST) a folyamatuk szerint csoportosítva, a Fusion
 Programkezelő neveivel (Windows-program: a Wine-környezete, Flatpak: az azonosítója alapján).
@@ -31,7 +31,7 @@ except ImportError:      # Xlib nélkül csak a folyamatlista működik
 UID = os.getuid()
 CLK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
-# a Fusion Desktop saját, mindig futó ablakai — ezek nem „programok”
+# a Fúzió Desktop saját, mindig futó ablakai — ezek nem „programok”
 SKIP_CLASSES = {"fusion-shell", "Fusion Panel", "Fusion Start", "fusion-tasks"}
 SKIP_TYPES = {"_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_NOTIFICATION",
               "_NET_WM_WINDOW_TYPE_TOOLTIP", "_NET_WM_WINDOW_TYPE_POPUP_MENU", "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU"}

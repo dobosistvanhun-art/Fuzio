@@ -1,4 +1,4 @@
-// FusionOS — Kamera: élőkép, kameraváltás, fénykép, videófelvétel (Qt Multimedia + ffmpeg)
+// Fúzió — Kamera: élőkép, kameraváltás, fénykép, videófelvétel (Qt Multimedia + ffmpeg)
 import QtQuick
 import QtQuick.Controls
 import QtMultimedia

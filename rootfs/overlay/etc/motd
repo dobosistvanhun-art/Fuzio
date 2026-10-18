@@ -1,11 +1,11 @@
 
-  FusionOS — fejlesztői konzol (M6)
-  Fusion Desktop: Start menü (Super), Fájlkezelő (Ctrl+Alt+E), Beállítások (Ctrl+Alt+S), Terminál (Ctrl+Alt+T)
+  Fúzió — fejlesztői konzol (M6)
+  Fúzió Desktop: Start menü (Super), Fájlkezelő (Ctrl+Alt+E), Beállítások (Ctrl+Alt+S), Terminál (Ctrl+Alt+T)
   Hardverprofil:  fusion-hwinfo      Grafika: glxinfo -B, vulkaninfo --summary
   Wi-Fi:  fusion-wifi list | fusion-wifi connect "<hálózat>" | fusion-wifi
   Soros eszközök (lézer, nyomtató):  fusion-devices
   Windows-programok:  fwr list | fwr install lightburn <telepítő.exe> | fwr launch lightburn | fwr check
   Nyomtató (Klipper):  fusion-printer | fusion-printer ui | sudo fusion-printer import <printer.cfg>
-  Értesítés küldése:  fusion-notify "cím" "szöveg"     Fusion Shell: fusion-shell (status, restart)
-  Fusion Desktop újraindítása a tty1-en:  fusion-session
+  Értesítés küldése:  fusion-notify "cím" "szöveg"     Fúzió Shell: fusion-shell (status, restart)
+  Fúzió Desktop újraindítása a tty1-en:  fusion-session
   A rendszer csak olvasható; a változások a FUSION_DATA partícióra kerülnek.

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# rootfs — a FusionOS rendszerkép (Ubuntu 24.04 minbase + Fusion) építése,
+# rootfs — a Fúzió rendszerkép (Ubuntu 24.04 minbase + Fusion) építése,
 # tömörített, csak olvasható EROFS-képfájlba. Root kell hozzá (mmdebstrap, chroot).
 
 ROOTFS_IMG_NAME="rootfs.erofs"
@@ -60,7 +60,7 @@ step_rootfs() {
 
     # a gyári kernelmodulok (NVIDIA) a rögzített kernelhez — ha hiányoznak, most fordulnak
     nvidia_ko_ready || step_drivers
-    # a Fusion Windows Runtime motorja (Wine, WoW64) — ha még nincs kész, most fordul
+    # a Fúzió Windows Runtime motorja (Wine, WoW64) — ha még nincs kész, most fordul
     wine_ready || step_wine
     # M5: Klipper + Moonraker futtatókörnyezet — ha még nincs kész, most készül
     printer_ready || step_printer
@@ -77,7 +77,7 @@ step_rootfs() {
 
     pkgs=$(sed -e 's/#.*//' -e "s/@KERNEL_ABI@/$KERNEL_ABI/" "$FUSION_ROOT/rootfs/packages.list" | tr -s ' \n' ',' | sed 's/^,//; s/,$//')
 
-    step "Rendszerkép: Ubuntu 24.04 (noble) minbase + FusionOS csomagok"
+    step "Rendszerkép: Ubuntu 24.04 (noble) minbase + Fúzió csomagok"
     info "tükör: $ROOTFS_MIRROR"
     FUSION_NVIDIA_KO=$(nvidia_ko_dir)
     FUSION_WINE_BUILD=$(wine_out_dir); FUSION_WINE_ID=$(wine_build_id)

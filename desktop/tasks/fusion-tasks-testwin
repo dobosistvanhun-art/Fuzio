@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""FusionOS — próbaablak a Feladatkezelőhöz (fejlesztés / önteszt)
+"""Fúzió — próbaablak a Feladatkezelőhöz (fejlesztés / önteszt)
 
     fusion-tasks-testwin ok     válaszoló ablak (_NET_WM_PING-re felel, a bezárásra kilép)
     fusion-tasks-testwin hung   „lefagyott” ablak: megjelenik, aztán nem dolgozza fel az üzeneteit

@@ -35,7 +35,7 @@ SettingsPage {
     Section {
         title: "MI KERÜL A MENTÉSBE"
         InfoRow { icon: "archive-in"; label: "DATA"; value: (p.s.dataUsedText || "…") + " — a telepített programok (LightBurn, Flatpak), beállítások, Wi-Fi, Google Drive-bejelentkezés, saját fájlok, a nyomtató adatai" }
-        InfoRow { label: "Visszaállítás"; value: "a Fusion Telepítőben: Új telepítés → „DATA visszaállítása mentésből” (a mentést tartalmazó lemez legyen bedugva)" }
+        InfoRow { label: "Visszaállítás"; value: "a Fúzió Telepítőben: Új telepítés → „DATA visszaállítása mentésből” (a mentést tartalmazó lemez legyen bedugva)" }
         InfoRow { label: "Figyelem"; value: "a mentés jelszavakat is tartalmaz (Wi-Fi, Google Drive) — tartsa biztonságban"; valueColor: Theme.warn }
     }
     Section {
@@ -89,9 +89,9 @@ SettingsPage {
         Repeater {
             model: p.s.backups
             InfoRow { icon: "archive-in"; label: modelData.when
-                      value: "FusionOS " + modelData.version + "   ·   " + modelData.sizeText + "   ·   " + modelData.volume.replace("/run/media/fusion/", "") +
+                      value: "Fúzió " + modelData.version + "   ·   " + modelData.sizeText + "   ·   " + modelData.volume.replace("/run/media/fusion/", "") +
                              (modelData.parts.length > 1 ? "   ·   " + modelData.parts.length + " darab" : "") }
         }
-        InfoRow { visible: p.s.backups.length === 0; label: "—"; value: "a csatolt köteteken nincs FusionOS-mentés" }
+        InfoRow { visible: p.s.backups.length === 0; label: "—"; value: "a csatolt köteteken nincs Fúzió-mentés" }
     }
 }

@@ -1,4 +1,4 @@
-// FusionOS — értesítésközpont (a panel harang-gombjára)
+// Fúzió — értesítésközpont (a panel harang-gombjára)
 import QtQuick
 import FusionUI
 
