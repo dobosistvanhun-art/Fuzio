@@ -1,0 +1,83 @@
+#!/usr/bin/python3
+"""Fúzió — touchpad parancssorból (a munkamenet indulásakor és a Beállítások → Eszközök oldal is ezt használja)
+
+    fusion-touchpad                      állapot: touchpadok, a beállítások és a tényleges értékek
+    fusion-touchpad apply                a mentett beállítások érvényesítése (munkamenet indulásakor)
+    fusion-touchpad set <kulcs> <érték>  mentés és érvényesítés; kulcsok:
+        enabled|tap|natural|horizontal|dwt|middle  be|ki
+        scroll                                     twofinger|edge|none   (két ujjal | a szélén | nincs)
+        speed                                      -1 … 1
+    fusion-touchpad --json               állapot JSON-ban
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+from fusion import touchpad as tp  # noqa: E402
+
+YES = {"be": True, "on": True, "1": True, "true": True, "igen": True,
+       "ki": False, "off": False, "0": False, "false": False, "nem": False}
+SCROLL_HU = {"twofinger": "két ujjal", "edge": "a touchpad szélén", "none": "nincs", "?": "?"}
+
+
+def show(st):
+    s = st["settings"]
+    print("Beállítás:  " + ("bekapcsolva" if s["enabled"] else "KIKAPCSOLVA")
+          + f"  ·  koppintás: {'be' if s['tap'] else 'ki'}  ·  görgetés: {SCROLL_HU[s['scroll']]}"
+          + f"{' (természetes)' if s['natural'] else ''}  ·  sebesség: {s['speed']:+.2f}"
+          + f"  ·  gépelés közben tiltva: {'igen' if s['dwt'] else 'nem'}")
+    if not st["ok"]:
+        print("Nem érvényesíthető: " + st["error"])
+        return 1
+    if not st["devices"]:
+        print("Nincs touchpad (vagy nem a libinput kezeli).")
+        return 0
+    for d in st["devices"]:
+        c = d["current"]
+        print(f"  {d['name']} (id {d['id']}): koppintás {'be' if c['tap'] else 'ki'}, görgetés {SCROLL_HU.get(c['scroll'], '?')}"
+              f"{', természetes' if c['natural'] else ''}, sebesség {c['speed']:+.2f}{'' if c['enabled'] else ', KIKAPCSOLVA'}")
+    print("Elérhető görgetés: " + (", ".join(SCROLL_HU[m] for m in st["available"].get("scroll", [])) or "-"))
+    return 0
+
+
+def main(a):
+    if not a or a == ["--json"]:
+        st = tp.status()
+        if a:
+            print(json.dumps(st, ensure_ascii=False))
+            return 0
+        return show(st)
+    if a[0] == "apply":
+        errs = tp.apply()
+        for e in errs:
+            print("hiba: " + e, file=sys.stderr)
+        return 1 if errs else 0
+    if a[0] == "set" and len(a) == 3:
+        k, v = a[1], a[2]
+        if k not in tp.DEFAULTS:
+            sys.exit(f"ismeretlen kulcs: {k}")
+        if k == "scroll":
+            if v not in tp.SCROLL:
+                sys.exit("scroll: twofinger | edge | none")
+            val = v
+        elif k == "speed":
+            try:
+                val = float(v)
+            except ValueError:
+                sys.exit("speed: -1 … 1")
+        else:
+            if v.lower() not in YES:
+                sys.exit(f"{k}: be | ki")
+            val = YES[v.lower()]
+        s = tp.save({k: val})
+        errs = tp.apply(s)
+        for e in errs:
+            print("hiba: " + e, file=sys.stderr)
+        return 1 if errs else 0
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

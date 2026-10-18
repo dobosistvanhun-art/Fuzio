@@ -26,6 +26,7 @@ import fusion_store as store
 import fusion_ui as ui
 import fusion
 from fusion import devices as fdev
+from fusion import touchpad as ftp
 from fusion import jobs as fjobs
 from fusion import trash as ftrash
 from fusion import bluetooth as fbt
@@ -482,6 +483,27 @@ class Settings(QObject):
     @pyqtSlot()
     def cameraOpen(self):
         ui.spawn(["fusion-camera"])
+
+    # --- Touchpad (0.0.53) ---
+    @pyqtSlot()
+    def touchpadRefresh(self):
+        self._async("touchpad", ftp.status)
+
+    @pyqtSlot(str, "QVariant")
+    def touchpadSet(self, key, value):
+        def f():
+            if key not in ftp.DEFAULTS:
+                return {"ok": False, "error": f"ismeretlen kulcs: {key}"}
+            try:
+                s = ftp.save({key: value})
+            except (OSError, ValueError, TypeError) as e:
+                return {"ok": False, "error": str(e)}
+            errs = ftp.apply(s)
+            st = ftp.status()
+            if errs:
+                st["error"] = "; ".join(errs)
+            return st
+        self._async("touchpad", f)
 
     # --- Bluetooth ---
     @pyqtSlot()

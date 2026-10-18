@@ -47,6 +47,7 @@ xserver-xorg-video-fbdev
 xinit
 xauth
 x11-xserver-utils
+xinput
 x11-xkb-utils
 x11-utils
 # Mesa: szoftveres / virtuális GPU-k (VirtualBox, QEMU); az NVIDIA a saját GL-jét hozza

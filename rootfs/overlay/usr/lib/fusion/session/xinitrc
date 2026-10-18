@@ -6,6 +6,8 @@ setxkbmap hu 2>/dev/null
 bg=$(cat "$CONF/background" 2>/dev/null); case "$bg" in \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;; *) bg='#16202b' ;; esac
 xsetroot -solid "$bg" -cursor_name left_ptr 2>/dev/null
 xset s off -dpms 2>/dev/null
+# touchpad: a felhasználó beállításai (Beállítások → Eszközök → Touchpad) az alapértékekre
+fusion-touchpad apply >/dev/null 2>&1
 # terminál: FusionDark színek, DejaVu Sans Mono
 xrdb -nocpp -merge /usr/lib/fusion/session/Xresources 2>/dev/null
 # kijelző-felbontás (Beállítások → Kijelző; csak xrandr-sor lehet benne)

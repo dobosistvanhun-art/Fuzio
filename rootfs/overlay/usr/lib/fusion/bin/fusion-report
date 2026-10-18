@@ -573,6 +573,15 @@ def build(desc, sysinfo, m):
     L.append("  Soros portok: " + (" ".join(tty) if tty else "nincs"))
     L.append("  Eszközszerepek (Fusion eszközréteg):")
     L += indent(run(["/usr/lib/fusion/devices/fusion-devd", "list"], timeout=10), 4)
+    L.append("  Beviteli eszközök (kernel):")
+    try:
+        names = [l.split("=", 1)[1].strip('"') for l in open("/proc/bus/input/devices", encoding="utf-8", errors="replace")
+                 if l.startswith("N: Name=")]
+    except OSError:
+        names = []
+    L += indent("\n".join(names) or "-", 4)
+    L.append("  Touchpad (libinput, a munkamenetben):")
+    L += indent(run(["/usr/lib/fusion/desktop/bin/fusion-touchpad"], timeout=10), 4)
 
     L += bt_camera_printer_section(m)
     L += permissions_section()

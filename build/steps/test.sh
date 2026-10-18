@@ -352,6 +352,7 @@ step_test() {
             _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fúzió-színek, magyar menü" || ok_run=0
             _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
             _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
+            _check "$log" "FUSION-T1: TOUCHPAD devices=[1-9].* default\[tap=True scroll=twofinger natural=False\] set\[tap=False scroll=twofinger natural=True\] conf=1" "touchpad: koppintás és két ujjas görgetés alapból, a beállítás érvényesül (fusion-touchpad)" || ok_run=0
             _check "$log" "FUSION-T1: DEVTERM window=1 .*menu=True" "Fejlesztő terminál (Start → Rendszer)" || ok_run=0
             _check "$log" "FUSION-UPDFILES: BUILD 9.9.9@~/Projektek/proba-fusionos/build/out/release" "Rendszerfrissítés: a saját build kimenete (build/out/release) a listában" || ok_run=0
             _check "$log" "FUSION-M6: DASHBOARD viewable=1 type=_NET_WM_WINDOW_TYPE_DESKTOP" "irányítópult az asztalon (asztal típusú ablak)" || ok_run=0
