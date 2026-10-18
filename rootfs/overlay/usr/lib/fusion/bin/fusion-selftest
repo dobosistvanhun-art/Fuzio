@@ -312,7 +312,7 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     # 3) Linux-program archívumban (.desktop + X-Fusion-Open társítás)
     t=$(mktemp -d); mkdir -p "$t/fprobaprog"
     printf '#!/bin/sh\necho "$@" > /tmp/fusion-prog-native.txt\n' > "$t/fprobaprog/fprobaprog"; chmod 755 "$t/fprobaprog/fprobaprog"
-    printf '[Desktop Entry]\nType=Application\nName=Fúzió Próba\nExec=fprobaprog %%F\nX-Fusion-Open=.fprb\n' > "$t/fprobaprog/fprobaprog.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Fusion Próba\nExec=fprobaprog %%F\nX-Fusion-Open=.fprb\n' > "$t/fprobaprog/fprobaprog.desktop"
     tar czf /tmp/fprobaprog-1.0.tar.gz -C "$t" fprobaprog; chmod 644 /tmp/fprobaprog-1.0.tar.gz; rm -rf "$t"
     echo "FUSION-PROG: DETECT $(prun fusion-programs detect /tmp/fprobaprog-1.0.tar.gz) $(prun fusion-programs detect /usr/lib/fusion/programs/tests/fusionteszt-setup.exe)"
     prun fusion-programs install /tmp/fprobaprog-1.0.tar.gz 2>&1 | tail -n 2 | sed 's/^/FUSION-PROG:   /'
