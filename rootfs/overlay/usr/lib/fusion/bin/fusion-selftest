@@ -509,8 +509,11 @@ x.move_to_desktop(w["id"], 1)
 time.sleep(0.8)
 moved = next(i for i in x.windows() if i["id"] == w["id"])["desktop"]
 x.set_desktop(1)
-time.sleep(1.2)
-st = json.load(open("/run/user/1000/fusion-shell.state"))
+for _ in range(25):                     # a Shell félmásodpercenként nézi az asztalt — lassú gépen kicsit később
+    time.sleep(0.4)
+    st = json.load(open("/run/user/1000/fusion-shell.state"))
+    if st.get("desktop") == 1:
+        break
 cur = x.desktop()[0]
 pv = "IsViewable" in run(["xwininfo", "-name", "Fusion Panel"], capture_output=True, text=True).stdout
 x.set_desktop(0)
