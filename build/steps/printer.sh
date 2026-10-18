@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# printer — M5: Klipper + Moonraker (3D nyomtató) a Fúzióhoz
+# printer — M5: Klipper + Moonraker (3D nyomtató) a FusionOS-hez
 #
 # A Klipper és a Moonraker Python-programok; a futtatáshoz saját, rögzített Python-környezet
 # (venv) kell. Ezt egy eldobható mmdebstrap build-chrootban készítjük (a rendszerképbe
