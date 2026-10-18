@@ -313,3 +313,15 @@ docs/         ellenőrzőlisták
 - A DATA fájlrendszer-ellenőrzése (fsck) még nincs az initramfs-ben.
 - A gyökér-overlay felső rétegének frissítéskori kezelése: M7 (A/B frissítés).
 - `loader.conf`: `editor yes` — fejlesztői beállítás, később kikapcsol.
+
+## Licenc
+
+A FusionOS forrása **MIT-licenc** alatt szabadon használható, módosítható és terjeszthető, a forrás
+megjelölésével (a `LICENSE` fájl szerzői jogi sorának megtartásával). A kész rendszerképekben lévő külső
+programokra (Linux, Ubuntu-csomagok, Qt, Wine, NVIDIA-illesztő …) a saját licencük vonatkozik.
+A Vas & Króm motorrajzai AI-generáltak — `desktop/games/vaskrom/art-src/OLVASSEL.md`.
+
+## Letöltés tesztelőknek
+
+A kész, pendrive-ra írható képfájlok (Rufus / balenaEtcher) és a Vas & Króm Windows-változata a
+[Releases](https://github.com/dobosistvanhun-art/FusionOS/releases) oldalon vannak.
