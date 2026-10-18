@@ -177,41 +177,70 @@ def installers():
 
 
 # --- Rendszerfrissítés (M7): .fupd fájlok a szokásos helyeken, a futó rendszer állapota ---
+_FUPD_CACHE = {}       # (út, méret, módosítás) → manifest-adatok: egy .fupd-t csak egyszer olvasunk
+
+
 def fupd_info(path):
-    """a frissítőfájl manifestje (csak a tar elejét olvassa)"""
+    """a frissítőfájl manifestje (csak a tar elejét olvassa; az eredmény gyorsítótárban)"""
     import tarfile
     try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (path, st.st_size, st.st_mtime)
+    if key in _FUPD_CACHE:
+        return _FUPD_CACHE[key]
+    try:
         with tarfile.open(path, "r:") as t:
-            m = next((x for x in t if os.path.basename(x.name) == "fusion-update.manifest"), None)
+            m = t.next()                    # a manifest a csomag első tagja (build.sh: _make_fupd)
+            if m is None or os.path.basename(m.name) != "fusion-update.manifest":
+                m = None
             txt = t.extractfile(m).read().decode("utf-8", "replace") if m else ""
     except (tarfile.TarError, OSError):
         return None
     kv = dict(ln.split("=", 1) for ln in txt.splitlines() if "=" in ln and " " not in ln.split("=", 1)[0])
     if "FUSION_VERSION" not in kv:
+        _FUPD_CACHE[key] = None
         return None
-    return {"version": kv.get("FUSION_VERSION", "?"), "milestone": kv.get("FUSION_MILESTONE", ""),
+    info = {"version": kv.get("FUSION_VERSION", "?"), "milestone": kv.get("FUSION_MILESTONE", ""),
             "stamp": kv.get("BUILD_STAMP", ""),
             # T3: telepítő pendrive is készíthető belőle (a telepítő UKI-ja és az ESP-fájlok benne vannak)
             "media": bool(re.search(r"(?m)^uki-installer\.efi ", txt)) and bool(re.search(r"(?m)^esp-static\.tar ", txt))}
+    _FUPD_CACHE[key] = info
+    return info
 
 
-def update_files():
+def update_roots():
+    """a keresési helyek, a valószínűek elöl: a saját build kimenete, Letöltések, /data/import, a saját mappa, végül
+    a csatolt kötetek (pendrive, Tárhely)"""
     home = os.path.expanduser("~")
-    # a saját build kimenete is (Fejlesztődoboz: …/fusionos/build/out/release — a mappa mélyebben van, mint
-    # amit a saját mappa bejárása elér; 0.0.48: ~/Projektek/fusionos, ~/Fusion/fusionos stb.)
+    # a saját build kimenete (Fejlesztődoboz: ~/Projektek/fusionos/build/out/release — mélyebben van, mint amit a saját
+    # mappa bejárása elér)
     builds = sorted(set(glob.glob(os.path.join(home, "*", "build", "out", "release"))
                         + glob.glob(os.path.join(home, "*", "*", "build", "out", "release"))))
-    roots = ([os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), home, "/data/import"] + builds
-             + sorted(glob.glob(fusion.MEDIA + "/*")))
+    fast = builds + [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), "/data/import", home]
+    return fast, sorted(glob.glob(fusion.MEDIA + "/*"))
+
+
+def update_files(roots=None, budget=None):
+    """.fupd fájlok a megadott helyeken (legfeljebb 2 szint mélyen); budget: másodperc, utána a bejárás abbamarad"""
+    home = os.path.expanduser("~")
+    if roots is None:
+        fast, media = update_roots()
+        roots = fast + media
+    t0 = time.monotonic()
     seen, out = set(), []
     for r in roots:
         if not os.path.isdir(r):
             continue
         base = r.rstrip("/").count("/")
         for dirpath, dirs, files in os.walk(r):
+            if budget is not None and time.monotonic() - t0 > budget:
+                dirs[:] = []
+                break
             if dirpath.count("/") - base >= 2:
                 dirs[:] = []
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive")
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive", "Tárhely", "cache")
                        and not os.path.ismount(os.path.join(dirpath, d))]
             for f in files:
                 if not f.lower().endswith(".fupd"):
@@ -230,6 +259,27 @@ def update_files():
     return out[:20]
 
 
+LOADER_GUID = "4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+
+
+def running_stamp():
+    """a futó rendszer build-bélyege a systemd-boot által indított bejegyzés nevéből (pl. fusionos-0.0.53-e1-<bélyeg>-a)
+    — root nélkül, az efivarfs-ból; ha nem olvasható: üres"""
+    try:
+        with open(f"/sys/firmware/efi/efivars/LoaderEntrySelected-{LOADER_GUID}", "rb") as f:
+            name = f.read()[4:].decode("utf-16-le").rstrip("\x00")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    parts = name.split("-")
+    return parts[-2] if len(parts) >= 5 and parts[-2].isdigit() else ""
+
+
+def mark_newer(files, stamp):
+    for f in files:
+        f["newer"] = bool(f.get("stamp")) and (not stamp.isdigit() or f["stamp"] > stamp)
+    return files
+
+
 def update_state():
     rc, out = ui.admin("update-status", "--json", timeout=20)
     try:
@@ -238,14 +288,10 @@ def update_state():
         st = {}
     rel = ui.fusion_release()
     running = next((e for e in st.get("entries", []) if e.get("running")), None)
-    stamp = running["name"].split("-")[-2] if running and running["name"].count("-") >= 4 else ""
-    files = update_files()
-    for f in files:
-        f["newer"] = bool(f.get("stamp")) and (not stamp.isdigit() or f["stamp"] > stamp)
+    stamp = running["name"].split("-")[-2] if running and running["name"].count("-") >= 4 else running_stamp()
     return {"version": rel.get("FUSION_VERSION", "?"), "milestone": rel.get("FUSION_MILESTONE", ""),
             "slot": st.get("slot", _read("/run/fusion/slot", "?")), "state": st.get("state", ""),
-            "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "files": files,
-            "stamp": stamp}
+            "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "stamp": stamp}
 
 
 # --- Indítás (UEFI-bejegyzések) ---
@@ -1019,11 +1065,23 @@ class Settings(QObject):
     # --- Rendszerfrissítés ---
     @pyqtSlot()
     def updateRefresh(self):
-        def f():
+        """két külön szálon: a frissítőfájlok (gyors helyek azonnal, a csatolt kötetek utána) és a rendszer-slotok
+        állapota (fusion-admin) — az egyik lassúsága nem tartja vissza a másikat"""
+        def st():
             d = update_state()
             d["job"] = self._job_state("update")
             return d
-        self._async("update", f)
+        self._async("update", st)
+
+        def files():
+            stamp = running_stamp()
+            fast, media = update_roots()
+            t0 = time.monotonic()
+            quick = mark_newer(update_files(fast, budget=5), stamp)
+            self.result.emit("update-files", {"files": quick, "partial": bool(media), "stamp": stamp})
+            allf = mark_newer(update_files(fast + media, budget=20), stamp) if media else quick
+            return {"files": allf, "partial": False, "stamp": stamp, "secs": round(time.monotonic() - t0, 1)}
+        self._async("update-files", files)
 
     @pyqtSlot(str, result=str)
     def updateInstall(self, path):

@@ -223,10 +223,12 @@ cmd_prepare() {
             rm -rf "$WINEPREFIX"
         fi
     fi
+    # a wineboot kijelző nélkül fut: grafikus munkamenetben különben a Wine saját „Wine” felugró ablaka jelenik
+    # meg a környezet létrehozásakor / frissítésekor (0.0.54 — mérve: DISPLAY-jal ablak, nélküle nincs, a környezet ugyanaz)
     if [ ! -r "$WINEPREFIX/system.reg" ]; then
-        "$WINE" wineboot -i >> "$LOG" 2>&1 || fail "a környezet létrehozása nem sikerült (napló: $LOG)"
+        env -u DISPLAY -u WAYLAND_DISPLAY "$WINE" wineboot -i >> "$LOG" 2>&1 || fail "a környezet létrehozása nem sikerült (napló: $LOG)"
     else
-        "$WINE" wineboot -u >> "$LOG" 2>&1 || true
+        env -u DISPLAY -u WAYLAND_DISPLAY "$WINE" wineboot -u >> "$LOG" 2>&1 || true
     fi
     "$WINESERVER" -w
 
@@ -265,7 +267,7 @@ cmd_prepare() {
             printf '\n[-%s\\MyComputer\\Namespace\\%s]\n' "$ns" '{21EC2020-3AEA-1069-A2DD-08002B30309D}'
         done
     } > "$reg"
-    "$WINE" regedit /S 'C:\fusion-settings.reg' >> "$LOG" 2>&1 \
+    env -u DISPLAY -u WAYLAND_DISPLAY "$WINE" regedit /S 'C:\fusion-settings.reg' >> "$LOG" 2>&1 \
         || fail "a beállítások írása nem sikerült (napló: $LOG)"
     rm -f "$reg"
 

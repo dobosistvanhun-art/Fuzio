@@ -330,6 +330,9 @@ in_root systemctl mask apt-daily.timer apt-daily-upgrade.timer e2scrub_reap.serv
 in_root systemctl mask systemd-tpm2-setup.service systemd-tpm2-setup-early.service >/dev/null 2>&1
 # NVIDIA: a persistenced (CUDA-szerverekhez) nem kell; az udev-szabály enélkül hiányzó egységet kérne
 in_root systemctl mask nvidia-persistenced.service >/dev/null 2>&1
+# altatás NVIDIA-val (0.0.54): a videómemória mentése / visszatöltése (nvidia-sleep.sh); NVIDIA-driver nélkül kilép
+in_root systemctl enable nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service >/dev/null 2>&1 \
+    || echo "  [customize] FIGYELEM: az nvidia-suspend szolgáltatások nem engedélyezhetők"
 # a noble login-PAM-ja a pam_lastlog-ot kéri, de a modul nincs a csomagban → minden belépéskor hibaüzenet a naplóban
 sed -i '/pam_lastlog\.so/d' "$R/etc/pam.d/login"
 # Terminál: több soros parancs beillesztése (pl. egy leírásból) soronként fusson, ne kerüljenek a sorba

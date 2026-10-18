@@ -208,8 +208,8 @@ Rectangle {
                        font.family: Theme.font; font.bold: true; font.pixelSize: 13 } }
             Column {
                 x: 48; anchors.verticalCenter: parent.verticalCenter
-                Text { text: shell.user; color: Theme.text; font.family: Theme.font; font.pixelSize: 13 }
-                Text { text: shell.version; color: Theme.dim; font.family: Theme.font; font.pixelSize: 10 }
+                Text { text: shell.version; color: Theme.text; font.family: Theme.font; font.pixelSize: 13; font.bold: true }
+                Text { text: "felhasználó: " + shell.user; color: Theme.dim; font.family: Theme.font; font.pixelSize: 10 }
             }
             Row {
                 anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter

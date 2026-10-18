@@ -14,6 +14,7 @@ SettingsPage {
     property string msg: ""
     property string chosen: ""
     property bool pending: false
+    property bool searching: false          // a csatolt kötetek (pendrive, Tárhely) keresése még tart
     property var mjob: ({ running: false, lines: [], rc: null, title: "" })
     property var mdisks: []
     busy: job.running
@@ -24,8 +25,12 @@ SettingsPage {
         target: settings
         function onResult(tag, r) {
             if (tag === "update" && r.version !== undefined) {
+                r.files = p.s.files || []
                 p.s = r
                 if (r.job && !p.job.running) p.job = r.job
+            } else if (tag === "update-files" && r.files !== undefined) {
+                var n = Object.assign({}, p.s); n.files = r.files; p.s = n
+                p.searching = r.partial === true
                 if (p.chosen && !r.files.find(f => f.path === p.chosen)) p.chosen = ""
                 if (!p.chosen && r.files.length && r.files[0].newer) p.chosen = r.files[0].path
             } else if (tag === "media-job") {
@@ -110,7 +115,8 @@ SettingsPage {
                 }
             }
         }
-        InfoRow { visible: p.s.files.length === 0; label: "Nincs frissítőfájl"
+        InfoRow { visible: p.searching; icon: "search"; label: "Keresés…"; value: "a pendrive-ok és a Tárhely átnézése még tart — a már megtalált fájlok fent láthatók"; valueColor: Theme.dim }
+        InfoRow { visible: p.s.files.length === 0 && !p.searching; label: "Nincs frissítőfájl"
                   value: "Másolja a .fupd fájlt a Letöltések mappába vagy egy pendrive-ra, majd: Frissítés (jobb felső gomb). A saját build (…/fusionos/build/out/release) magától megjelenik." }
     }
     Flow {

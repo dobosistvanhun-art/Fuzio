@@ -259,8 +259,15 @@ fi
 if [ -x /usr/lib/fusion/wine/bin/wine ]; then
     echo "FUSION-M4: WINE $(/usr/lib/fusion/wine/bin/wine --version 2>/dev/null)"
     if [ -e /dev/fusion/laser ]; then
+        # 0.0.54: a környezet létrehozásakor nem jelenhet meg a Wine saját felugró ablaka (wineboot „Wine”)
+        rm -f /tmp/fwr-popup.txt
+        ( while [ ! -e /tmp/fwr-check.done ]; do
+              runuser -u fusion -- env DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority xwininfo -root -tree 2>/dev/null \
+                  | grep -F '("wineboot.exe"' | grep -v 'Default IME' >> /tmp/fwr-popup.txt; sleep 0.3; done ) &
         out=$(timeout 1200 runuser -u fusion -- env HOME=/home/fusion DISPLAY=:0 XAUTHORITY=/home/fusion/.Xauthority \
               /usr/bin/fwr check 2>&1); rc=$?
+        touch /tmp/fwr-check.done; sleep 1
+        echo "FUSION-M4: POPUP wineboot=$(sort -u /tmp/fwr-popup.txt 2>/dev/null | grep -c .)"
         printf '%s\n' "$out" | sed 's/^/FUSION-M4:   /'
         echo "FUSION-M4: CHECK rc=$rc"
         echo "FUSION-M4: PREFIX $(ls -d /data/fwr/fwr-check/drive_c 2>/dev/null) owner=$(stat -c %U /data/fwr/fwr-check 2>/dev/null)"
@@ -484,6 +491,35 @@ PY
     urun /usr/lib/fusion/desktop/bin/fusion-touchpad set tap be >/dev/null 2>&1; urun /usr/lib/fusion/desktop/bin/fusion-touchpad set natural ki >/dev/null 2>&1
     echo "FUSION-T1: TOUCHPAD devices=$tpn wait=${i}s default[$t0] set[$t1] conf=$(grep -c '"tap": true' /home/fusion/.config/fusion/touchpad.json 2>/dev/null)"
     [ "${tpn:-0}" -ge 1 ] || sed 's/^/FUSION-T1:   touchpad: /' /tmp/fusion-tp.log | tail -n 5
+    # 0.0.54: két asztal — váltás, ablak áthelyezése, a panel minden asztalon látszik
+    urun xterm -T deskproba -e sleep 60 >/dev/null 2>&1 &
+    sleep 3
+    cat > /tmp/deskproba.py <<'DPY'
+import json, sys, time
+from subprocess import run
+sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
+from fusion.x11 import X11
+x = X11()
+w = next((i for i in x.windows() if i["title"] == "deskproba"), None)
+if w is None:
+    print("nincs ablak")
+    sys.exit()
+n0 = x.desktop()[1]
+x.move_to_desktop(w["id"], 1)
+time.sleep(0.8)
+moved = next(i for i in x.windows() if i["id"] == w["id"])["desktop"]
+x.set_desktop(1)
+time.sleep(1.2)
+st = json.load(open("/run/user/1000/fusion-shell.state"))
+cur = x.desktop()[0]
+pv = "IsViewable" in run(["xwininfo", "-name", "Fusion Panel"], capture_output=True, text=True).stdout
+x.set_desktop(0)
+time.sleep(0.8)
+print(f"count={n0} moved={moved} cur={cur} shell={st.get('desktop')}/{st.get('desktops')} panel={pv} back={x.desktop()[0]}")
+DPY
+    chmod 644 /tmp/deskproba.py
+    echo "FUSION-T1: DESKTOPS $(urun python3 /tmp/deskproba.py 2>&1 | tail -n 1)"
+    pkill -u fusion -f 'xterm -T deskproba' 2>/dev/null
     echo "FUSION-T1: TEXTMENU $(grep -c 'FTextMenu' /usr/lib/fusion/desktop/qml/FusionUI/qmldir) field=$(grep -c 'FTextMenu {}' /usr/lib/fusion/desktop/qml/FusionUI/FTextField.qml)"
     # irányítópult: asztal típusú ablak a többi alatt
     dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')
@@ -642,6 +678,8 @@ if [ -n "$st" ]; then
     /usr/lib/fusion/bin/fusion-disk storage-mount >/dev/null 2>&1; rc=$?
     smp=$(mp_of "/dev/${s}1")
     echo "FUSION-STORE: REMOUNT rc=$rc mounted=${smp:-nincs} file=$(cat /home/fusion/Tárhely/proba.txt 2>/dev/null)"
+    # 0.0.54: az asztal Rendszer csempéje a Tárhely szabad helyét is mutatja
+    echo "FUSION-STORE: DASH $(runuser -u fusion -- env HOME=/home/fusion QT_QPA_PLATFORM=offscreen python3 -c 'import sys; sys.path[:0] = ["/usr/lib/fusion/desktop/shell", "/usr/lib/fusion/desktop/lib"]; import dashboard; s = dashboard.system_status()["store"]; print("label=%s free=%s" % (s.get("label"), "igen" if s.get("free") else "nem"))' 2>&1 | tail -n 1)"
     g1=$( [ -n "$scr" ] && adm disk format-disk "$(basename "$scr")" gpt ext4 "x" "$(basename "$scr")" >/dev/null 2>&1; [ -n "$scr" ] && adm disk storage-set "$(basename "$scr")1" 2>&1 | tail -n 1)
     g2=$(adm disk storage-set "$(cat /run/fusion/boot-disk)4" 2>&1 | tail -n 1)
     echo "FUSION-STORE: GUARD $g1 | $g2"
@@ -661,7 +699,8 @@ rout=$(urun fusion-report -d "Teszt: a lézer nem látszik. jelszó=Titok123 kap
 rf=$(ls /tmp/fusion-report/fusion-hibajelentes-*.txt 2>/dev/null | head -n 1)
 echo "FUSION-REPORT: RUN rc=$rrc secs=$(( $(date +%s) - t0 )) size=$(stat -c %s "$rf" 2>/dev/null || echo 0) $(printf '%s' "$rout" | tail -n 1)"
 if [ -n "$rf" ]; then
-    echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM' 'WI-FI'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
+    echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM' 'ALTATÁS' 'WI-FI'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
+    echo "FUSION-REPORT: SLEEP services=$(systemctl is-enabled nvidia-suspend.service nvidia-resume.service 2>/dev/null | tr '\n' ',') section=$(grep -c '^  mem_sleep:' "$rf")"
     echo "FUSION-REPORT: MASK secret=$(grep -c 'Titok123' "$rf") email=$(grep -c 'teszt.elek@pelda.hu' "$rf") ssid=$(grep -c 'FusionTeszt' "$rf") alias=$(grep -c 'EMAIL-1' "$rf")"
     echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
     grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'

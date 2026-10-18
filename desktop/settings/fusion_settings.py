@@ -56,7 +56,8 @@ def selftest():
     u = sb.update_state()
     print(f"FUSION-SETTINGS: UPDATE version={u['version']} slot={u['slot']} entries="
           + (",".join(f"{e['slot']}:{e['state']}{'*' if e['running'] else ''}" for e in u["entries"]) or "-")
-          + f" files={len(u['files'])} error={u['error'] or '-'}", flush=True)
+          + f" files={len(sb.update_files())} error={u['error'] or '-'}"
+          + f" stamp={'ok' if u['stamp'] and u['stamp'] == (sb.running_stamp() or u['stamp']) else (u['stamp'] or '-')}", flush=True)
     b = sb.backup_state()
     print(f"FUSION-SETTINGS: BACKUP error={b['error'] or '-'} data={b.get('dataUsedText', '-')} targets={len(b.get('targets', []))} backups={len(b.get('backups', []))}", flush=True)
     bt = sb.boot_state()

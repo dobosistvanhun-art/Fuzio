@@ -163,7 +163,7 @@ apply_check() {
 # ZBook M1-ben: az NVIDIA driver még nincs telepítve -> missing, semmi nem töltődik be
 apply_check zbook-m1 "$TMP/zbook-discrete" "i915 vmwgfx" "" missing ""
 # ZBook M2-től: minden NVIDIA modul megvan -> loaded, sorrendben
-apply_check zbook-m2 "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm modeset=1"
+apply_check zbook-m2 "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp nvidia-modeset nvidia-drm modeset=1"
 # VirtualBox VMSVGA -> vmwgfx betöltve, az eszközt átvette
 S="$TMP/vbox-bound"
 mkpci "$S" 0000:00:02.0 0x030000 0x15ad 0x0405 1 vmwgfx
@@ -192,6 +192,7 @@ conf_check "xorg: nincs automatikus második GPU-képernyő" "$X/xorg-display.co
 conf_check "xorg: NVIDIA modulútvonal"   "$X/xorg-display.conf" 'ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"'
 conf_check "xorg: root-jog a profilból (auto)" "$X/Xwrapper.config" 'needs_root_rights=auto'
 conf_check "modprobe.d: nvidia_drm modeset=1" "$TMP/apply-zbook-m2/modprobe.d/fusion-hardware-options.conf" 'options nvidia_drm modeset=1'
+conf_check "modprobe.d: nvidia altatás (videómemória mentése)" "$TMP/apply-zbook-m2/modprobe.d/fusion-hardware-options.conf" 'options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp'
 X="$TMP/apply-zbook-m1/hardware"
 conf_check "xorg: driver nélkül nincs Device szakasz" "$X/xorg-display.conf" 'Section "Device"' nincs
 conf_check "xorg: át nem vett eszköznél nincs Device szakasz" "$TMP/apply-vbox-unbound/hardware/xorg-display.conf" 'Section "Device"' nincs
@@ -200,7 +201,7 @@ conf_check "xorg: VMSVGA -> modesetting" "$X/xorg-display.conf" 'Driver "modeset
 conf_check "xorg: VMSVGA root=auto"      "$X/Xwrapper.config"   'needs_root_rights=auto'
 # kernel parancssori felülírás: nvidia-drm.modeset=0 és fusion.xorg.root=auto
 CMDLINE_FILE="$TMP/cmdline"; echo "quiet nvidia_drm.modeset=0 fusion.xorg.root=yes fusion.slot=A" > "$CMDLINE_FILE"
-apply_check zbook-cmdline "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm"
+apply_check zbook-cmdline "$TMP/zbook-discrete" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp nvidia-modeset nvidia-drm"
 conf_check "parancssor: modprobe.d-ben nincs modeset" "$TMP/apply-zbook-cmdline/modprobe.d/fusion-hardware-options.conf" 'modeset' nincs
 conf_check "parancssor: fusion.xorg.root=yes" "$TMP/apply-zbook-cmdline/hardware/Xwrapper.config" 'needs_root_rights=yes'
 CMDLINE_FILE=""
@@ -209,9 +210,9 @@ CMDLINE_FILE=""
 # a Hardware Layer észreveszi (modeset=N), újratölti modeset=1-gyel, és jelenti
 S="$TMP/zbook-discrete"
 rm -rf "$S/module"; mkdir -p "$S/module/nvidia_drm/parameters"; echo N > "$S/module/nvidia_drm/parameters/modeset"
-KEEP_MODULES=1 apply_check zbook-udev-elobb "$S" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia nvidia-modeset nvidia-drm modeset=1 -r nvidia-drm nvidia-drm modeset=1"
+KEEP_MODULES=1 apply_check zbook-udev-elobb "$S" "nvidia nvidia-modeset nvidia-drm" "" loaded "nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp nvidia-modeset nvidia-drm modeset=1 -r nvidia-drm nvidia-drm modeset=1"
 conf_check "újratöltés után modeset=Y" "$S/module/nvidia_drm/parameters/modeset" '^Y$'
-conf_check "a jelentésben a tényleges érték" "$TMP/apply-zbook-udev-elobb/hardware/display.env" "FUSION_DISPLAY_MODULE_PARAMS='nvidia_drm.modeset=Y'"
+conf_check "a jelentésben a tényleges érték" "$TMP/apply-zbook-udev-elobb/hardware/display.env" "FUSION_DISPLAY_MODULE_PARAMS='nvidia.NVreg_PreserveVideoMemoryAllocations=Y nvidia.NVreg_TemporaryFilePath=/var/tmp nvidia_drm.modeset=Y'"
 
 echo "Eredmény: $PASS sikeres, $FAIL hibás"
 [ "$FAIL" -eq 0 ]

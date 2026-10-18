@@ -12,7 +12,9 @@ display.server = x11
 display.kernel_modules = nvidia nvidia-modeset nvidia-drm
 # KMS az nvidia-drm-en keresztül — ZBookon mérve (2026-09-27): modeset=Y, GL 4.6, Vulkan 1.2.175.
 # KMS nélkül (nvidia-drm.modeset=0) is teljes gyorsítás; a KMS kell a root nélküli Xorg-hoz.
-display.module_options = nvidia-drm:modeset=1
+# Altatás (0.0.54): a videómemória mentése altatáskor (NVIDIA ajánlás a nvidia-suspend/-resume szolgáltatásokkal,
+# amelyek a képben engedélyezve vannak; NVIDIA nélkül nem csinálnak semmit). Nélküle ébredéskor fekete képernyő / lefagyás.
+display.module_options = nvidia-drm:modeset=1 nvidia:NVreg_PreserveVideoMemoryAllocations=1 nvidia:NVreg_TemporaryFilePath=/var/tmp
 display.xorg_driver = nvidia
 display.xorg_module_path = /usr/lib/x86_64-linux-gnu/nvidia/xorg
 # root-jog nélküli Xorg — ZBookon mérve (2026-09-27): az Xorg a fusion felhasználóként fut,

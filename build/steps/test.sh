@@ -310,7 +310,7 @@ step_test() {
             _check "$log" "FUSION-SETTINGS: DISPLAY ok=True" "Beállítások → Kijelző (xrandr)" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PRINTER klipper=active moonraker=active nginx=active" "Beállítások → Nyomtató" || ok_run=0
             _check "$log" "FUSION-SETTINGS: PROGRAMS lightburn=nincs installers=" "Programkezelő: az ismert, nem telepített program (recept)" || ok_run=0
-            _check "$log" "FUSION-SETTINGS: UPDATE version=$FUSION_VERSION slot=A entries=A:ok\* files=0 error=-" "Beállítások → Rendszerfrissítés: állapot (sudo fusion-admin update-status)" || ok_run=0
+            _check "$log" "FUSION-SETTINGS: UPDATE version=$FUSION_VERSION slot=A entries=A:ok\* files=0 error=- stamp=ok" "Beállítások → Rendszerfrissítés: állapot (sudo fusion-admin update-status)" || ok_run=0
             _check "$log" "FUSION-TASKS: RESULT ok" "Feladatkezelő: lefagyott ablak felismerése és bezárása" || ok_run=0
             _check "$log" "FUSION-DISKS: GUARD ok" "Lemezkezelő: a Fúzió saját lemeze nem módosítható" || ok_run=0
             _check "$log" "FUSION-DISKS: RESULT ok" "Lemezkezelő: lemezlista (sudo), felület" || ok_run=0
@@ -351,6 +351,7 @@ step_test() {
             _check "$log" "FUSION-M6: SETTINGS window=1 .*switched=1" "Beállítások ablak, egy példány (oldalváltás)" || ok_run=0
             _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fúzió-színek, magyar menü" || ok_run=0
             _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
+            _check "$log" "FUSION-T1: DESKTOPS count=2 moved=1 cur=1 shell=1/2 panel=True back=0" "két asztal: váltás, ablak áthelyezése, a panel minden asztalon (JWM + Fúzió Shell)" || ok_run=0
             _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
             _check "$log" "FUSION-T1: TOUCHPAD devices=[1-9].* default\[tap=True scroll=twofinger natural=False\] set\[tap=False scroll=twofinger natural=True\] conf=1" "touchpad: koppintás és két ujjas görgetés alapból, a beállítás érvényesül (fusion-touchpad)" || ok_run=0
             _check "$log" "FUSION-T1: DEVTERM window=1 .*menu=True" "Fejlesztő terminál (Start → Rendszer)" || ok_run=0
@@ -417,6 +418,7 @@ step_test() {
             _check "$log" "FUSION-M4:   *GL_RENDERER: llvmpipe" "OpenGL a Wine-on át (WGL)" || ok_run=0
             _check "$log" "FUSION-M4:   *CAM: MediaFrameSourceGroup.FindAllAsync OK" "Windows kamera-felsoroló (WinRT) — LightBurn 2.x induláshoz" || ok_run=0
             _check "$log" "FUSION-M4: CHECK rc=0" "fwr check hibátlan" || ok_run=0
+            _check "$log" "FUSION-M4: POPUP wineboot=0" "új Windows-környezet: nincs Wine-felugró ablak (wineboot kijelző nélkül)" || ok_run=0
             _check "$log" "FUSION-M4: SYSTRAY showsystray=1 notray=1" "a Wine saját tálcaablaka kikapcsolva" || ok_run=0
             # Fúzió Programkezelő: leírás-alapú programok (Windows: fwr, Linux: archívum), társítás, eltávolítás
             _check "$log" "FUSION-PROG: SYNC win64 prefix=/data/fwr/lightburn port=laser icon=icon.png" "a régi helyű LightBurn leírást kap, újratelepítés nélkül" || ok_run=0
@@ -464,6 +466,7 @@ step_test() {
             _check "$log" "FUSION-DISK: GUARD fusion-disk: a Fúzió saját lemeze .* | fusion-disk: a Fúzió saját lemeze" "a rendszerlemez nem formázható, partíciója nem törölhető" || ok_run=0
             _check "$log" "FUSION-STORE: SET rc=0 mounted=/run/media/fusion/Tárhely link=/run/media/fusion/Tárhely write=ok conf=1 service=enabled" "Adatlemez: belső lemez formázása (ext4), beállítás, csatolás, ~/Tárhely" || ok_run=0
             _check "$log" "FUSION-STORE: REMOUNT rc=0 mounted=/run/media/fusion/Tárhely file=ok" "Adatlemez: újracsatolás indításkor (fusion-disk storage-mount)" || ok_run=0
+            _check "$log" "FUSION-STORE: DASH label=Tárhely free=igen" "asztal, Rendszer csempe: a Tárhely szabad helye" || ok_run=0
             _check "$log" "FUSION-STORE: GUARD .*cserélhető eszköz.* | .*saját lemeze" "Adatlemez: pendrive és a rendszerlemez nem lehet" || ok_run=0
             _check "$log" "FUSION-STORE: FORGET rc=0 conf=0 link=0" "Adatlemez: a lemez törlésekor a beállítás megszűnik" || ok_run=0
             if grep -qa "FUSION-COM-OK" "$out/serial-$cfg.out" 2>/dev/null; then :; else
@@ -476,7 +479,8 @@ step_test() {
         _check "$log" "FUSION-M3: NOGRAB ok" "nincs ModemManager / brltty" || ok_run=0
         # hibajelentés: elkészül, minden szakasz benne van, a titkok maszkolva, a rendszeroldali rész (sudo) is
         _check "$log" "FUSION-REPORT: RUN rc=0 " "hibajelentés: elkészül (fusion-report, a felhasználóként)" || ok_run=0
-        _check "$log" "FUSION-REPORT: SECTIONS ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,\s*\$" "hibajelentés: minden szakasz" || ok_run=0
+        _check "$log" "FUSION-REPORT: SECTIONS ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,\s*\$" "hibajelentés: minden szakasz" || ok_run=0
+        _check "$log" "FUSION-REPORT: SLEEP services=enabled,enabled, section=1" "altatás: nvidia-suspend/-resume engedélyezve, ALTATÁS szakasz a hibajelentésben" || ok_run=0
         _check "$log" "FUSION-REPORT: MASK secret=0 email=0 ssid=0 alias=[1-9]" "hibajelentés: jelszó, e-mail, Wi-Fi-név maszkolva" || ok_run=0
         _check "$log" "FUSION-REPORT: SYSTEM update=[1-9][0-9]* pss=1 state=rendszerállapot: running" "hibajelentés: rendszeroldali rész (A/B-állapot, PSS) a segéden át" || ok_run=0
         # Wi-Fi: iwd fut, a ZBook firmware-je és drivere a képben, valódi kapcsolódás virtuális rádiókkal

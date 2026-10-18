@@ -1,7 +1,9 @@
 <?xml version="1.0"?>
 <!-- Fúzió — ablakkezelő (JWM) beállítás.
      A panelt, a Start menüt és az értesítéseket a Fúzió Shell adja (fusion-shell), a JWM csak
-     az ablakokat kezeli: saját tálca nincs, egy munkaasztal, lapos FusionDark stílus. -->
+     az ablakokat kezeli: saját tálca nincs, két asztal (0.0.54), lapos FusionDark stílus.
+     Asztalváltás: Ctrl+Alt+← / →, Ctrl+Alt+1 / 2, a panel 1 | 2 gombjai — a Tab NEM (István: a Tab-billentyű rossz).
+     Ablak áthelyezése a másik asztalra: Ctrl+Alt+Shift+← / →, vagy a tálcagombon jobb gomb. -->
 <JWM>
     <RootMenu onroot="3">
         <Program label="Fájlkezelő">fusion-files</Program>
@@ -12,7 +14,15 @@
         <Separator/>
         <Restart label="Ablakkezelő újraindítása"/>
     </RootMenu>
-    <Desktops width="1" height="1"/>
+    <Desktops width="2" height="1">
+        <Desktop name="1"/>
+        <Desktop name="2"/>
+    </Desktops>
+    <!-- a Fúzió Shell ablakai (panel, irányítópult, Start menü, értesítések) minden asztalon -->
+    <Group>
+        <Class>fusion-shell</Class>
+        <Option>sticky</Option>
+    </Group>
     <FocusModel>click</FocusModel>
     <SnapMode distance="8">border</SnapMode>
     <MoveMode>opaque</MoveMode>
@@ -57,6 +67,11 @@
     <Key mask="A" key="F1">exec:fusion-shell menu</Key>
     <Key mask="A" key="F10">maximize</Key>
     <Key key="Super_L">exec:fusion-shell menu</Key>
+    <Key mask="CA" key="Left">ldesktop</Key>
+    <Key mask="CA" key="Right">rdesktop</Key>
+    <Key mask="CA" key="#">desktop#</Key>
+    <Key mask="CAS" key="Left">sendl</Key>
+    <Key mask="CAS" key="Right">sendr</Key>
     <Key mask="CA" key="e">exec:fusion-files</Key>
     <Key mask="CA" key="t">exec:fusion-terminal</Key>
     <Key mask="CA" key="s">exec:fusion-settings</Key>

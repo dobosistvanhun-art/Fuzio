@@ -583,6 +583,22 @@ def build(desc, sysinfo, m):
     L.append("  Touchpad (libinput, a munkamenetben):")
     L += indent(run(["/usr/lib/fusion/desktop/bin/fusion-touchpad"], timeout=10), 4)
 
+    L += section("ALTATÁS")
+    L.append("  mem_sleep: " + (read("/sys/power/mem_sleep").strip() or "-") + "   ·   állapotok: " + (read("/sys/power/state").strip() or "-"))
+    L.append("  NVIDIA: " + ("altatás-támogatás (/proc/driver/nvidia/suspend) van" if os.path.exists("/proc/driver/nvidia/suspend")
+                             else "nincs NVIDIA-driver vagy altatás-támogatás"))
+    try:
+        pv = [l.strip() for l in open("/proc/driver/nvidia/params", encoding="utf-8") if l.startswith(("PreserveVideoMemoryAllocations", "TemporaryFilePath"))]
+    except OSError:
+        pv = []
+    if pv:
+        L.append("  " + "   ·   ".join(pv))
+    L.append("  szolgáltatások: " + run(["systemctl", "is-enabled", "nvidia-suspend.service", "nvidia-resume.service"]).replace("\n", " "))
+    L.append("  legutóbbi altatások / ébredések (ez és az előző indítás):")
+    for b in ("-1", "0"):
+        L += indent("\n".join(run(["journalctl", "-b", b, "--no-pager", "-q", "-o", "short-monotonic", "-g",
+                                   "PM: suspend|PM: resume|ACPI: PM|Lid closed|Lid opened|nvidia-(suspend|resume)|suspend exit|Suspending system"],
+                                  timeout=20).splitlines()[-12:]) or f"(boot {b}: nincs)", 4)
     L += bt_camera_printer_section(m)
     L += permissions_section()
 

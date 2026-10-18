@@ -6,6 +6,7 @@ import FusionUI
 Rectangle {
     id: panel
     color: Theme.panel
+    readonly property var deskWindows: shell.windows.filter(w => w.desktop === undefined || w.desktop < 0 || w.desktop === shell.desktop)
     Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }
 
     component TrayButton: Rectangle {
@@ -45,11 +46,38 @@ Rectangle {
         }
         Rectangle { width: 1; height: 24; color: Theme.border; anchors.verticalCenter: parent.verticalCenter }
 
-        // tálca
+        // asztalok (0.0.54): 1 | 2 — kattintás / görgő: váltás; Ctrl+Alt+← / → (a Tab nem kell hozzá)
+        Row {
+            id: deskRow
+            visible: shell.desktopCount > 1
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            Repeater {
+                model: shell.desktopCount
+                delegate: Rectangle {
+                    width: 26; height: 26; radius: Theme.radius
+                    color: index === shell.desktop ? Theme.selected : (dma.containsMouse ? Theme.hover : "transparent")
+                    border.color: index === shell.desktop ? Theme.accent : Theme.border; border.width: 1
+                    Text { anchors.centerIn: parent; text: index + 1; color: index === shell.desktop ? Theme.text : Theme.dim
+                           font.family: Theme.font; font.pixelSize: 12; font.bold: index === shell.desktop }
+                    // pötty: van-e ablak ezen az asztalon
+                    Rectangle { anchors.bottom: parent.bottom; anchors.bottomMargin: 3; anchors.horizontalCenter: parent.horizontalCenter
+                                width: 4; height: 4; radius: 2; color: Theme.dim
+                                visible: shell.windows.some(w => w.desktop === index) }
+                    MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true; onClicked: shell.setDesktop(index)
+                                onWheel: (w) => shell.setDesktop(w.angleDelta.y > 0 ? Math.max(0, shell.desktop - 1)
+                                                                                    : Math.min(shell.desktopCount - 1, shell.desktop + 1)) }
+                    ToolTipLite { text: (index + 1) + ". asztal  (Ctrl+Alt+" + (index + 1) + ";  Ctrl+Alt+← / →)"; show: dma.containsMouse }
+                }
+            }
+        }
+        Rectangle { visible: deskRow.visible; width: 1; height: 24; color: Theme.border; anchors.verticalCenter: parent.verticalCenter }
+
+        // tálca: az aktuális asztal ablakai (és a minden asztalon látszók)
         Repeater {
-            model: shell.windows
+            model: panel.deskWindows
             delegate: Rectangle {
-                width: Math.min(230, Math.max(110, (panel.width - trayRow.width - 80) / Math.max(1, shell.windows.length) - 3))
+                width: Math.min(230, Math.max(110, (panel.width - trayRow.width - 140) / Math.max(1, panel.deskWindows.length) - 3))
                 height: 34; radius: Theme.radius
                 color: modelData.active && !modelData.hidden ? Theme.selected : (winMa.containsMouse ? Theme.hover : "transparent")
                 Rectangle {
@@ -68,9 +96,13 @@ Rectangle {
                     font.family: Theme.font; font.pixelSize: 13
                 }
                 MouseArea { id: winMa; anchors.fill: parent; hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                    onClicked: (m) => m.button === Qt.MiddleButton ? shell.closeWindow(modelData.id) : shell.toggleWindow(modelData.id) }
-                ToolTipLite { text: modelData.title + "\n(középső gomb: bezárás)"; show: winMa.containsMouse }
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                    onClicked: (m) => m.button === Qt.MiddleButton ? shell.closeWindow(modelData.id)
+                                    : m.button === Qt.RightButton ? (shell.desktopCount > 1 && modelData.desktop >= 0
+                                          ? shell.moveWindowToDesktop(modelData.id, (shell.desktop + 1) % shell.desktopCount) : null)
+                                    : shell.toggleWindow(modelData.id) }
+                ToolTipLite { text: modelData.title + "\n(középső gomb: bezárás" + (shell.desktopCount > 1 ? ";  jobb gomb: át a másik asztalra)" : ")")
+                              show: winMa.containsMouse }
             }
         }
     }

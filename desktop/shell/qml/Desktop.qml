@@ -121,8 +121,10 @@ Rectangle {
             Bar { visible: !!(sc.s.battery && sc.s.battery.text); pct: (sc.s.battery && sc.s.battery.pct) || 0
                   fill: pct < 15 ? Theme.danger : (pct < 30 ? Theme.warn : Theme.ok) }
             KV { visible: !!(sc.s.battery && sc.s.battery.health); k: "Akku állapota"; v: (sc.s.battery && sc.s.battery.health) || "" }
-            KV { k: "DATA"; v: (sc.s.data && sc.s.data.free) ? (sc.s.data.free + " szabad / " + sc.s.data.total) : "—" }
+            KV { k: "Rendszerlemez"; v: (sc.s.data && sc.s.data.free) ? (sc.s.data.free + " szabad / " + sc.s.data.total) : "—" }
             Bar { pct: (sc.s.data && sc.s.data.pct) || 0 }
+            KV { visible: !!(sc.s.store && sc.s.store.free); k: "Tárhely"; v: (sc.s.store && sc.s.store.free) ? (sc.s.store.free + " szabad / " + sc.s.store.total) : "" }
+            Bar { visible: !!(sc.s.store && sc.s.store.free); pct: (sc.s.store && sc.s.store.pct) || 0 }
             KV { k: "Bekapcsolva"; v: sc.s.uptime || "" }
         }
 

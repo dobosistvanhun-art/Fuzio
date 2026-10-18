@@ -77,9 +77,20 @@ def system_status():
         data = {"free": ui.human_size(f), "total": ui.human_size(t), "pct": round(100.0 * (t - f) / t) if t else 0}
     except OSError:
         pass
+    # Adatlemez (Tárhely, 0.0.48): a ~/Tárhely hivatkozás célja, ha csatolva van
+    store = {}
+    try:
+        tgt = os.path.realpath(os.path.expanduser("~/Tárhely"))
+        if os.path.islink(os.path.expanduser("~/Tárhely")) and os.path.ismount(tgt):
+            s = os.statvfs(tgt)
+            t, f = s.f_blocks * s.f_frsize, s.f_bavail * s.f_frsize
+            store = {"free": ui.human_size(f), "total": ui.human_size(t), "pct": round(100.0 * (t - f) / t) if t else 0,
+                     "label": os.path.basename(tgt)}
+    except OSError:
+        pass
     up = float(_read("/proc/uptime", "0").split()[0] or 0)
     return {"version": ui.fusion_version(), "memPct": round(100.0 * used / tot), "mem": f"{ui.human_size(used)} / {ui.human_size(tot)}",
-            "cpuPct": min(100, round(100.0 * float(load) / ncpu)), "load": load, "temp": temp, "data": data,
+            "cpuPct": min(100, round(100.0 * float(load) / ncpu)), "load": load, "temp": temp, "data": data, "store": store,
             "uptime": f"{int(up // 3600)} óra {int(up % 3600 // 60)} perc", "wired": fusion_net.wired(),
             "battery": _battery()}
 

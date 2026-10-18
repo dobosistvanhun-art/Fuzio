@@ -6,6 +6,8 @@ az EWMH szabvány szerint (_NET_CLIENT_LIST, _NET_ACTIVE_WINDOW, _NET_CLOSE_WIND
   - ablak aktiválása, kis méretre tétele, bezárása
   - a Shell saját ablakainak típusa: panel (dock + képernyősáv-foglalás),
     lebegő ablak (Start menü, értesítés, felugró)
+  - asztalok (munkaterületek, 0.0.54): az aktuális asztal, váltás, ablak áthelyezése másik asztalra
+    (_NET_CURRENT_DESKTOP, _NET_NUMBER_OF_DESKTOPS, _NET_WM_DESKTOP)
 """
 from Xlib import X, Xatom, display, protocol
 
@@ -19,7 +21,9 @@ ATOMS = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING"
          "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
          "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID",
          "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
-         "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW", "_NET_WM_ICON")
+         "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW", "_NET_WM_ICON",
+         "_NET_CURRENT_DESKTOP", "_NET_NUMBER_OF_DESKTOPS", "_NET_WM_STATE_STICKY")
+ALL_DESKTOPS = 0xFFFFFFFF
 
 
 class X11:
@@ -74,7 +78,31 @@ class X11:
         win = self.d.create_resource_object("window", xid)
         self._set_atoms(win, "_NET_WM_WINDOW_TYPE", [t])
         self._set_atoms(win, "_NET_WM_STATE", ["_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_STATE_ABOVE"])
+        win.change_property(self.a["_NET_WM_DESKTOP"], Xatom.CARDINAL, 32, [ALL_DESKTOPS])    # minden asztalon
         self.d.flush()
+
+    # --- asztalok (munkaterületek) ---
+    def desktop(self):
+        """(aktuális asztal 0-tól, asztalok száma)"""
+        cur = self._prop(self.root, "_NET_CURRENT_DESKTOP")
+        num = self._prop(self.root, "_NET_NUMBER_OF_DESKTOPS")
+        return (int(cur[0]) if cur is not None and len(cur) else 0), (int(num[0]) if num is not None and len(num) else 1)
+
+    def set_desktop(self, n):
+        cur, num = self.desktop()
+        if 0 <= n < num and n != cur:
+            ev = protocol.event.ClientMessage(window=self.root, client_type=self.a["_NET_CURRENT_DESKTOP"],
+                                              data=(32, [n, X.CurrentTime, 0, 0, 0]))
+            self.root.send_event(ev, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+            self.d.flush()
+
+    def window_desktop(self, wid):
+        v = self._prop(self.d.create_resource_object("window", int(wid)), "_NET_WM_DESKTOP")
+        return int(v[0]) if v is not None and len(v) else ALL_DESKTOPS
+
+    def move_to_desktop(self, wid, n):
+        """az ablak áthelyezése az n. asztalra (EWMH: _NET_WM_DESKTOP kérés az ablakkezelőnek)"""
+        self._client_msg(wid, "_NET_WM_DESKTOP", [n, 2, 0, 0, 0])
 
     # --- ablaklista ---
     def _prop(self, win, name, typ=X.AnyPropertyType):
@@ -120,7 +148,10 @@ class X11:
                 cls = win.get_wm_class() or ("", "")
             except Exception:
                 cls = ("", "")
+            dk = self._prop(win, "_NET_WM_DESKTOP")
+            dk = int(dk[0]) if dk is not None and len(dk) else ALL_DESKTOPS
             out.append({"id": int(i), "title": self._title(win) or (cls[1] if len(cls) > 1 else "") or "ablak",
+                        "desktop": -1 if dk == ALL_DESKTOPS or self.a["_NET_WM_STATE_STICKY"] in state else dk,
                         "cls": (cls[1] if len(cls) > 1 else "") or "", "inst": cls[0] if cls else "",
                         "active": int(i) == active,
                         "hidden": self.a["_NET_WM_STATE_HIDDEN"] in state})
@@ -156,6 +187,10 @@ class X11:
         self.d.flush()
 
     def activate(self, wid):
+        """előre hozás — ha az ablak egy másik asztalon van, előbb arra az asztalra vált"""
+        dk = self.window_desktop(wid)
+        if dk != ALL_DESKTOPS:
+            self.set_desktop(dk)
         self._client_msg(wid, "_NET_ACTIVE_WINDOW", [2, X.CurrentTime, 0, 0, 0])
 
     def minimize(self, wid):

@@ -131,6 +131,7 @@ class NotifyObject(QObject):
 # ---------------------------------------------------------------------------
 class Shell(QObject):
     windowsChanged = pyqtSignal()
+    desktopChanged = pyqtSignal()
     clockChanged = pyqtSignal()
     wifiChanged = pyqtSignal()
     devicesChanged = pyqtSignal()
@@ -147,6 +148,7 @@ class Shell(QObject):
         self.app = app
         self.x = X11()
         self._windows = []
+        self._desk = (0, 1)          # (aktuális asztal, asztalok száma) — 0.0.54
         self._clock = {"time": "", "date": "", "year": 0, "month": 0, "day": 0}
         self._wifi = {"state": "?", "ssid": "", "ok": False}
         self._devices = []           # [{"role","name","dev","present"}]
@@ -174,6 +176,25 @@ class Shell(QObject):
     @pyqtProperty("QVariant", notify=windowsChanged)
     def windows(self):
         return self._windows
+
+    @pyqtProperty(int, notify=desktopChanged)
+    def desktop(self):
+        return self._desk[0]
+
+    @pyqtProperty(int, notify=desktopChanged)
+    def desktopCount(self):
+        return self._desk[1]
+
+    @pyqtSlot(int)
+    def setDesktop(self, n):
+        self.x.set_desktop(n)
+        QTimer.singleShot(80, self.poll_windows)
+
+    @pyqtSlot(int, int)
+    def moveWindowToDesktop(self, wid, n):
+        """tálcagomb, jobb gomb: az ablak a másik asztalra kerül (ott marad megnyitva)"""
+        self.x.move_to_desktop(wid, n)
+        QTimer.singleShot(120, self.poll_windows)
 
     @pyqtProperty("QVariant", notify=clockChanged)
     def clock(self):
@@ -531,8 +552,13 @@ class Shell(QObject):
         try:
             self.x.pending()
             w = self.x.windows(skip_pids=(os.getpid(),))
+            dk = self.x.desktop()
         except Exception:
             return
+        if dk != self._desk:
+            self._desk = dk
+            self.desktopChanged.emit()
+            self.write_state()
         for i in w:
             i["icon"], i["iconFile"] = self._icon_for(i)
         if w != self._windows:
@@ -821,6 +847,8 @@ class Shell(QObject):
     def write_state(self, last=None):
         st = {"pid": os.getpid(), "ready": getattr(self, "_ready", False), "menu": self._menu_open,
               "popup": self._popup, "windows": len(self._windows), "notifications": len(self._notes),
+              "desktop": self._desk[0], "desktops": self._desk[1],
+              "windesk": {w["title"][:40]: w.get("desktop", -1) for w in self._windows},
               "taskicons": sorted({("file" if w.get("iconFile") else w.get("icon", "app")) for w in self._windows}),
               "dashboard": bool(getattr(self, "desk", None) and self.desk.isVisible()), "printer": self.dash.printer.get("state", ""),
               "unread": self.unread, "toasts": len(self._toasts),
