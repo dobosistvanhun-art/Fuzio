@@ -352,6 +352,10 @@ step_test() {
             _check "$log" "FUSION-T1: TERMINAL window=1 .*cmd=TERM-OK class=lxterminal conf=1 hu=van" "Terminál (LXTerminal): ablak, parancs, Fúzió-színek, magyar menü" || ok_run=0
             _check "$log" "FUSION-T1: TASKICONS files=True settings=True terminal=True" "tálca: a futó programok ikonjai" || ok_run=0
             _check "$log" "FUSION-T1: DESKTOPS count=2 moved=1 cur=1 shell=1/2 panel=True back=0" "két asztal: váltás, ablak áthelyezése, a panel minden asztalon (JWM + Fúzió Shell)" || ok_run=0
+            _check "$log" "FUSION-T1: CLIPS count=[2-9][0-9]* popup=clip viewable=1 key=1" "vágólap-előzmények: a másolások megmaradnak, Ctrl+Alt+V megnyitja" || ok_run=0
+            _check "$log" "FUSION-T1: SCREENSHOT n=2 \([0-9]*x[0-9]*\),[0-9]*x[0-9]* screen=\1 keys=3" "képernyőkép: teljes képernyő és ablak, PNG a Képek/Képernyőképek mappába" || ok_run=0
+            _check "$log" "FUSION-T1: FILESEARCH n=[1-9][0-9]* hit=~/Projektek/kereso/Fúzió keresőpróba.txt menu=1" "gyorskereső: a Start menü fájlokat is talál" || ok_run=0
+            _check "$log" "FUSION-T1: SNAP left=True max=True restore=True" "ablak igazítása: bal szél = fél képernyő, teteje = teljes, elhúzva vissza az eredeti méret" || ok_run=0
             _check "$log" "FUSION-T1: TEXTMENU 1 field=1" "jobb gombos szövegmenü (FTextMenu) a szövegmezőkben" || ok_run=0
             _check "$log" "FUSION-T1: TOUCHPAD devices=[1-9].* default\[tap=True scroll=twofinger natural=False\] set\[tap=False scroll=twofinger natural=True\] conf=1" "touchpad: koppintás és két ujjas görgetés alapból, a beállítás érvényesül (fusion-touchpad)" || ok_run=0
             _check "$log" "FUSION-T1: DEVTERM window=1 .*menu=True" "Fejlesztő terminál (Start → Rendszer)" || ok_run=0

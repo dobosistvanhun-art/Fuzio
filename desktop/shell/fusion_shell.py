@@ -11,7 +11,8 @@ Egy folyamat, több ablak:
 küldhet: fusion-notify, notify-send), és a Shell saját eseményei: eszköz (lézer, nyomtató)
 csatlakozott/levált, USB-meghajtó, Wi-Fi-kapcsolat, rendszerfrissítés.
 
-Jelzések: SIGUSR1 = Start menü nyitása/zárása (fusion-shell menu, Super / Alt+F1).
+Jelzések: SIGUSR1 = Start menü nyitása/zárása (fusion-shell menu, Super / Alt+F1);
+          SIGUSR2 = vágólap-előzmények (fusion-shell clip, Ctrl+Alt+V; 0.0.55).
 Állapot a tesztekhez: $XDG_RUNTIME_DIR/fusion-shell.state (JSON).
 """
 import array
@@ -35,7 +36,9 @@ import fusion_net  # noqa: E402
 import fusion_sound  # noqa: E402
 from fusion.x11 import PANEL_HEIGHT, X11  # noqa: E402
 from fusion import devices as fdev  # noqa: E402
+from fusion import filesearch  # noqa: E402
 from dashboard import Dashboard  # noqa: E402
+from snap import Snapper  # noqa: E402
 
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
                           pyqtSignal, pyqtSlot)
@@ -49,6 +52,7 @@ MENU_W, MENU_H = 640, 580
 CENTER_W, CENTER_H = 400, 520
 CAL_W, CAL_H = 300, 300
 SOUND_W, SOUND_H = 340, 300
+CLIP_W, CLIP_H = 560, 440
 TOAST_W = 380
 STATE_FILE = os.path.join(ui.RUNTIME, "fusion-shell.state")
 MEDIA_DIR = fusion.MEDIA
@@ -132,6 +136,7 @@ class NotifyObject(QObject):
 class Shell(QObject):
     windowsChanged = pyqtSignal()
     desktopChanged = pyqtSignal()
+    clipsChanged = pyqtSignal()
     clockChanged = pyqtSignal()
     wifiChanged = pyqtSignal()
     devicesChanged = pyqtSignal()
@@ -149,6 +154,9 @@ class Shell(QObject):
         self.x = X11()
         self._windows = []
         self._desk = (0, 1)          # (aktuális asztal, asztalok száma) — 0.0.54
+        self._clips = []             # vágólap-előzmények (0.0.55): csak a memóriában, legújabb elöl
+        self._clip_own = None        # amit a Shell maga tett a vágólapra (ne kerüljön újra elöl)
+        self._findex, self._findex_at, self._findex_busy = [], 0.0, False    # fájlkereső (0.0.55)
         self._clock = {"time": "", "date": "", "year": 0, "month": 0, "day": 0}
         self._wifi = {"state": "?", "ssid": "", "ok": False}
         self._devices = []           # [{"role","name","dev","present"}]
@@ -176,6 +184,107 @@ class Shell(QObject):
     @pyqtProperty("QVariant", notify=windowsChanged)
     def windows(self):
         return self._windows
+
+    # --- fájlkereső a Start menüben (0.0.55): a fájlnevek indexe a háttérben épül, 10 percenként frissül ---
+    def refresh_file_index(self, force=False):
+        if self._findex_busy or (not force and time.monotonic() - self._findex_at < 600):
+            return
+        self._findex_busy = True
+
+        def work():
+            try:
+                self._findex = filesearch.build()
+            except Exception:
+                pass
+            self._findex_at = time.monotonic()
+            self._findex_busy = False
+        threading.Thread(target=work, daemon=True).start()
+
+    @pyqtSlot(str, result="QVariant")
+    def searchFiles(self, q):
+        self.refresh_file_index()
+        try:
+            res = filesearch.search(self._findex, q)
+        except Exception:
+            return []
+        kinds = {".png": "file-image", ".jpg": "file-image", ".jpeg": "file-image", ".svg": "file-image", ".gif": "file-image",
+                 ".webp": "file-image", ".txt": "file-text", ".md": "file-text", ".pdf": "file-text", ".gcode": "file-code",
+                 ".py": "file-code", ".js": "file-code", ".sh": "file-code", ".zip": "file-archive", ".gz": "file-archive",
+                 ".xz": "file-archive", ".tar": "file-archive", ".exe": "file-exe", ".msi": "file-exe"}
+        for r in res:
+            ic = "folder" if r["dir"] else kinds.get(os.path.splitext(r["name"])[1].lower(), "file")
+            r.update({"id": "file:" + r["path"], "desc": ("Mappa" if r["dir"] else "Fájl") + "  ·  " + r["folder"],
+                      "iconFile": os.path.join(ui.ICON_DIR, ic + ".svg"), "installed": True, "isFile": True, "search_only": True})
+        return res
+
+    @pyqtSlot(str)
+    def openPath(self, path):
+        """találat megnyitása: mappa → Fájlkezelő; fájl → a társított program (Programkezelő), különben a
+        Fájlkezelő a fájl mappájával"""
+        self.hideMenu()
+        if os.path.isdir(path):
+            ui.spawn(["fusion-files", path])
+            return
+        try:
+            import fusion_programs as fp
+            progs = fp.assoc(path, False)
+        except Exception:
+            progs = []
+        if progs:
+            ui.spawn(["fusion-run", progs[0][0], path])
+        else:
+            ui.spawn(["fusion-files", os.path.dirname(path)])
+
+    # --- vágólap-előzmények (0.0.55) ---
+    CLIP_MAX, CLIP_LEN = 25, 200000
+
+    def watch_clipboard(self):
+        cb = self.app.clipboard()
+        cb.dataChanged.connect(self._clip_changed)
+
+    def _clip_changed(self):
+        try:
+            t = self.app.clipboard().text()
+        except Exception:
+            return
+        if not t or not t.strip() or len(t) > self.CLIP_LEN:
+            return
+        if t == self._clip_own:
+            self._clip_own = None
+            return
+        self._clips = [t] + [c for c in self._clips if c != t]
+        del self._clips[self.CLIP_MAX:]
+        self.clipsChanged.emit()
+        self.write_state()
+
+    @pyqtProperty("QVariant", notify=clipsChanged)
+    def clips(self):
+        return [{"text": c, "short": " ".join(c.split())[:160], "lines": c.count("\n") + 1, "chars": len(c)} for c in self._clips]
+
+    @pyqtSlot(int)
+    def pickClip(self, i):
+        """a kiválasztott elem újra a vágólapra (és a lista elejére); utána Ctrl+V-vel beilleszthető"""
+        if 0 <= i < len(self._clips):
+            t = self._clips.pop(i)
+            self._clips.insert(0, t)
+            self._clip_own = t
+            self.app.clipboard().setText(t)
+            self.clipsChanged.emit()
+        self._hide_popups()
+
+    @pyqtSlot(int)
+    def dropClip(self, i):
+        if 0 <= i < len(self._clips):
+            self._clips.pop(i)
+            self.clipsChanged.emit()
+
+    @pyqtSlot()
+    def clearClips(self):
+        self._clips = []
+        self.clipsChanged.emit()
+
+    def toggleClips(self):
+        self.togglePopup("clip")
 
     @pyqtProperty(int, notify=desktopChanged)
     def desktop(self):
@@ -385,6 +494,12 @@ class Shell(QObject):
         self.snd.rootObject().implicitHeightChanged.connect(self._place_sound)
         self._place_sound()
 
+        # vágólap-előzmények (0.0.55): a képernyő közepén
+        self.clipv = view("ClipHistory.qml", "Fúzió Vágólap", pop)
+        self.clipv.setGeometry((sw - CLIP_W) // 2, max(40, (sh - PANEL_HEIGHT - CLIP_H) // 2), CLIP_W, CLIP_H)
+        self.x.setup_floating(int(self.clipv.winId()), "popup")
+        self.clipv.activeChanged.connect(lambda: self._focus_lost(self.clipv, "clip"))
+
         # buborék: felülíró (override-redirect) ablak — nem veszi el a fókuszt, nincs kerete
         self.toast = view("Toasts.qml", "Fúzió értesítés", F.ToolTip | F.FramelessWindowHint | F.WindowStaysOnTopHint | F.WindowDoesNotAcceptFocus)
         self.toast.rootObject().implicitHeightChanged.connect(self._place_toast)
@@ -505,7 +620,7 @@ class Shell(QObject):
 
     # --- felugrók: értesítésközpont, naptár ---
     def _hide_popups(self):
-        for name, v in (("center", self.center), ("calendar", self.cal), ("sound", self.snd)):
+        for name, v in (("center", self.center), ("calendar", self.cal), ("sound", self.snd), ("clip", self.clipv)):
             if v.isVisible():
                 v.hide()
         if self._popup:
@@ -514,7 +629,7 @@ class Shell(QObject):
 
     @pyqtSlot(str)
     def togglePopup(self, name):
-        v = {"center": self.center, "calendar": self.cal, "sound": self.snd}[name]
+        v = {"center": self.center, "calendar": self.cal, "sound": self.snd, "clip": self.clipv}[name]
         if v.isVisible():
             self._hide_popups()
         elif not self._recent(name):
@@ -847,7 +962,7 @@ class Shell(QObject):
     def write_state(self, last=None):
         st = {"pid": os.getpid(), "ready": getattr(self, "_ready", False), "menu": self._menu_open,
               "popup": self._popup, "windows": len(self._windows), "notifications": len(self._notes),
-              "desktop": self._desk[0], "desktops": self._desk[1],
+              "desktop": self._desk[0], "desktops": self._desk[1], "clips": len(self._clips),
               "windesk": {w["title"][:40]: w.get("desktop", -1) for w in self._windows},
               "taskicons": sorted({("file" if w.get("iconFile") else w.get("icon", "app")) for w in self._windows}),
               "dashboard": bool(getattr(self, "desk", None) and self.desk.isVisible()), "printer": self.dash.printer.get("state", ""),
@@ -882,7 +997,11 @@ def main():
         print("fusion-shell: az org.freedesktop.Notifications már foglalt", file=sys.stderr)
 
     shell.build_windows()
+    shell.snapper = Snapper(QML, app)       # ablakok igazítása a képernyő széléhez (0.0.55)
     ui.on_signal(app, signal.SIGUSR1, shell.toggleMenu)
+    ui.on_signal(app, signal.SIGUSR2, shell.toggleClips)
+    shell.watch_clipboard()
+    QTimer.singleShot(15000, shell.refresh_file_index)   # a fájlkereső indexe az indulás után kicsivel
     try:
         with open(os.path.join(ui.RUNTIME, "fusion-shell.pid"), "w") as f:
             f.write(f"{os.getpid()}\n")

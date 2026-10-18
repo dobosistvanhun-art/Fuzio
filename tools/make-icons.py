@@ -101,6 +101,9 @@ def gear(cx=12, cy=12, r1=5.8, r2=8.2, teeth=8):
 
 
 G["settings"] = gear()
+G["touchpad"] = "M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z M3 15h18 M12 15v6 M12 7.5a1.6 1.6 0 1 1 0 .01"
+G["screenshot"] = "M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4 M12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"
+G["clipboard"] = "M8 4h8v3H8z M8 5.5H5v15h14v-15h-3 M8.5 11h7 M8.5 14h7 M8.5 17h4"
 
 # programcsempék: (rajzolat, háttérszín)
 APPS = {
@@ -123,6 +126,8 @@ APPS = {
     "report": ("report", "#a16207"),
     "update": ("update", "#0f766e"),
     "devterm": ("file-code", "#4338ca"),
+    "screenshot": ("screenshot", "#0e7490"),
+    "clipboard": ("clipboard", "#a16207"),
 }
 
 

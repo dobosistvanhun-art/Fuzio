@@ -38,13 +38,22 @@ Rectangle {
         var f = norm(filter)
         if (f !== "")
             return shell.apps.filter(a => norm(a.name).indexOf(f) >= 0 || norm(a.desc).indexOf(f) >= 0 || norm(a.keywords).indexOf(f) >= 0)
+                   .concat(menu.fileHits)
         if (group === "gyakori") return frequent()
         if (group === "osszes") return shell.apps.filter(a => !a.search_only).slice().sort((x, y) => x.name.localeCompare(y.name, "hu"))
         return shell.apps.filter(a => !a.search_only && a.group === group).slice().sort((x, y) => x.name.localeCompare(y.name, "hu"))
     }
-    property var items: { filter; group; shell.apps; return shown() }
+    // fájlok is (0.0.55): a saját mappa és a Tárhely fájlnevei — kis késleltetéssel, gépelés közben nem keres minden betűre
+    property var fileHits: []
+    Timer { id: ft; interval: 180; onTriggered: menu.fileHits = menu.filter.length >= 2 ? shell.searchFiles(menu.filter) : [] }
+    onFilterChanged: { if (filter.length < 2) fileHits = []; ft.restart() }
+    property var items: { filter; group; shell.apps; fileHits; return shown() }
     onItemsChanged: cur = 0
-    function launch(i) { if (i >= 0 && i < items.length) shell.launch(items[i].id) }
+    function launch(i) {
+        if (i < 0 || i >= items.length) return
+        if (items[i].isFile) shell.openPath(items[i].path)
+        else shell.launch(items[i].id)
+    }
     function stepGroup(d) {
         var i = groupList.findIndex(g => g.id === group)
         group = groupList[Math.max(0, Math.min(groupList.length - 1, i + d))].id
@@ -74,7 +83,7 @@ Rectangle {
                 if (e.key === Qt.Key_PageDown || e.key === Qt.Key_Right && search.text === "") { menu.stepGroup(1); e.accepted = true }
                 else if (e.key === Qt.Key_PageUp || e.key === Qt.Key_Left && search.text === "") { menu.stepGroup(-1); e.accepted = true }
             }
-            Text { anchors.verticalCenter: parent.verticalCenter; visible: !search.text; text: "Keresés a programok és beállítások között…"
+            Text { anchors.verticalCenter: parent.verticalCenter; visible: !search.text; text: "Keresés: programok, beállítások, fájlok…"
                    color: Theme.dim; font.family: Theme.font; font.pixelSize: 14 }
         }
     }
@@ -127,8 +136,9 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 Text { width: parent.width; text: modelData.name; elide: Text.ElideRight
                        color: modelData.installed ? Theme.text : Theme.dim; font.family: Theme.font; font.pixelSize: 14 }
-                Text { width: parent.width; elide: Text.ElideRight
+                Text { width: parent.width
                        text: menu.filter && !modelData.search_only ? menu.groupName(modelData.group) + "  ·  " + modelData.desc : modelData.desc
+                       elide: modelData.isFile ? Text.ElideMiddle : Text.ElideRight
                        color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
             }
             MouseArea { id: ima; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.LeftButton | Qt.RightButton

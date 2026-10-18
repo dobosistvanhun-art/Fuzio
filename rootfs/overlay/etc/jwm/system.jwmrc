@@ -72,6 +72,10 @@
     <Key mask="CA" key="#">desktop#</Key>
     <Key mask="CAS" key="Left">sendl</Key>
     <Key mask="CAS" key="Right">sendr</Key>
+    <Key mask="CA" key="v">exec:fusion-shell clip</Key>
+    <Key key="Print">exec:fusion-screenshot</Key>
+    <Key mask="S" key="Print">exec:fusion-screenshot terulet</Key>
+    <Key mask="A" key="Print">exec:fusion-screenshot ablak</Key>
     <Key mask="CA" key="e">exec:fusion-files</Key>
     <Key mask="CA" key="t">exec:fusion-terminal</Key>
     <Key mask="CA" key="s">exec:fusion-settings</Key>

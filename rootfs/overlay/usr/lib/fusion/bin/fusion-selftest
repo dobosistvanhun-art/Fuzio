@@ -520,6 +520,104 @@ DPY
     chmod 644 /tmp/deskproba.py
     echo "FUSION-T1: DESKTOPS $(urun python3 /tmp/deskproba.py 2>&1 | tail -n 1)"
     pkill -u fusion -f 'xterm -T deskproba' 2>/dev/null
+    # 0.0.55: vágólap-előzmények — két másolás egy Qt-programból, a Shell megjegyzi; Ctrl+Alt+V (fusion-shell clip) megnyitja
+    cat > /tmp/clipproba.py <<'CPY'
+import sys, time
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import QTimer
+app = QGuiApplication(sys.argv)
+cb = app.clipboard()
+steps = [lambda: cb.setText("fuzio-vagolap-1"), lambda: cb.setText("fuzio-vagolap-2"), app.quit]
+for i, f in enumerate(steps):
+    QTimer.singleShot(1500 * (i + 1), f)
+app.exec()
+CPY
+    chmod 644 /tmp/clipproba.py
+    urun env QT_QPA_PLATFORM=xcb python3 /tmp/clipproba.py >/tmp/clipproba.log 2>&1
+    sleep 1
+    c1=$(python3 -c 'import json; print(json.load(open("/run/user/1000/fusion-shell.state")).get("clips"))' 2>/dev/null)
+    urun fusion-shell clip; sleep 2
+    cp1=$(python3 -c 'import json; print(json.load(open("/run/user/1000/fusion-shell.state")).get("popup"))' 2>/dev/null)
+    cw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fúzió Vágólap' | head -n 1 | awk '{print $1}')
+    cv=$([ -n "$cw" ] && urun xwininfo -id "$cw" | grep -c IsViewable)
+    urun fusion-shell clip; sleep 1
+    echo "FUSION-T1: CLIPS count=$c1 popup=$cp1 viewable=$cv key=$(grep -c 'exec:fusion-shell clip' /etc/jwm/system.jwmrc)"
+    [ "${c1:-0}" -ge 2 ] || sed 's/^/FUSION-T1:   clip: /' /tmp/clipproba.log | tail -n 5
+    # 0.0.55: képernyőkép — teljes képernyő és az aktív ablak, PNG a ~/Képek/Képernyőképek mappába
+    rm -rf /home/fusion/Képek/Képernyőképek
+    urun fusion-screenshot --nincs-vagolap >/dev/null 2>&1
+    i=0; while [ $i -lt 20 ] && [ "$(ls /home/fusion/Képek/Képernyőképek/*.png 2>/dev/null | wc -l)" -lt 1 ]; do sleep 1; i=$((i + 1)); done
+    sleep 2
+    urun fusion-screenshot ablak --nincs-vagolap >/dev/null 2>&1
+    i=0; while [ $i -lt 20 ] && [ "$(ls /home/fusion/Képek/Képernyőképek/*.png 2>/dev/null | wc -l)" -lt 2 ]; do sleep 1; i=$((i + 1)); done
+    shots=$(python3 -c '
+import glob, struct
+fs = sorted(glob.glob("/home/fusion/Képek/Képernyőképek/*.png"))
+out = []
+for f in fs:
+    with open(f, "rb") as h:
+        b = h.read(24)
+    out.append("%dx%d" % struct.unpack(">II", b[16:24]) if b[:8] == b"\x89PNG\r\n\x1a\n" else "rossz")
+print("n=%d %s" % (len(fs), ",".join(out)))' 2>&1)
+    scr=$(urun xwininfo -root 2>/dev/null | awk '/Width:/{w=$2} /Height:/{h=$2} END{print w "x" h}')
+    echo "FUSION-T1: SCREENSHOT $shots screen=$scr keys=$(grep -c 'exec:fusion-screenshot' /etc/jwm/system.jwmrc)"
+    # 0.0.55: gyorskereső — a Start menü fájlokat is talál (név szerint, ékezet nélkül is)
+    runuser -u fusion -- sh -c 'mkdir -p /home/fusion/Projektek/kereso && echo x > "/home/fusion/Projektek/kereso/Fúzió keresőpróba.txt"'
+    fnd=$(urun python3 -c 'import sys; sys.path.insert(0, "/usr/lib/fusion/desktop/lib"); from fusion import filesearch as fs; ix = fs.build(); r = fs.search(ix, "fuzio keresoproba"); print("n=%d hit=%s" % (len(ix), r[0]["folder"] + "/" + r[0]["name"] if r else "nincs"))' 2>&1 | tail -n 1)
+    echo "FUSION-T1: FILESEARCH $fnd menu=$(grep -c 'shell.searchFiles' /usr/lib/fusion/desktop/shell/qml/StartMenu.qml)"
+    rm -rf /home/fusion/Projektek/kereso
+    # 0.0.55: ablak igazítása a képernyő széléhez — a címsornál fogva a bal szélre, a tetejére, majd vissza középre
+    urun xterm -T snapproba -geometry 70x20+300+200 -e sleep 90 >/dev/null 2>&1 &
+    sleep 3
+    cat > /tmp/snapproba.py <<'SPY'
+import sys, time
+sys.path.insert(0, "/usr/lib/fusion/desktop/lib")
+from Xlib.ext import xtest
+from Xlib import X
+from fusion.x11 import X11
+x = X11()
+w = next((i for i in x.windows() if i["title"] == "snapproba"), None)
+if w is None:
+    print("nincs ablak")
+    sys.exit()
+wid = w["id"]
+x.activate(wid)
+time.sleep(0.5)
+
+
+def drag(tx, ty):
+    (fx, fy, fw, fh), (l, r, t, b) = x.frame(wid)
+    sx, sy = fx + fw // 2, fy + max(4, t // 2)
+    xtest.fake_input(x.d, X.MotionNotify, x=sx, y=sy)
+    x.d.sync()
+    time.sleep(0.2)
+    xtest.fake_input(x.d, X.ButtonPress, 1)
+    x.d.sync()
+    time.sleep(0.3)
+    for k in range(1, 21):
+        xtest.fake_input(x.d, X.MotionNotify, x=sx + (tx - sx) * k // 20, y=sy + (ty - sy) * k // 20)
+        x.d.sync()
+        time.sleep(0.05)
+    time.sleep(0.4)
+    xtest.fake_input(x.d, X.ButtonRelease, 1)
+    x.d.sync()
+    time.sleep(1.0)
+    return x.frame(wid)[0]
+
+
+orig = x.frame(wid)[0]
+ax, ay, aw, ah = x.workarea()
+left = drag(0, 300)
+okl = left[0] == ax and left[1] == ay and abs(left[2] - aw // 2) <= 2 and abs(left[3] - ah) <= 2
+drag(aw // 2, 0)
+mx = x.is_maximized(wid)
+back = drag(aw // 2, ah // 2)
+okb = not x.is_maximized(wid) and abs(back[2] - orig[2]) <= 2 and abs(back[3] - orig[3]) <= 2
+print(f"left={okl} max={mx} restore={okb} work={aw}x{ah} got={left[2]}x{left[3]}")
+SPY
+    chmod 644 /tmp/snapproba.py
+    echo "FUSION-T1: SNAP $(urun python3 /tmp/snapproba.py 2>&1 | tail -n 1)"
+    pkill -u fusion -f 'xterm -T snapproba' 2>/dev/null
     echo "FUSION-T1: TEXTMENU $(grep -c 'FTextMenu' /usr/lib/fusion/desktop/qml/FusionUI/qmldir) field=$(grep -c 'FTextMenu {}' /usr/lib/fusion/desktop/qml/FusionUI/FTextField.qml)"
     # irányítópult: asztal típusú ablak a többi alatt
     dw=$(urun xwininfo -root -tree 2>/dev/null | grep -F 'Fusion Irányítópult' | head -n 1 | awk '{print $1}')

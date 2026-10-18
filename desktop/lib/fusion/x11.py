@@ -22,7 +22,9 @@ ATOMS = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING"
          "WM_CHANGE_STATE", "_NET_WM_DESKTOP", "_NET_CLOSE_WINDOW", "_NET_WM_PID",
          "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_STATE_BELOW",
          "WM_PROTOCOLS", "_NET_WM_PING", "WM_DELETE_WINDOW", "_NET_WM_ICON",
-         "_NET_CURRENT_DESKTOP", "_NET_NUMBER_OF_DESKTOPS", "_NET_WM_STATE_STICKY")
+         "_NET_CURRENT_DESKTOP", "_NET_NUMBER_OF_DESKTOPS", "_NET_WM_STATE_STICKY",
+         "_NET_WORKAREA", "_NET_FRAME_EXTENTS", "_NET_MOVERESIZE_WINDOW",
+         "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ")
 ALL_DESKTOPS = 0xFFFFFFFF
 
 
@@ -103,6 +105,49 @@ class X11:
     def move_to_desktop(self, wid, n):
         """az ablak áthelyezése az n. asztalra (EWMH: _NET_WM_DESKTOP kérés az ablakkezelőnek)"""
         self._client_msg(wid, "_NET_WM_DESKTOP", [n, 2, 0, 0, 0])
+
+    # --- ablakok igazítása a képernyő széléhez (0.0.55) ---
+    def pointer(self):
+        """(x, y, bal gomb lenyomva)"""
+        q = self.root.query_pointer()
+        return q.root_x, q.root_y, bool(q.mask & X.Button1Mask)
+
+    def active(self):
+        a = self._prop(self.root, "_NET_ACTIVE_WINDOW")
+        return int(a[0]) if a is not None and len(a) and int(a[0]) else 0
+
+    def workarea(self):
+        """a panel nélküli terület (x, y, szélesség, magasság) — az aktuális asztalé"""
+        v = self._prop(self.root, "_NET_WORKAREA")
+        cur = self.desktop()[0]
+        if v is not None and len(v) >= 4 * (cur + 1):
+            return tuple(int(i) for i in v[4 * cur:4 * cur + 4])
+        w, h = self.screen_size()
+        return 0, 0, w, h - PANEL_HEIGHT
+
+    def frame(self, wid):
+        """az ablak kerettel együtti helye: (x, y, szélesség, magasság) és a keret (bal, jobb, fent, lent)"""
+        win = self.d.create_resource_object("window", int(wid))
+        g = win.get_geometry()
+        t = win.translate_coords(self.root, 0, 0)
+        cx, cy = -t.x, -t.y
+        e = self._prop(win, "_NET_FRAME_EXTENTS")
+        l, r, tp, b = (int(i) for i in e[:4]) if e is not None and len(e) >= 4 else (0, 0, 0, 0)
+        return (cx - l, cy - tp, g.width + l + r, g.height + tp + b), (l, r, tp, b)
+
+    def is_maximized(self, wid):
+        st = self._prop(self.d.create_resource_object("window", int(wid)), "_NET_WM_STATE") or []
+        return self.a["_NET_WM_STATE_MAXIMIZED_VERT"] in st and self.a["_NET_WM_STATE_MAXIMIZED_HORZ"] in st
+
+    def set_maximized(self, wid, on):
+        self._client_msg(wid, "_NET_WM_STATE", [1 if on else 0, self.a["_NET_WM_STATE_MAXIMIZED_VERT"],
+                                                self.a["_NET_WM_STATE_MAXIMIZED_HORZ"], 2, 0])
+
+    def place(self, wid, x, y, w, h):
+        """a keret bal felső sarka (x, y), a teljes (kerettel együtti) méret w × h"""
+        (_fx, _fy, _fw, _fh), (l, r, tp, b) = self.frame(wid)
+        flags = 1 | (0xF << 8) | (2 << 12)            # NorthWest gravitáció, x+y+w+h, felhasználói kérés
+        self._client_msg(wid, "_NET_MOVERESIZE_WINDOW", [flags, int(x), int(y), max(50, int(w) - l - r), max(50, int(h) - tp - b)])
 
     # --- ablaklista ---
     def _prop(self, win, name, typ=X.AnyPropertyType):

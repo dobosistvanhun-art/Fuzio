@@ -21,6 +21,9 @@ UD="${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs"
 if ! grep -q '^XDG_DOWNLOAD_DIR=' "$UD" 2>/dev/null; then
     mkdir -p "$(dirname "$UD")" && printf 'XDG_DOWNLOAD_DIR="$HOME/Letöltések"\n' >> "$UD"
 fi
+# Képek mappa (0.0.55: a képernyőképek a Képek/Képernyőképek alá kerülnek)
+grep -q '^XDG_PICTURES_DIR=' "$UD" 2>/dev/null || printf 'XDG_PICTURES_DIR="$HOME/Képek"\n' >> "$UD"
+mkdir -p "$HOME/Képek"
 dl=$(sed -n 's/^XDG_DOWNLOAD_DIR="\(.*\)"$/\1/p' "$UD" | head -n 1 | sed "s#^\$HOME#$HOME#")
 case "$dl" in /*) mkdir -p "$dl" ;; esac
 # fejlesztői eszközök (fusion-dev): Node.js a DATA-n, az npm globális csomagjai (pl. wrangler) a saját mappában

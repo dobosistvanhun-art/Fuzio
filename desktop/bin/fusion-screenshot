@@ -1,0 +1,136 @@
+#!/usr/bin/python3
+"""Fúzió — képernyőkép (0.0.55)
+
+    fusion-screenshot            a teljes képernyő (Print Screen)
+    fusion-screenshot terulet    kijelölt terület (Shift+Print Screen; Start menü → Képernyőkép)
+    fusion-screenshot ablak      az aktív ablak a keretével (Alt+Print Screen)
+    fusion-screenshot … --nincs-vagolap   csak fájlba (a vágólapra nem)
+
+A kép a ~/Képek/Képernyőképek mappába kerül (PNG), és a vágólapra is (Ctrl+V-vel beilleszthető, amíg mást nem
+másolnak — a program addig a háttérben tartja, legfeljebb 30 percig). Értesítés jelzi, hová mentette.
+Terület kijelölése: egérrel húzva; Enter vagy dupla kattintás: a teljes képernyő; Esc: mégse.
+"""
+import os
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
+import fusion_ui as ui  # noqa: E402  (a környezeti változókat a Qt betöltése előtt állítja)
+
+from PyQt6.QtCore import QObject, QRect, QTimer, QUrl, pyqtSlot  # noqa: E402
+from PyQt6.QtGui import QGuiApplication, QImage  # noqa: E402
+from PyQt6.QtQuick import QQuickView  # noqa: E402
+
+KEEP_S = 30 * 60
+
+
+def out_dir():
+    d = os.path.join(os.path.expanduser("~"), "Képek", "Képernyőképek")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+class Shot(QObject):
+    def __init__(self, app, mode, clip):
+        super().__init__()
+        self.app, self.mode, self.clip = app, mode, clip
+        self.screen = app.primaryScreen()
+        self.full = self.screen.grabWindow(0)          # a képernyő most (a kijelölő ablak előtt)
+        self.view = None
+        self.path = ""
+
+    def run(self):
+        if self.mode == "terulet":
+            return self.select()
+        if self.mode == "ablak":
+            r = self.active_rect()
+            return self.finish(self.full.copy(QRect(*r)) if r else self.full)
+        return self.finish(self.full)
+
+    def active_rect(self):
+        try:
+            from fusion.x11 import X11
+            x = X11()
+            wid = x.active()
+            if not wid:
+                return None
+            (fx, fy, fw, fh), _e = x.frame(wid)
+            sw, sh = self.full.width(), self.full.height()
+            fx, fy = max(0, fx), max(0, fy)
+            fw, fh = min(fw, sw - fx), min(fh, sh - fy)
+            return (fx, fy, fw, fh) if fw > 4 and fh > 4 else None
+        except Exception:
+            return None
+
+    # --- terület kijelölése: teljes képernyős ablak a fagyasztott képpel ---
+    def select(self):
+        tmp = os.path.join(ui.RUNTIME, "fusion-screenshot-full.png")
+        self.full.save(tmp, "PNG")
+        v = QQuickView()
+        v.rootContext().setContextProperty("shot", self)
+        v.rootContext().setContextProperty("shotImage", QUrl.fromLocalFile(tmp).toString() + "?" + str(time.time()))
+        v.engine().addImportPath(ui.QML_DIR)
+        v.setTitle("Fúzió Képernyőkép")
+        v.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+        v.setSource(QUrl.fromLocalFile(os.path.join(ui.QML_DIR, "ScreenshotSelect.qml")))
+        if v.status() == QQuickView.Status.Error:
+            print("fusion-screenshot: " + "; ".join(e.toString() for e in v.errors()), file=sys.stderr)
+            return self.finish(self.full)
+        self.view = v
+        v.showFullScreen()
+        v.requestActivate()
+        return None
+
+    @pyqtSlot(int, int, int, int)
+    def chosen(self, x, y, w, h):
+        if self.view:
+            self.view.hide()
+        if w < 3 or h < 3:
+            img = self.full
+        else:
+            dpr = self.full.devicePixelRatio() or 1
+            img = self.full.copy(QRect(int(x * dpr), int(y * dpr), int(w * dpr), int(h * dpr)))
+        QTimer.singleShot(0, lambda: self.finish(img))
+
+    @pyqtSlot()
+    def cancel(self):
+        self.app.quit()
+
+    def finish(self, pix):
+        name = time.strftime("Képernyőkép %Y-%m-%d %H-%M-%S.png")
+        self.path = os.path.join(out_dir(), name)
+        ok = pix.save(self.path, "PNG")
+        if not ok:
+            ui.notify("Képernyőkép", "nem menthető: " + self.path, "screenshot")
+            self.app.quit()
+            return
+        ui.notify("Képernyőkép elmentve", self.path.replace(os.path.expanduser("~"), "~")
+                  + ("\nA vágólapon is (Ctrl+V)" if self.clip else ""), "screenshot")
+        print(self.path, flush=True)
+        if not self.clip:
+            self.app.quit()
+            return
+        cb = self.app.clipboard()
+        cb.setImage(pix.toImage() if not isinstance(pix, QImage) else pix)
+        # amíg a vágólap a miénk, a háttérben maradunk (X11: a tartalmat a tulajdonos adja ki)
+        QTimer.singleShot(400, lambda: cb.dataChanged.connect(self.app.quit))
+        QTimer.singleShot(KEEP_S * 1000, self.app.quit)
+
+
+def main(a):
+    mode = next((x for x in a if not x.startswith("-")), "teljes")
+    if mode not in ("teljes", "terulet", "ablak"):
+        print(__doc__.strip())
+        return 2
+    if os.fork() != 0:          # a hívó (billentyűparancs) ne várjon a vágólapra
+        return 0
+    app, _engine = ui.create_app("fusion-screenshot", "Képernyőkép", "screenshot")
+    app.setQuitOnLastWindowClosed(False)
+    s = Shot(app, mode, "--nincs-vagolap" not in a)
+    QTimer.singleShot(0, s.run)
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
