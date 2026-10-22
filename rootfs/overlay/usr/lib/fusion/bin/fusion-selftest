@@ -584,7 +584,12 @@ if w is None:
     print("nincs ablak")
     sys.exit()
 wid = w["id"]
-x.activate(wid)
+# lassú (KVM nélküli) futásban az ablakkezelő késve teszi aktívvá: a Shell a lenyomáskor aktív ablakot figyeli
+for _ in range(50):
+    x.activate(wid)
+    time.sleep(0.2)
+    if x.active() == wid:
+        break
 time.sleep(0.5)
 
 
