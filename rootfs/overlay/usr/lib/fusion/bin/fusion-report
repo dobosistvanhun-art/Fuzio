@@ -593,12 +593,26 @@ def build(desc, sysinfo, m):
         pv = []
     if pv:
         L.append("  " + "   ·   ".join(pv))
-    L.append("  szolgáltatások: " + run(["systemctl", "is-enabled", "nvidia-suspend.service", "nvidia-resume.service"]).replace("\n", " "))
+    # 0.0.56: az NVIDIA altató-szolgáltatásai maszkolva (a 470-es driverrel beragadtak), a driver a kernel útját használja
+    L.append("  NVIDIA altató-szolgáltatások (0.0.56-tól maszkolva): "
+             + run(["systemctl", "is-enabled", "nvidia-suspend.service", "nvidia-resume.service"]).replace("\n", " "))
+    lid = "suspend"
+    for line in read("/data/system/power.conf").splitlines():
+        if line.startswith("lid="):
+            lid = line[4:].strip()
+    lidstate = " ".join(read(f).split(":")[-1].strip() for f in glob.glob("/proc/acpi/button/lid/*/state")) or "-"
+    L.append(f"  fedél lecsukásakor: {lid} ({ {'suspend': 'altatás', 'screen-off-ac': 'töltőn csak kijelző ki', 'screen-off': 'csak kijelző ki'}.get(lid, '?') })"
+             + f"   ·   fedél most: {lidstate}   ·   fusion-lid: " + run(["systemctl", "is-active", "fusion-lid.service"]).strip())
+    inh = [l for l in run(["systemd-inhibit", "--list", "--no-legend"], timeout=10).splitlines()
+           if "sleep" in l or "handle-lid-switch" in l]
+    L.append("  altatást / fedelet tiltó zárak: " + (str(len(inh)) if inh else "nincs"))
+    L += indent("\n".join(" ".join(l.split()) for l in inh), 4) if inh else []
     L.append("  legutóbbi altatások / ébredések (ez és az előző indítás):")
     for b in ("-1", "0"):
         L += indent("\n".join(run(["journalctl", "-b", b, "--no-pager", "-q", "-o", "short-monotonic", "-g",
-                                   "PM: suspend|PM: resume|ACPI: PM|Lid closed|Lid opened|nvidia-(suspend|resume)|suspend exit|Suspending system"],
-                                  timeout=20).splitlines()[-12:]) or f"(boot {b}: nincs)", 4)
+                                   "PM: suspend|PM: resume|PM: Some devices|Freezing .*failed|Lid closed|Lid opened|nvidia-(suspend|resume)"
+                                   "|fusion-sleep|suspend exit|Suspending system|Failed to put system to sleep|blocked for more than 122"],
+                                  timeout=20).splitlines()[-20:]) or f"(boot {b}: nincs)", 4)
     L += bt_camera_printer_section(m)
     L += permissions_section()
 

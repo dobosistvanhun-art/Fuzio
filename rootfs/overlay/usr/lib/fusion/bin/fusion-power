@@ -1,0 +1,82 @@
+#!/bin/sh
+# =============================================================================
+#  Fúzió — fusion-power: mi történjen a fedél lecsukásakor (0.0.56)
+#
+#    status            a beállított mód: suspend | screen-off-ac | screen-off
+#    set <mód>         (root — fusion-admin lid set) a mód mentése a DATA-ra és alkalmazása
+#    lid-hold          (fusion-lid.service) a mód szerint tartja / elengedi a fedél kezelését
+#
+#  Módok:
+#    suspend         altatás (a logind alapviselkedése)
+#    screen-off-ac   töltőn csak a kijelző kapcsol ki, akkumulátoron altatás
+#    screen-off      soha nem altat, csak a kijelző kapcsol ki
+#  A kijelzőt a Fúzió Shell kapcsolja ki / be (fedél-figyelés), ugyanúgy, mint amikor a lézer /
+#  nyomtató tartja ébren a gépet (fusion-keepawake@). Itt csak a logind fedél-kezelése tiltódik
+#  (handle-lid-switch zár) — a kézi altatás és a leállítás továbbra is működik.
+#  A beállítás a DATA-n van (/data/system/power.conf), így a rendszerfrissítés megtartja.
+# =============================================================================
+set -u
+CONF=${FUSION_POWER_CONF:-/data/system/power.conf}
+POWER_SUPPLY=${FUSION_POWER_SUPPLY:-/sys/class/power_supply}
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+fail() { printf 'fusion-power: %s\n' "$*" >&2; exit 1; }
+
+mode() {
+    m=$(sed -n 's/^lid=//p' "$CONF" 2>/dev/null | head -n 1)
+    case "$m" in suspend|screen-off-ac|screen-off) echo "$m" ;; *) echo suspend ;; esac
+}
+
+# töltőn van-e: van hálózati táp és online; ha nincs Mains típusú táp (asztali gép), töltőnek számít
+on_ac() {
+    found=0
+    for d in "$POWER_SUPPLY"/*; do
+        [ "$(cat "$d/type" 2>/dev/null)" = Mains ] || continue
+        found=1
+        [ "$(cat "$d/online" 2>/dev/null)" = 1 ] && return 0
+    done
+    [ $found -eq 0 ]
+}
+
+wanted() {   # 0 = a fedél ne altasson most
+    case "$(mode)" in
+        screen-off) return 0 ;;
+        screen-off-ac) on_ac ;;
+        *) return 1 ;;
+    esac
+}
+
+lid_hold() {
+    pid=""
+    trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; exit 0' TERM INT
+    trap ':' HUP
+    while :; do
+        if wanted; then
+            if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+                systemd-inhibit --what=handle-lid-switch --who=fuzio-fedel \
+                    --why="Beállítás: fedél lecsukásakor csak a kijelző kapcsol ki ($(mode))" --mode=block sleep infinity &
+                pid=$!
+                echo "fedél: nem altat ($(mode)$(on_ac && echo ', töltőn' || echo ', akkumulátoron'))"
+            fi
+        elif [ -n "$pid" ]; then
+            kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; pid=""
+            echo "fedél: altat ($(mode)$(on_ac && echo ', töltőn' || echo ', akkumulátoron'))"
+        fi
+        sleep 5 & wait $! 2>/dev/null
+    done
+}
+
+cmd=${1:-status}; [ $# -gt 0 ] && shift
+case "$cmd" in
+    status) mode ;;
+    set)
+        [ $# -eq 1 ] || fail "használat: set suspend|screen-off-ac|screen-off"
+        case "$1" in suspend|screen-off-ac|screen-off) ;; *) fail "ismeretlen mód: $1" ;; esac
+        [ "$(id -u)" -eq 0 ] || fail "rootként kell futnia"
+        mkdir -p "$(dirname "$CONF")" || fail "a beállítás helye nem hozható létre"
+        printf 'lid=%s\n' "$1" > "$CONF.tmp" && chmod 0644 "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || fail "a beállítás nem menthető"
+        systemctl restart fusion-lid.service 2>/dev/null || true
+        echo "$1" ;;
+    lid-hold) lid_hold ;;
+    *) fail "használat: status | set <mód> | lid-hold" ;;
+esac

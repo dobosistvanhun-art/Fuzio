@@ -1,0 +1,35 @@
+#!/bin/sh
+# Fúzió — altatás / ébredés (systemd-sleep hook, 0.0.56)
+#   pre:  a körülmények a naplóba (fusion-sleep): mód, töltő, fedél, konzol
+#   post: (sikeres ébredés vagy megszakadt altatás után is lefut) vissza a grafikus konzolra,
+#         a kijelző bekapcsolása — így egy félresikerült altatás után sem marad sötét a képernyő
+# A hibajelentés ALTATÁS szakasza ezeket a sorokat mutatja.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+VTF=/run/fusion-sleep.vt
+log() { logger -t fusion-sleep -- "$*"; }
+
+ac="?"
+for d in /sys/class/power_supply/*; do
+    [ "$(cat "$d/type" 2>/dev/null)" = Mains ] && ac=$(cat "$d/online" 2>/dev/null)
+done
+lid=$(cat /proc/acpi/button/lid/*/state 2>/dev/null | awk '{print $2; exit}')
+
+case "$1" in
+    pre)
+        vt=$(fgconsole 2>/dev/null); [ -n "$vt" ] && echo "$vt" > "$VTF"
+        log "altatás indul: $2 / $(cat /sys/power/mem_sleep 2>/dev/null) — töltő: ${ac:-?}, fedél: ${lid:-?}, konzol: ${vt:-?}" ;;
+    post)
+        log "ébredés: $2 — töltő: ${ac:-?}, fedél: ${lid:-?}"
+        vt=$(cat "$VTF" 2>/dev/null); rm -f "$VTF"
+        if [ -n "$vt" ] && [ "$(fgconsole 2>/dev/null)" != "$vt" ]; then
+            chvt "$vt" 2>/dev/null && log "vissza a grafikus konzolra: $vt"
+        fi
+        # a kijelző be (az X a munkamenet felhasználójáé), utána a DPMS ki — mint a Fúzió Shell felnyitáskor
+        u=$(stat -c %U /tmp/.X11-unix/X0 2>/dev/null)
+        if [ -n "$u" ] && [ "$u" != root ]; then
+            h=$(getent passwd "$u" | cut -d: -f6)
+            ( runuser -u "$u" -- env DISPLAY=:0 XAUTHORITY="$h/.Xauthority" sh -c 'xset dpms force on; xset s off -dpms' \
+                >/dev/null 2>&1 & )
+        fi ;;
+esac
+exit 0

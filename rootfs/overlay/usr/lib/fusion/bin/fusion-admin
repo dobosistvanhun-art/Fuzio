@@ -8,6 +8,8 @@
 #  ellenőrzött paraméterű parancsokat ismeri — tetszőleges parancsot nem futtat.
 #
 #    power poweroff|reboot            leállítás / újraindítás
+#    lid status | set suspend|screen-off-ac|screen-off
+#                                     fedél lecsukásakor: altatás / töltőn csak kijelző ki / csak kijelző ki (fusion-power)
 #    mount <eszköz>                   kötet csatolása a /run/media/fusion/<név> alá
 #    unmount <eszköz|csatolási pont>  leválasztás (csak a /run/media alól)
 #    eject <lemez>                    a lemez összes kötetének leválasztása (biztonságos eltávolítás)
@@ -217,6 +219,14 @@ fi
 case "$cmd" in
     power)
         case "${1:-}" in poweroff|reboot) exec systemctl "$1" ;; *) fail "használat: power poweroff|reboot" ;; esac ;;
+    lid)
+        case "${1:-}" in
+            status) [ $# -eq 1 ] || fail "használat: lid status" ;;
+            set) [ $# -eq 2 ] || fail "használat: lid set suspend|screen-off-ac|screen-off"
+                 case "$2" in suspend|screen-off-ac|screen-off) ;; *) fail "ismeretlen mód: $2" ;; esac ;;
+            *) fail "használat: lid status | set suspend|screen-off-ac|screen-off" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-power "$@" ;;
     mount)       [ $# -eq 1 ] || fail "használat: mount <eszköz>"; do_mount "$1" ;;
     unmount)     [ $# -eq 1 ] || fail "használat: unmount <eszköz|csatolási pont>"; do_unmount "$1" ;;
     eject)       [ $# -eq 1 ] || fail "használat: eject <lemez>"; do_eject "$1" ;;

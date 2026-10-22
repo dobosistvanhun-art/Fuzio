@@ -35,6 +35,28 @@ SettingsPage {
         }
     }
     Section {
+        title: "ENERGIA"
+        Column {
+        x: 12; width: parent.width - 24; spacing: 8; topPadding: 6; bottomPadding: 10
+        Flow {
+            width: parent.width
+            spacing: 8
+            FLabel { width: 200; height: 30; text: "Fedél lecsukásakor"; dim: true }
+            Repeater {
+                model: [ { m: "suspend", t: "Altatás" }, { m: "screen-off-ac", t: "Töltőn csak kijelző ki" },
+                         { m: "screen-off", t: "Csak kijelző ki" } ]
+                FButton { text: modelData.t; flat: !checked; checked: (p.s.lid || "suspend") === modelData.m
+                          onClicked: settings.lidSet(modelData.m) }
+            }
+        }
+        FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true
+                 text: "„Csak kijelző ki”: a gép tovább fut (letöltés, nyomtatás, Klipper), a kijelző kikapcsol, felnyitáskor visszajön. "
+                       + "„Töltőn csak kijelző ki”: töltőn így, akkumulátoron altat. Ha lézer vagy 3D nyomtató csatlakozik, a gép mindig ébren marad." }
+        FLabel { visible: !!p.s.lidError; width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
+                 color: Theme.danger; text: p.s.lidError || "" }
+        }
+    }
+    Section {
         title: "LOMTÁR"
         InfoRow { icon: "trash"; label: "Tartalom"; value: p.s.trash ? (p.s.trash.count + " elem, " + p.s.trash.sizeText) : "" }
         Column {

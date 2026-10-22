@@ -484,7 +484,8 @@ step_test() {
         # hibajelentés: elkészül, minden szakasz benne van, a titkok maszkolva, a rendszeroldali rész (sudo) is
         _check "$log" "FUSION-REPORT: RUN rc=0 " "hibajelentés: elkészül (fusion-report, a felhasználóként)" || ok_run=0
         _check "$log" "FUSION-REPORT: SECTIONS ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,ok,\s*\$" "hibajelentés: minden szakasz" || ok_run=0
-        _check "$log" "FUSION-REPORT: SLEEP services=enabled,enabled, section=1" "altatás: nvidia-suspend/-resume engedélyezve, ALTATÁS szakasz a hibajelentésben" || ok_run=0
+        _check "$log" "FUSION-REPORT: SLEEP services=masked,masked, section=1 lid=1 hook=ok nvhook=0" "altatás: nvidia-suspend/-resume maszkolva, Fúzió altatás-hook, ALTATÁS szakasz (fedél-mód) a hibajelentésben" || ok_run=0
+        _check "$log" "FUSION-POWER: LID start=suspend set=screen-off inhibit=1 back=suspend inhibit=0 invalid=elutasitva unit=active conf=644" "fedél lecsukásakor: a beállítás a segéden át, a logind fedél-zárja a mód szerint" || ok_run=0
         _check "$log" "FUSION-REPORT: MASK secret=0 email=0 ssid=0 alias=[1-9]" "hibajelentés: jelszó, e-mail, Wi-Fi-név maszkolva" || ok_run=0
         _check "$log" "FUSION-REPORT: SYSTEM update=[1-9][0-9]* pss=1 state=rendszerállapot: running" "hibajelentés: rendszeroldali rész (A/B-állapot, PSS) a segéden át" || ok_run=0
         # Wi-Fi: iwd fut, a ZBook firmware-je és drivere a képben, valódi kapcsolódás virtuális rádiókkal

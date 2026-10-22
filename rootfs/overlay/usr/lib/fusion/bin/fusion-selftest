@@ -801,11 +801,22 @@ rf=$(ls /tmp/fusion-report/fusion-hibajelentes-*.txt 2>/dev/null | head -n 1)
 echo "FUSION-REPORT: RUN rc=$rrc secs=$(( $(date +%s) - t0 )) size=$(stat -c %s "$rf" 2>/dev/null || echo 0) $(printf '%s' "$rout" | tail -n 1)"
 if [ -n "$rf" ]; then
     echo "FUSION-REPORT: SECTIONS $(for h in 'GYORS ELLENŐRZÉS' 'SZOLGÁLTATÁSOK' 'ESZKÖZÖK' 'LEMEZEK' 'HÁLÓZAT' 'RENDSZERFRISSÍTÉS' 'PROGRAMOK' 'MEMÓRIA' 'NAPLÓK' 'ADATVÉDELEM' 'ALTATÁS' 'WI-FI'; do grep -q "^$h" "$rf" && printf 'ok,' || printf '%s:hiányzik,' "$h"; done)"
-    echo "FUSION-REPORT: SLEEP services=$(systemctl is-enabled nvidia-suspend.service nvidia-resume.service 2>/dev/null | tr '\n' ',') section=$(grep -c '^  mem_sleep:' "$rf")"
+    echo "FUSION-REPORT: SLEEP services=$(systemctl is-enabled nvidia-suspend.service nvidia-resume.service 2>/dev/null | tr '\n' ',') section=$(grep -c '^  mem_sleep:' "$rf") lid=$(grep -c '^  fedél lecsukásakor:' "$rf") hook=$(test -x /usr/lib/systemd/system-sleep/fusion && echo ok || echo nincs) nvhook=$(ls /usr/lib/systemd/system-sleep/nvidia 2>/dev/null | wc -l)"
     echo "FUSION-REPORT: MASK secret=$(grep -c 'Titok123' "$rf") email=$(grep -c 'teszt.elek@pelda.hu' "$rf") ssid=$(grep -c 'FusionTeszt' "$rf") alias=$(grep -c 'EMAIL-1' "$rf")"
     echo "FUSION-REPORT: SYSTEM update=$(grep -c 'fusionos-.*\.efi' "$rf") pss=$(grep -c 'összesen (minden folyamat)' "$rf") state=$(grep -o 'rendszerállapot: [a-z]*' "$rf")"
     grep -E '^\s+\[' "$rf" | head -n 14 | sed 's/^/FUSION-REPORT:   /'
 fi
+# --- fedél lecsukásakor (0.0.56): a beállítás a segéden át, a logind fedél-zárja a mód szerint ---
+lidinh() { systemd-inhibit --list --no-legend 2>/dev/null | grep -c '^fuzio-fedel .*handle-lid-switch'; }
+p0=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin lid status 2>&1)
+urun sudo -n /usr/lib/fusion/bin/fusion-admin lid set screen-off >/dev/null 2>&1; i=0
+while [ "$(lidinh)" = 0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); done
+p1=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin lid status 2>&1); n1=$(lidinh)
+urun sudo -n /usr/lib/fusion/bin/fusion-admin lid set suspend >/dev/null 2>&1; i=0
+while [ "$(lidinh)" != 0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); done
+p2=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin lid status 2>&1); n2=$(lidinh)
+bad=$(urun sudo -n /usr/lib/fusion/bin/fusion-admin lid set rossz >/dev/null 2>&1 && echo elfogadta || echo elutasitva)
+echo "FUSION-POWER: LID start=$p0 set=$p1 inhibit=$n1 back=$p2 inhibit=$n2 invalid=$bad unit=$(systemctl is-active fusion-lid.service) conf=$(stat -c %a /data/system/power.conf 2>/dev/null)"
 # --- memória (0.0.30): a Fúzió-folyamatok PSS-e (arányos memória) és a megosztott (tmpfs) rész — tájékoztató ---
 memline=""
 for pid in $(pgrep -u fusion -f 'fusion_(shell|tasks_app|settings_app)\.py|fusion-(tasks|shell)' 2>/dev/null); do

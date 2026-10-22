@@ -1,0 +1,13 @@
+# Fúzió — fedél lecsukásakor altatás vagy csak a kijelző kikapcsolása (Beállítások → Rendszer → Energia)
+[Unit]
+Description=Fúzió — a fedél viselkedése (Beállítások)
+After=systemd-logind.service
+RequiresMountsFor=/data
+
+[Service]
+ExecStart=/usr/lib/fusion/bin/fusion-power lid-hold
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
