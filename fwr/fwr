@@ -318,13 +318,52 @@ fonts_apply() {  # (WINEPREFIX, LOG beállítva)
         [ -L "$_l" ] || continue
         [ -e "$_l" ] || rm -f "$_l"
     done
-    [ -d "$FWR_USER_FONTS" ] || return 0
-    find "$FWR_USER_FONTS" -maxdepth 3 -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' -o -iname '*.fon' -o -iname '*.fnt' \) 2>/dev/null \
-        | head -n 2000 | while IFS= read -r _f; do
-            _n="fusion-${_f##*/}"
-            [ "$(readlink "$_fd/$_n" 2>/dev/null)" = "$_f" ] && continue
-            rm -f "$_fd/$_n"; ln -s "$_f" "$_fd/$_n"
-        done
+    if [ -d "$FWR_USER_FONTS" ]; then
+        find "$FWR_USER_FONTS" -maxdepth 3 -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' -o -iname '*.fon' -o -iname '*.fnt' \) 2>/dev/null \
+            | head -n 2000 | while IFS= read -r _f; do
+                _n="fusion-${_f##*/}"
+                [ "$(readlink "$_fd/$_n" 2>/dev/null)" = "$_f" ] && continue
+                rm -f "$_fd/$_n"; ln -s "$_f" "$_fd/$_n"
+            done
+    fi
+    fonts_register
+}
+
+# A Windows a betűtípusokat a registryből ismeri (HKLM\...\Windows NT\CurrentVersion\Fonts): a DirectWrite
+# (a Qt 6-os programok — pl. a LightBurn 2.x — betűlistája) CSAK innen olvas, a Fonts mappát nem nézi.
+# Ezért a hivatkozott betűtípusok ide is bekerülnek („Fuzio: <név> (TrueType)” = fusion-<fájl>), és
+# kikerülnek, ha a betűtípust törölték. Csak változáskor fut (regedit), a lista a .fwr-fonts fájlban.
+fonts_register() {
+    _fd="$WINEPREFIX/drive_c/windows/Fonts"
+    _mf="$WINEPREFIX/.fwr-fonts"
+    _now=$(find "$_fd" -maxdepth 1 -name 'fusion-*' -type l 2>/dev/null | sed 's|.*/||' | sort)
+    [ "$_now" = "$(cat "$_mf" 2>/dev/null)" ] && return 0
+    command -v python3 >/dev/null || return 0
+    _reg="$WINEPREFIX/drive_c/fusion-fonts.reg"
+    FWR_FONTS_OLD="$(cat "$_mf" 2>/dev/null)" FWR_FONTS_NOW="$_now" python3 - "$_reg" <<'PYEOF' || return 0
+import os, sys
+def entry(f):
+    if '"' in f or '\\' in f:
+        return None
+    stem, ext = os.path.splitext(f[len("fusion-"):])
+    name = "Fuzio: " + stem + (" (TrueType)" if ext.lower() in (".ttf", ".otf", ".ttc") else "")
+    return name, f
+old = [e for e in map(entry, filter(None, os.environ.get("FWR_FONTS_OLD", "").splitlines())) if e]
+now = [e for e in map(entry, filter(None, os.environ.get("FWR_FONTS_NOW", "").splitlines())) if e]
+lines = ["Windows Registry Editor Version 5.00", ""]
+lines.append(r"[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Fonts]")
+for n, _ in old:
+    lines.append('"%s"=-' % n)
+for n, f in now:
+    lines.append('"%s"="%s"' % (n, f))
+with open(sys.argv[1], "w", encoding="utf-16") as out:
+    out.write("\r\n".join(lines) + "\r\n")
+PYEOF
+    if env -u DISPLAY -u WAYLAND_DISPLAY "$WINE" regedit /S 'C:\fusion-fonts.reg' >> "$LOG" 2>&1; then
+        printf '%s\n' "$_now" > "$_mf"
+        printf 'fwr: betűtípusok a registryben: %s\n' "$(printf '%s\n' "$_now" | grep -c .)" >> "$LOG"
+    fi
+    rm -f "$_reg"
 }
 
 # a profil környezeti változói (env.NÉV = érték) — a Windows-program is látja őket
