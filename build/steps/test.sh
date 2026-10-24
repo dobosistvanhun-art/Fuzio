@@ -319,6 +319,7 @@ step_test() {
             _check "$log" "FUSION-J3: PAM lastlog=0 login=0" "nincs pam_lastlog-hiba a naplóban" || ok_run=0
             _check "$log" "FUSION-API: USER version=1 profile=generic-kms roles=laser,printer present=[a-z,-]* ROOT generic-kms (ok, driver: none)" "Fúzió API (M8): a fusion csomag felhasználóként és rootként" || ok_run=0
             _check "$log" "FUSION-API: NOTIFY ok" "Fúzió API: értesítés a fusion-notify-on át" || ok_run=0
+            _check "$log" "FUSION-FONTS: ok ICU ok" "saját betűtípusok (fusion-fonts) és a Windows rendszer-ICU-ja" || ok_run=0
             # M8b: a fusion parancssor, sémák, feladat-protokoll
             _check "$log" "FUSION-CLI: JSON api-version=ok system=ok hardware=ok devices=ok volumes=ok power=ok jobs=ok schema=ok programs list=ok" "fusion CLI: minden lekérdezés JSON-ja a leírás szerint" || ok_run=0
             _check "$log" "FUSION-CLI: VERSION $FUSION_VERSION 1 generic-kms" "fusion system: verzió, API, kijelzőprofil" || ok_run=0

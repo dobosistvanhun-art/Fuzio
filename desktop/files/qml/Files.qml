@@ -32,6 +32,7 @@ FWindow {
         if (it.isDir) { p.go(it.full); return }
         var k = files.kind(it.full)
         if (k === "exe") { files.installProgram(it.full); say("Telepítő: a telepítés a Programkezelőben folytatódik"); return }
+        if (k === "font") { say(files.installFont(it.full)); return }
         // Fúzió-társítás (pl. .lbrn → LightBurn) mindig; a programok MIME-igénye csak akkor, ha a
         // beépített nézőke nem tudja megmutatni (kép, szöveg, archívum marad a nézőkében)
         var prog = files.openWithProgram(it.full, k === "image" || k === "text" || k === "archive")
@@ -55,6 +56,7 @@ FWindow {
         case "view": if (it.name && !it.isDir) openViewer(it.full); break
         case "openwith": if (it.name && !it.isDir && !it.isParent) openWithDlg.show(it.full); break
         case "install": if (it.name && !it.isDir) { files.installProgram(it.full); say("a Programkezelő megnyílt: " + it.name) } break
+        case "font": if (it.name) say(files.installFont(it.full)); break
         case "edit": if (it.name && !it.isDir) openEditor(it.full); break
         case "newfile": ask("Új fájl", "Az új fájl neve:", "", function (v) { var e = files.newFile(act.model.path, v); if (e) err("Nem hozható létre", e); else { act.model.reloadKeep(); act.setCur(act.model.indexOf(v)); openEditor(act.model.path + "/" + v) } }); break
         case "copy": case "move":
@@ -408,6 +410,7 @@ FWindow {
         CI { text: "Tömörítés (Alt+F5)"; act: "pack" }
         CI { text: "Kicsomagolás (Alt+F9)"; act: "extract" }
         CI { text: "Telepítés a Programkezelővel"; act: "install" }
+        CI { text: "Betűtípus telepítése (ttf, otf, fon, fnt, zip)"; act: "font" }
         CI { text: "Lomtárba (F8, Del)"; act: "delete" }
         CI { text: "Végleges törlés (Shift+Del)"; act: "delete-final" }
         MenuSeparator {}

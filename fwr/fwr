@@ -208,7 +208,7 @@ cmd_prepare() {
     stamp="$WINEPREFIX/.fwr-stamp"
     # csak a környezetet érintő kulcsok számítanak (a leírás egyéb mezői — név, ikon — nem)
     want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides|places)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16) $(sysdlls_id)"
-    if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then places_apply "$pf"; return 0; fi
+    if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then places_apply "$pf"; fonts_apply; return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
     # grafikus munkamenetben értesítés (az előkészítés néhány másodperc — ne tűnjön lefagyásnak)
@@ -286,6 +286,7 @@ cmd_prepare() {
     done
     places_apply "$pf"
     sysdlls_apply
+    fonts_apply
     "$WINESERVER" -k 2>/dev/null; "$WINESERVER" -w 2>/dev/null
     echo "$want" > "$stamp"
     say "fwr: kész."
@@ -304,6 +305,26 @@ sysdlls_apply() {  # (WINEPREFIX, LOG beállítva)
         cp "$_d" "$_s32/${_d##*/}.fwr-new" && mv -f "$_s32/${_d##*/}.fwr-new" "$_s32/${_d##*/}" \
             && printf 'fwr: rendszer-DLL: %s\n' "${_d##*/}" >> "$LOG"
     done
+}
+
+# a felhasználó saját betűtípusai (fusion-fonts, 0.0.57): hivatkozásként a környezet C:\Windows\Fonts
+# mappájába — a Wine onnan minden fajtát betölt (a raszteres .fon/.fnt-t is). Minden indításkor
+# frissül (olcsó); a már nem létező betűtípusok hivatkozása törlődik.
+FWR_USER_FONTS="${FWR_USER_FONTS:-$HOME/.local/share/fonts}"
+fonts_apply() {  # (WINEPREFIX, LOG beállítva)
+    _fd="$WINEPREFIX/drive_c/windows/Fonts"
+    [ -d "$_fd" ] || return 0
+    for _l in "$_fd"/fusion-*; do
+        [ -L "$_l" ] || continue
+        [ -e "$_l" ] || rm -f "$_l"
+    done
+    [ -d "$FWR_USER_FONTS" ] || return 0
+    find "$FWR_USER_FONTS" -maxdepth 3 -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' -o -iname '*.fon' -o -iname '*.fnt' \) 2>/dev/null \
+        | head -n 2000 | while IFS= read -r _f; do
+            _n="fusion-${_f##*/}"
+            [ "$(readlink "$_fd/$_n" 2>/dev/null)" = "$_f" ] && continue
+            rm -f "$_fd/$_n"; ln -s "$_f" "$_fd/$_n"
+        done
 }
 
 # a profil környezeti változói (env.NÉV = érték) — a Windows-program is látja őket

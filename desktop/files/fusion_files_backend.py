@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import tarfile
 import threading
 import time
@@ -34,6 +35,7 @@ CODE_EXT = {"gcode", "gc", "g", "nc", "ngc", "tap"}
 IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"}
 ARCHIVE_EXT = ("zip", "tar", "tar.gz", "tgz", "tar.xz", "txz", "tar.bz2", "tbz2")
 EXE_EXT = {"exe", "msi", "appimage", "flatpakref", "flatpak"}   # telepítők → Programkezelő
+FONT_EXT = {"ttf", "otf", "ttc", "fon", "fnt"}                   # betűtípusok → fusion-fonts
 CHUNK = 1024 * 1024
 
 
@@ -80,6 +82,8 @@ def kind_of(path):
         return "archive"
     if e in EXE_EXT:
         return "exe"
+    if e in FONT_EXT:
+        return "font"
     try:
         with open(path, "rb") as f:
             head = f.read(4096)
@@ -1292,6 +1296,19 @@ class Files(QObject):
     def installProgram(self, path):
         """telepítés: a Programkezelő nyílik ezzel a fájllal"""
         ui.spawn(["fusion-settings", "programs", path])
+
+    @pyqtSlot(str, result=str)
+    def installFont(self, path):
+        """betűtípus telepítése (fájl vagy zip): fusion-fonts — az eredmény szövege"""
+        try:
+            r = subprocess.run(["fusion-fonts", "install", path], capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return f"a betűtípus nem telepíthető: {e}"
+        lines = [l for l in (r.stdout + r.stderr).splitlines() if l.strip()]
+        n = sum(1 for l in lines if l.startswith("telepítve:"))
+        if n:
+            return (lines[0] if n == 1 else f"{n} betűtípus telepítve") + " — a futó programok újraindítás után látják"
+        return lines[-1] if lines else "nem volt telepíthető betűtípus"
 
     @pyqtSlot(str, bool, result=str)
     def openWithProgram(self, path, explicit_only):

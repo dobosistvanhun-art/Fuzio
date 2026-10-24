@@ -69,6 +69,8 @@ vulkan-tools
 # fordul, build/steps/wine.sh; 32 bites Linux-könyvtár nem kell — WoW64)
 libfreetype6
 libfontconfig1
+# fc-cache, fc-list: saját betűtípusok (fusion-fonts)
+fontconfig
 libgnutls30t64
 libunwind8
 libdbus-1-3

@@ -195,6 +195,7 @@ ln -sf /usr/lib/fusion/desktop/camera/fusion_camera_app.py "$R/usr/bin/fusion-ca
 ln -sf /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py "$R/usr/bin/fusion-vaskrom"
 ln -sf /usr/lib/fusion/desktop/installer/fusion_installer_app.py "$R/usr/bin/fusion-installer"
 ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
+ln -sf /usr/lib/fusion/bin/fusion-fonts "$R/usr/bin/fusion-fonts"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
 in_root systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
 for u in pipewire.socket pipewire-pulse.socket wireplumber.service; do

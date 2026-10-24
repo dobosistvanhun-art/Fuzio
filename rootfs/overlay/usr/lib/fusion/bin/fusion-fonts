@@ -1,0 +1,189 @@
+#!/usr/bin/python3
+# =============================================================================
+#  Fúzió — fusion-fonts: saját betűtípusok (0.0.57)
+#
+#    install <fájl|mappa|zip>…   betűtípus(ok) telepítése (.ttf .otf .ttc .fon .fnt; zip-ből is)
+#    list [--json]               a telepített saját betűtípusok
+#    remove <fájlnév>…           eltávolítás
+#
+#  A betűtípusok helye: ~/.local/share/fonts/Fuzio/ (a felhasználóé, a DATA-n — a rendszerfrissítés
+#  megtartja). Innen látja őket a Fúzió felülete és a Linux-programok (fontconfig; a Flatpak-programok
+#  is: Inkscape, GIMP, LibreOffice), a Windows-programok (LightBurn) pedig az fwr-en át: indításkor
+#  a környezetük C:\Windows\Fonts mappájába kerülnek hivatkozásként. A már futó program az új
+#  betűtípust az újraindítása után látja.
+# =============================================================================
+import json
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+
+DEST = os.path.join(os.path.expanduser("~"), ".local/share/fonts/Fuzio")
+EXTS = (".ttf", ".otf", ".ttc", ".fon", ".fnt")
+MAX_SIZE = 64 * 1024 * 1024
+MAX_FILES = 1000
+
+
+def font_kind(head):
+    """a fájl eleje alapján betűtípus-e (a kiterjesztés önmagában nem elég)"""
+    if head[:4] in (b"\x00\x01\x00\x00", b"true", b"typ1"):
+        return "TrueType"
+    if head[:4] == b"OTTO":
+        return "OpenType"
+    if head[:4] == b"ttcf":
+        return "TrueType-gyűjtemény"
+    if head[:2] == b"MZ":
+        return "Windows-betűkészlet (FON)"
+    if head[:2] in (b"\x00\x02", b"\x00\x03"):
+        return "Windows-raszterbetű (FNT)"
+    return None
+
+
+def safe_name(name):
+    name = os.path.basename(name.replace("\\", "/")).strip()
+    name = "".join(c for c in name if c not in '\x00/:*?"<>|')
+    return name[:200] if name and not name.startswith(".") else ""
+
+
+def install_bytes(name, data, out):
+    name = safe_name(name)
+    if not name or not name.lower().endswith(EXTS):
+        return
+    if len(data) > MAX_SIZE:
+        out["skipped"].append(f"{name}: túl nagy")
+        return
+    kind = font_kind(data[:8])
+    if not kind:
+        out["skipped"].append(f"{name}: nem betűtípus")
+        return
+    os.makedirs(DEST, exist_ok=True)
+    path = os.path.join(DEST, name)
+    tmp = path + ".fusion-new"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    out["installed"].append({"file": name, "kind": kind})
+
+
+def install_path(p, out):
+    if len(out["installed"]) >= MAX_FILES:
+        return
+    if os.path.isdir(p):
+        for root, _dirs, files in os.walk(p):
+            for f in sorted(files):
+                if f.lower().endswith(EXTS + (".zip",)):
+                    install_path(os.path.join(root, f), out)
+        return
+    if p.lower().endswith(".zip"):
+        try:
+            with zipfile.ZipFile(p) as z:
+                for info in z.infolist()[:20000]:
+                    if info.is_dir() or not info.filename.lower().endswith(EXTS):
+                        continue
+                    if info.file_size > MAX_SIZE or len(out["installed"]) >= MAX_FILES:
+                        out["skipped"].append(f"{safe_name(info.filename)}: túl nagy / túl sok")
+                        continue
+                    install_bytes(info.filename, z.read(info), out)
+        except (zipfile.BadZipFile, OSError) as e:
+            out["skipped"].append(f"{os.path.basename(p)}: {e}")
+        return
+    try:
+        if os.path.getsize(p) > MAX_SIZE:
+            out["skipped"].append(f"{os.path.basename(p)}: túl nagy")
+            return
+        with open(p, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        out["skipped"].append(f"{os.path.basename(p)}: {e.strerror or e}")
+        return
+    if not p.lower().endswith(EXTS):
+        out["skipped"].append(f"{os.path.basename(p)}: nem betűtípus (.ttf .otf .ttc .fon .fnt vagy .zip)")
+        return
+    install_bytes(os.path.basename(p), data, out)
+
+
+def refresh():
+    """a fontconfig gyorsítótára (ha nincs fc-cache, a programok maguk veszik észre)"""
+    if shutil.which("fc-cache"):
+        subprocess.run(["fc-cache", "-f", os.path.dirname(DEST)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+
+
+def notify(title, body):
+    if os.environ.get("DISPLAY") and shutil.which("fusion-notify"):
+        subprocess.run(["fusion-notify", "-i", "text", title, body], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+
+
+def listing():
+    try:
+        names = sorted(f for f in os.listdir(DEST) if f.lower().endswith(EXTS))
+    except OSError:
+        names = []
+    res = []
+    for n in names:
+        p = os.path.join(DEST, n)
+        try:
+            with open(p, "rb") as f:
+                k = font_kind(f.read(8)) or "?"
+            res.append({"file": n, "kind": k, "size": os.path.getsize(p)})
+        except OSError:
+            continue
+    return res
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__ or "", end="")
+        print("használat: fusion-fonts install <fájl|mappa|zip>… | list [--json] | remove <fájlnév>…")
+        return 0
+    cmd, args = argv[0], argv[1:]
+    if cmd == "install":
+        if not args:
+            print("fusion-fonts: add meg a betűtípus fájlját", file=sys.stderr)
+            return 2
+        out = {"installed": [], "skipped": []}
+        for a in args:
+            install_path(os.path.abspath(a), out)
+        if out["installed"]:
+            refresh()
+        for i in out["installed"]:
+            print(f"telepítve: {i['file']} ({i['kind']})")
+        for s in out["skipped"]:
+            print(f"kihagyva: {s}")
+        n = len(out["installed"])
+        if n:
+            notify("Betűtípus telepítve" if n == 1 else f"{n} betűtípus telepítve",
+                   (out["installed"][0]["file"] if n == 1 else "") + " — a már futó programok az újraindításuk után látják")
+            return 0
+        print("fusion-fonts: nem volt telepíthető betűtípus", file=sys.stderr)
+        return 1
+    if cmd == "list":
+        items = listing()
+        if "--json" in args:
+            print(json.dumps(items, ensure_ascii=False))
+        else:
+            for i in items:
+                print(f"{i['file']:<48} {i['kind']}")
+            if not items:
+                print("(nincs saját betűtípus)")
+        return 0
+    if cmd == "remove":
+        rc = 0
+        for a in args:
+            n = safe_name(a)
+            p = os.path.join(DEST, n)
+            if n and os.path.isfile(p):
+                os.remove(p)
+                print(f"eltávolítva: {n}")
+            else:
+                print(f"nincs ilyen: {a}", file=sys.stderr)
+                rc = 1
+        refresh()
+        return rc
+    print(f"fusion-fonts: ismeretlen parancs: {cmd}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

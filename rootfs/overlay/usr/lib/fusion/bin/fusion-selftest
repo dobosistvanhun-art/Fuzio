@@ -835,6 +835,8 @@ api=$(urun python3 -c "import fusion; from fusion import hardware, devices; d = 
 apir=$(python3 -c "import fusion.hardware as h; print(h.summary())" 2>&1 | tail -n 1)
 echo "FUSION-API: USER $api ROOT $apir"
 echo "FUSION-API: NOTIFY $(urun fusion-notify -u low -i settings "Fúzió API" "értesítés a fusion.notify-on át" && echo ok || echo HIBA)"
+# 0.0.57: saját betűtípusok (fusion-fonts) és a Windows rendszer-ICU-ja a Windows-programokhoz
+echo "FUSION-FONTS: $(urun fusion-fonts list --json >/dev/null 2>&1 && command -v fc-cache >/dev/null && echo ok || echo HIBA) ICU $([ -s /usr/lib/fusion/fwr/dlls/x86_64/icuuc.dll ] && [ -s /usr/lib/fusion/fwr/dlls/x86_64/icuin.dll ] && echo ok || echo HIBA)"
 # M8b: a `fusion` parancssor — minden lekérdezés JSON-kimenete a leírás (docs/api/cli.md) szerinti kulcsokkal
 urun sh -c 'for c in "api-version" "system" "hardware" "devices" "volumes" "power" "jobs" "schema" "programs list"; do
     printf "%s\t" "$c"; fusion $c --json 2>&1 | tr -d "\n"; echo; done' > /tmp/fusion-cli.txt
