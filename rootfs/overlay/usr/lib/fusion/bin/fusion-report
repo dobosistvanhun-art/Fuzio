@@ -679,6 +679,21 @@ def build(desc, sysinfo, m):
         if t:
             L.append(f"  {title}, utolsó {n} sor:")
             L += indent(t, 4)
+    # Windows-programok (fwr): minden program naplójából a legutóbbi indítás (vagy telepítés) vége —
+    # ebből látszik, miért nem indul el egy program (hiányzó DLL, kezeletlen kivétel, összeomlás)
+    fwr_dir = f"{home}/.local/share/fusion/fwr"
+    try:
+        logs = sorted((os.path.getmtime(os.path.join(fwr_dir, f)), f) for f in os.listdir(fwr_dir) if f.endswith(".log"))
+    except OSError:
+        logs = []
+    for _, f in reversed(logs[-6:]):
+        lines = read(os.path.join(fwr_dir, f)).splitlines()
+        start = max((i for i, l in enumerate(lines) if l.startswith("=== ")), default=0)
+        last = lines[start:][-60:]
+        if last:
+            when = datetime.datetime.fromtimestamp(os.path.getmtime(os.path.join(fwr_dir, f))).strftime("%Y-%m-%d %H:%M")
+            L.append(f"  Windows-program: {f[:-4]} (fwr napló, módosítva {when}), a legutóbbi indítás utolsó {len(last)} sora:")
+            L += indent("\n".join(last), 4)
     xl = [l for l in read(f"{home}/.local/share/xorg/Xorg.0.log").splitlines() if "(EE)" in l or "(WW)" in l][-25:]
     if sysinfo and sysinfo.get("xorg_root"):
         xl = sysinfo["xorg_root"] + xl
