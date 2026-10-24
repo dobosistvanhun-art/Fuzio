@@ -40,6 +40,7 @@ FWR_DATA="${FWR_DATA:-/data/fwr}"
 FWR_PROGRAMS="${FWR_PROGRAMS:-/data/programs}"
 FWR_PROFILES="${FWR_PROFILES:-/usr/lib/fusion/fwr/profiles}"
 FWR_TOOLS="${FWR_TOOLS:-/usr/lib/fusion/fwr/tools}"
+FWR_DLLS="${FWR_DLLS:-/usr/lib/fusion/fwr/dlls}"
 FWR_LOGS="${HOME:-/tmp}/.local/share/fusion/fwr"
 WINE="$FWR_WINE/bin/wine"
 WINESERVER="$FWR_WINE/bin/wineserver"
@@ -51,7 +52,7 @@ prof_get() {  # prof_get <fájl> <kulcs>
     sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1 | sed 's/[[:space:]]*$//'
 }
 prof_keys() {  # prof_keys <fájl> <előtag> -> "kulcs|érték" sorok
-    sed -n "s/^[[:space:]]*$2\.\([A-Za-z0-9]*\)[[:space:]]*=[[:space:]]*\(.*\)$/\1|\2/p" "$1" | sed 's/[[:space:]]*$//'
+    sed -n "s/^[[:space:]]*$2\.\([A-Za-z0-9_]*\)[[:space:]]*=[[:space:]]*\(.*\)$/\1|\2/p" "$1" | sed 's/[[:space:]]*$//'
 }
 profile() {  # profile <id> -> a profilfájl (a Programkezelő leírása, különben a recept)
     case "$1" in *[!a-zA-Z0-9_.-]*|"") fail "érvénytelen program-azonosító: $1" ;; esac
@@ -206,7 +207,7 @@ cmd_prepare() {
     [ -w "$(dirname "$WINEPREFIX")" ] || fail "a $(dirname "$WINEPREFIX") nem írható"
     stamp="$WINEPREFIX/.fwr-stamp"
     # csak a környezetet érintő kulcsok számítanak (a leírás egyéb mezői — név, ikon — nem)
-    want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides|places)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16)"
+    want="$(wine_build_id) $(grep -E '^[[:space:]]*(windows|port\.|drive\.|dlloverrides|places)' "$pf" | sha256sum | cut -c1-16) $(sha256sum "$0" | cut -c1-16) $(sysdlls_id)"
     if [ -r "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then places_apply "$pf"; return 0; fi
 
     say "fwr: $(prof_get "$pf" name) futtatókörnyezetének előkészítése ($WINEPREFIX)…"
@@ -284,9 +285,36 @@ cmd_prepare() {
         rm -f "$dd/$l:"; ln -s "$target" "$dd/$l:"
     done
     places_apply "$pf"
+    sysdlls_apply
     "$WINESERVER" -k 2>/dev/null; "$WINESERVER" -w 2>/dev/null
     echo "$want" > "$stamp"
     say "fwr: kész."
+}
+
+# a Windows rendszer-DLL-jei, amelyek a Wine-ból hiányoznak (0.0.57): a Windows 10 System32-jének
+# ICU-ja (icuuc.dll, icuin.dll, icu.dll) — a Qt 6-os programok egy része importálja (LightBurn 2.2.00).
+# A rendszerképből (FWR_DLLS/x86_64) a környezet System32 mappájába kerülnek, ha ott nincs ugyanaz.
+sysdlls_id() { cat "$FWR_DLLS"/x86_64/*.dll 2>/dev/null | sha256sum | cut -c1-16; }
+sysdlls_apply() {  # (WINEPREFIX, LOG beállítva)
+    _s32="$WINEPREFIX/drive_c/windows/system32"
+    [ -d "$_s32" ] || return 0
+    for _d in "$FWR_DLLS"/x86_64/*.dll; do
+        [ -r "$_d" ] || continue
+        cmp -s "$_d" "$_s32/${_d##*/}" && continue
+        cp "$_d" "$_s32/${_d##*/}.fwr-new" && mv -f "$_s32/${_d##*/}.fwr-new" "$_s32/${_d##*/}" \
+            && printf 'fwr: rendszer-DLL: %s\n' "${_d##*/}" >> "$LOG"
+    done
+}
+
+# a profil környezeti változói (env.NÉV = érték) — a Windows-program is látja őket
+env_apply() {  # env_apply <id> <profil> — előbb a recept, aztán a program leírója (az felülírja)
+    { [ -r "$FWR_PROFILES/$1.fwr" ] && prof_keys "$FWR_PROFILES/$1.fwr" env
+      [ "$2" != "$FWR_PROFILES/$1.fwr" ] && prof_keys "$2" env; } > "${TMPDIR:-/tmp}/fwr-env.$$" 2>/dev/null
+    while IFS='|' read -r _k _v; do
+        case "$_k" in ""|*[!A-Za-z0-9_]*) continue ;; esac
+        export "$_k=$_v"
+    done < "${TMPDIR:-/tmp}/fwr-env.$$"
+    rm -f "${TMPDIR:-/tmp}/fwr-env.$$"
 }
 
 # a profil portjai mögötti eszközök állapota (felhasználóbarát figyelmeztetés)
@@ -341,6 +369,7 @@ cmd_launch() {
     [ -f "$exe" ] || fail "$(prof_get "$pf" name) nincs telepítve — telepítés: fwr install $id <telepítő.exe>"
     say "fwr: $(prof_get "$pf" name) indítása"
     port_report "$pf"
+    env_apply "$id" "$pf"
     printf '\n=== %s indítás: %s\n' "$(date '+%F %T')" "$winexe" >> "$LOG"
     cd "$(dirname "$exe")" || true
     "$WINE" "$winexe" "$@" >> "$LOG" 2>&1
@@ -354,6 +383,7 @@ cmd_run() {
     id=$1; prog=$2; shift 2; pf=$(profile "$id")
     cmd_prepare "$id" >/dev/null
     wine_env "$id" "$pf"
+    env_apply "$id" "$pf"
     "$WINE" "$prog" "$@" 2>> "$LOG"
 }
 

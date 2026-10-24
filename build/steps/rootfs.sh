@@ -18,7 +18,7 @@ rootfs_inputs_hash() {
         (cd "$FUSION_ROOT" && find rootfs hardware devices fwr printer desktop programs tools VERSION -type f \
             -not -path '*/__pycache__/*' -not -name '*.pyc' -print0 2>/dev/null | sort -z | xargs -0 sha256sum)
         (cd "$BUILD_DIR" && find config -type f -print0 2>/dev/null | sort -z | xargs -0 sha256sum)
-        for d in "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(printer_out_dir)"; do
+        for d in "$(nvidia_ko_dir)" "$(wine_out_dir)" "$(icu_out_dir)" "$(printer_out_dir)"; do
             [ -d "$d" ] && (cd "$d" && find . -type f -printf '%P %s %T@\n' | sort)
         done
     } | sha256sum | cut -c1-64
@@ -29,6 +29,7 @@ rootfs_stale() {
     [ -r "$img" ] || return 0
     nvidia_ko_ready || return 0
     wine_ready || return 0
+    icu_ready || return 0
     printer_ready || return 0
     [ "$(cat "$img.inputs" 2>/dev/null)" != "$(rootfs_inputs_hash)" ]
 }
@@ -62,6 +63,8 @@ step_rootfs() {
     nvidia_ko_ready || step_drivers
     # a Fúzió Windows Runtime motorja (Wine, WoW64) — ha még nincs kész, most fordul
     wine_ready || step_wine
+    # a Windows rendszer-ICU-ja (Qt 6-os programok, pl. LightBurn 2.2) — ha még nincs kész, most fordul
+    icu_ready || step_icu
     # M5: Klipper + Moonraker futtatókörnyezet — ha még nincs kész, most készül
     printer_ready || step_printer
 
@@ -80,7 +83,7 @@ step_rootfs() {
     step "Rendszerkép: Ubuntu 24.04 (noble) minbase + Fúzió csomagok"
     info "tükör: $ROOTFS_MIRROR"
     FUSION_NVIDIA_KO=$(nvidia_ko_dir)
-    FUSION_WINE_BUILD=$(wine_out_dir); FUSION_WINE_ID=$(wine_build_id)
+    FUSION_WINE_BUILD=$(wine_out_dir); FUSION_WINE_ID=$(wine_build_id); FUSION_ICU_BUILD=$(icu_out_dir)
     FUSION_PRINTER_BUILD=$(printer_out_dir); FUSION_PRINTER_ID=$(printer_build_id)
     FUSION_WEBUI_DIR=$(webui_dir)
     FUSION_MAINSAIL_CONFIG=$(printer_src_dir mainsail-config "$MAINSAIL_CONFIG_COMMIT")
@@ -88,7 +91,7 @@ step_rootfs() {
     FUSION_EXTRA_ROOT="$CACHE_DIR/root"
     [ -d "$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI" ] || die "hiányzik a kicsomagolt kernel — előbb: build/fusion-build fetch"
     export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES \
-           FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID \
+           FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID FUSION_ICU_BUILD \
            FUSION_PRINTER_BUILD FUSION_PRINTER_ID FUSION_WEBUI_DIR WEBUI_ZIPS FUSION_MAINSAIL_CONFIG FUSION_FLUIDD_CONFIG
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \

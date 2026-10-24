@@ -9,7 +9,7 @@ set -Eeuo pipefail
 trap 'echo "  [customize] HIBA: a(z) $LINENO. sorban: $BASH_COMMAND (kilépési kód: $?)" >&2' ERR
 R="$1"
 : "${FUSION_ROOT:?}" "${FUSION_VERSION:?}" "${FUSION_MILESTONE:?}" "${KERNEL_ABI:?}" "${FUSION_NVIDIA_KO:?}" "${NVIDIA_MODULES:?}"
-: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FIRMWARE_FILES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}"
+: "${FUSION_EXTRA_ROOT:?}" "${EXTRA_MODULES:?}" "${FIRMWARE_FILES:?}" "${FUSION_WINE_BUILD:?}" "${FUSION_WINE_ID:?}" "${FUSION_ICU_BUILD:?}"
 in_root() { chroot "$R" "$@"; }
 
 echo "  [customize] Fúzió fájlok"
@@ -102,6 +102,10 @@ cp "$FUSION_WINE_BUILD/BUILD-INFO" "$R/usr/lib/fusion/wine/BUILD-INFO"
 install -m 0755 "$FUSION_ROOT/fwr/fwr" "$R/usr/lib/fusion/fwr/fwr"
 rm -rf "$R/usr/lib/fusion/fwr/profiles"; cp -r "$FUSION_ROOT/fwr/profiles" "$R/usr/lib/fusion/fwr/profiles"
 install -m 0644 "$FUSION_WINE_BUILD"/*.exe "$R/usr/lib/fusion/fwr/tools/"
+# a Windows rendszer-ICU-ja: az fwr a programok környezetének System32 mappájába másolja
+mkdir -p "$R/usr/lib/fusion/fwr/dlls/x86_64"
+install -m 0644 "$FUSION_ICU_BUILD"/*.dll "$R/usr/lib/fusion/fwr/dlls/x86_64/"
+[ -r "$R/usr/lib/fusion/fwr/dlls/x86_64/icuuc.dll" ] || { echo "  [customize] HIBA: nincs icuuc.dll a képben"; exit 1; }
 chown -R root:root "$R/usr/lib/fusion/wine" "$R/usr/lib/fusion/fwr"
 ln -sf /usr/lib/fusion/fwr/fwr "$R/usr/bin/fwr"
 [ -x "$R/usr/lib/fusion/wine/bin/wine" ] || { echo "  [customize] HIBA: nincs wine a képben"; exit 1; }

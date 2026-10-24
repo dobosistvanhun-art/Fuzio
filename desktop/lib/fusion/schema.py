@@ -72,6 +72,7 @@ PROGRAM_FIELDS = {
                       values=("standard", "none"), types=["win64"]),
     "port.COMn":   _f("role", "soros port → eszközszerep (port.COM3 = laser)", types=["win64"]),
     "drive.X":     _f("dir", "meghajtóbetű → mappa (abszolút, vagy a saját mappához képest)", types=["win64"]),
+    "env.NAME":    _f("text", "környezeti változó a Windows-programnak (env.QTWEBENGINE_DISABLE_SANDBOX = 1)", types=["win64"]),
     "match":       _f("text", "recept: a telepítőfájl nevének mintája (LightBurn*.exe)", types=["win64"], recipe_only=True),
     # flatpak
     "appid":       _f("appid", "Flatpak-azonosító (com.prusa3d.PrusaSlicer)", types=["flatpak"]),
@@ -95,6 +96,9 @@ def _field(fields, key):
     if key in fields:
         return fields[key]
     m = re.match(r"^(port)\.(.+)$|^(drive)\.(.+)$", key)
+    e = re.match(r"^env\.([A-Za-z_][A-Za-z0-9_]*)$", key)
+    if e:
+        return dict(fields["env.NAME"], _sub=e.group(1), _subkind="env")
     if m and m.group(1):
         return dict(fields["port.COMn"], _sub=m.group(2), _subkind="com")
     if m and m.group(3):

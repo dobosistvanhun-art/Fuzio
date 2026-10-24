@@ -9,6 +9,7 @@
 #    fetch              kernel, busybox, modulok, betűkészlet, NVIDIA 470 csomagok letöltése (root nélkül)
 #    drivers            NVIDIA 470 kernelmodul fordítása a rögzített kernelhez — root kell (sudo)
 #    wine               Wine (WoW64) fordítása a Fúzió Windows Runtime-hoz — root kell (sudo)
+#    icu                a Windows rendszer-ICU-ja (icuuc.dll…) a Qt 6-os programokhoz — root kell (sudo)
 #    printer            Klipper + Moonraker futtatókörnyezet (M5) — root kell (sudo)
 #    rootfs [--force]   a Fúzió rendszerkép (EROFS) építése — root kell (sudo)
 #    build              initramfs-ek + UKI-k (Fúzió + diagnosztika) + ESP-fa
@@ -78,13 +79,14 @@ step_clean() {
     ok "build/out törölve"
 }
 
-usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
     deps)     step_deps "$@" ;;
     fetch)    step_fetch ;;
     wine)     if [ "$(id -u)" -eq 0 ]; then step_wine; else sudo "$BUILD_DIR/fusion-build" wine; fi ;;
+    icu)      if [ "$(id -u)" -eq 0 ]; then step_icu; else sudo "$BUILD_DIR/fusion-build" icu; fi ;;
     printer)  if [ "$(id -u)" -eq 0 ]; then step_printer; else sudo -E "$BUILD_DIR/fusion-build" printer; fi ;;
     drivers)  if [ "$(id -u)" -eq 0 ]; then step_drivers; else sudo "$BUILD_DIR/fusion-build" drivers; fi ;;
     rootfs)   if [ "$(id -u)" -eq 0 ]; then step_rootfs; else ensure_rootfs "$@"; fi ;;

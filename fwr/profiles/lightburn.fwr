@@ -14,3 +14,7 @@ open = .lbrn .lbrn2
 port.COM3 = laser
 # P: = Projektek (a felhasználó mappája); a Linux-fájlrendszer (Z:) nem látszik
 drive.P = Projektek
+# a LightBurn 2.2 a Qt WebEngine-t (Chromium) is betölti: a Chromium homokozója és GPU-gyorsítása
+# a Windows-futtatóban nem működik — nélkülük fut (a Fúzió saját homokozója ettől független)
+env.QTWEBENGINE_DISABLE_SANDBOX = 1
+env.QTWEBENGINE_CHROMIUM_FLAGS = --no-sandbox --disable-gpu
