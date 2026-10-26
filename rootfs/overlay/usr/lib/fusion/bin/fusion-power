@@ -4,7 +4,9 @@
 #
 #    status            a beállított mód: suspend | screen-off-ac | screen-off
 #    set <mód>         (root — fusion-admin lid set) a mód mentése a DATA-ra és alkalmazása
-#    lid-hold          (fusion-lid.service) a mód szerint tartja / elengedi a fedél kezelését
+#    lid-hold          (fusion-lid.service) a mód szerint tartja / elengedi a fedél kezelését,
+#                      és közben a processzor ütemezőjét is a táphoz igazítja (lásd lent)
+#    cpu               a processzor ütemezője most (governor)
 #
 #  Módok:
 #    suspend         altatás (a logind alapviselkedése)
@@ -13,6 +15,8 @@
 #  A kijelzőt a Fúzió Shell kapcsolja ki / be (fedél-figyelés), ugyanúgy, mint amikor a lézer /
 #  nyomtató tartja ébren a gépet (fusion-keepawake@). Itt csak a logind fedél-kezelése tiltódik
 #  (handle-lid-switch zár) — a kézi altatás és a leállítás továbbra is működik.
+#  Processzor (0.0.59): töltőn "performance" (a CAD / fordítás azonnal teljes órajelen fut),
+#  akkumulátoron "powersave". A power.conf "cpu=" sora felülírja: auto | performance | powersave.
 #  A beállítás a DATA-n van (/data/system/power.conf), így a rendszerfrissítés megtartja.
 # =============================================================================
 set -u
@@ -46,6 +50,32 @@ wanted() {   # 0 = a fedél ne altasson most
     esac
 }
 
+CPUFREQ=${FUSION_CPUFREQ:-/sys/devices/system/cpu/cpufreq}
+
+cpu_mode() {
+    m=$(sed -n 's/^cpu=//p' "$CONF" 2>/dev/null | head -n 1)
+    case "$m" in performance|powersave) echo "$m" ;; *) echo auto ;; esac
+}
+
+cpu_now() { cat "$CPUFREQ"/policy0/scaling_governor 2>/dev/null || echo "?"; }
+
+# a kívánt ütemező beállítása minden magon, ha a kernel ismeri (intel_pstate, acpi-cpufreq)
+cpu_apply() {
+    case "$(cpu_mode)" in
+        auto) if on_ac; then g=performance; else g=powersave; fi ;;
+        *) g=$(cpu_mode) ;;
+    esac
+    [ "$(cpu_now)" = "$g" ] && return 0
+    changed=0
+    for f in "$CPUFREQ"/policy*/scaling_governor; do
+        [ -w "$f" ] || continue
+        grep -qw "$g" "$(dirname "$f")/scaling_available_governors" 2>/dev/null || continue
+        echo "$g" > "$f" 2>/dev/null && changed=1
+    done
+    [ $changed -eq 1 ] && echo "processzor: $g ($(cpu_mode)$(on_ac && echo ', töltőn' || echo ', akkumulátoron'))"
+    return 0
+}
+
 lid_hold() {
     pid=""
     trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; exit 0' TERM INT
@@ -62,6 +92,7 @@ lid_hold() {
             kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; pid=""
             echo "fedél: altat ($(mode)$(on_ac && echo ', töltőn' || echo ', akkumulátoron'))"
         fi
+        cpu_apply
         sleep 5 & wait $! 2>/dev/null
     done
 }
@@ -74,9 +105,10 @@ case "$cmd" in
         case "$1" in suspend|screen-off-ac|screen-off) ;; *) fail "ismeretlen mód: $1" ;; esac
         [ "$(id -u)" -eq 0 ] || fail "rootként kell futnia"
         mkdir -p "$(dirname "$CONF")" || fail "a beállítás helye nem hozható létre"
-        printf 'lid=%s\n' "$1" > "$CONF.tmp" && chmod 0644 "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || fail "a beállítás nem menthető"
+        { printf 'lid=%s\n' "$1"; grep -v '^lid=' "$CONF" 2>/dev/null; } > "$CONF.tmp" && chmod 0644 "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || fail "a beállítás nem menthető"
         systemctl restart fusion-lid.service 2>/dev/null || true
         echo "$1" ;;
     lid-hold) lid_hold ;;
-    *) fail "használat: status | set <mód> | lid-hold" ;;
+    cpu) echo "$(cpu_now) ($(cpu_mode))" ;;
+    *) fail "használat: status | set <mód> | lid-hold | cpu" ;;
 esac
