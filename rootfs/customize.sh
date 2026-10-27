@@ -163,7 +163,7 @@ in_root /usr/lib/fusion/printer/moonraker-env/bin/python -c 'import tornado, nac
 echo "  [customize] Fúzió Desktop (M6): Fúzió Shell, Fájlkezelő, Beállítások"
 DK="$R/usr/lib/fusion/desktop"
 rm -rf "$DK" "$R/usr/lib/fusion/shell"; mkdir -p "$DK"
-for d in lib qml icons shell files settings tasks disks installer laser camera games bin; do
+for d in lib qml icons shell files settings tasks disks installer laser camera games ai bin; do
     cp -r "$FUSION_ROOT/desktop/$d" "$DK/"
 done
 install -m 0644 "$FUSION_ROOT/desktop/apps.json" "$DK/apps.json"
@@ -171,7 +171,8 @@ find "$DK" -name '__pycache__' -prune -exec rm -rf {} +
 rm -rf "$DK/games/vaskrom/art-src" "$DK/games/vaskrom/windows"   # a rajzolt motorképek forrása (fejlesztői eszköz, numpy) — a képbe csak az img/ kell
 chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusion_files.py" \
     "$DK/settings/fusion_settings.py" "$DK/bin/fusion" "$DK/bin/fusion-notify" "$DK/bin/fusion-sound" "$DK/bin/fusion-drive" \
-    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/games/vaskrom/fusion_vaskrom.py" "$DK/installer/fusion_installer_app.py"
+    "$DK/tasks/fusion_tasks_app.py" "$DK/tasks/fusion-tasks-testwin" "$DK/disks/fusion_disks_app.py" "$DK/laser/fusion_laser_app.py" "$DK/camera/fusion_camera_app.py" "$DK/games/vaskrom/fusion_vaskrom.py" "$DK/installer/fusion_installer_app.py" \
+    "$DK/ai/fusion_ai_app.py" "$DK/ai/tests/fake-claude"
 chown -R root:root "$DK"
 # Fúzió API (M8): a `fusion` Python-csomag minden Python-programnak (Fúzió-programok, szkriptek, root-segédek)
 ln -sfn /usr/lib/fusion/desktop/lib/fusion "$R/usr/lib/python3/dist-packages/fusion"
@@ -194,6 +195,7 @@ ln -sf /usr/lib/fusion/desktop/laser/fusion_laser_app.py "$R/usr/bin/fusion-lase
 ln -sf /usr/lib/fusion/desktop/camera/fusion_camera_app.py "$R/usr/bin/fusion-camera"
 ln -sf /usr/lib/fusion/desktop/games/vaskrom/fusion_vaskrom.py "$R/usr/bin/fusion-vaskrom"
 ln -sf /usr/lib/fusion/desktop/installer/fusion_installer_app.py "$R/usr/bin/fusion-installer"
+ln -sf /usr/lib/fusion/desktop/ai/fusion_ai_app.py "$R/usr/bin/fusion-ai"
 ln -sf /usr/lib/fusion/bin/fusion-report "$R/usr/bin/fusion-report"
 ln -sf /usr/lib/fusion/bin/fusion-fonts "$R/usr/bin/fusion-fonts"
 # hang: a PipeWire felhasználói szolgáltatásai (foglalat-indítás) minden felhasználónak
@@ -232,7 +234,8 @@ sys.path.insert(0, "/usr/lib/fusion/desktop/files")
 sys.path.insert(0, "/usr/lib/fusion/desktop/settings")
 sys.path.insert(0, "/usr/lib/fusion/desktop/disks")
 sys.path.insert(0, "/usr/lib/fusion/desktop/installer")
-import fusion_disks_app, fusion_installer_app
+sys.path.insert(0, "/usr/lib/fusion/desktop/ai")
+import fusion_disks_app, fusion_installer_app, fusion_ai_core
 import fusion_ui, fusion.x11, fusion.devices, fusion.notify, fusion_net, fusion_apps, fusion_files_backend, fusion_settings_backend
 import fusion_programs, fusion_store, fusion_sound, fusion_drive, fusion_tasks
 assert fusion_apps.fp is fusion_programs, "a Programkezelő modulja nem töltődött be"

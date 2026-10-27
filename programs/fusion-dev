@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Fúzió — fejlesztői eszközök (Node.js LTS, Wrangler)
+"""Fúzió — fejlesztői eszközök (Node.js LTS, Wrangler, Claude Code)
 
     fusion-dev                    állapot
     fusion-dev install node       Node.js LTS (nodejs.org, ellenőrzőösszeggel) → /data/dev/node
@@ -8,6 +8,10 @@
     fusion-dev install wrangler   Cloudflare Wrangler (npm, a felhasználó mappájába: ~/.local)
     fusion-dev update wrangler
     fusion-dev remove wrangler
+    fusion-dev install claude     Claude Code (az Anthropic hivatalos telepítője, ~/.local/bin/claude) és a
+                                  Claude Agent SDK a FusionAI-hoz (PyPI, ~/.local/share/fusion-ai/python)
+    fusion-dev update claude
+    fusion-dev remove claude      a Claude Code és az SDK törlése (a bejelentkezés és a munkamenetek: ~/.claude marad)
     fusion-dev box                Fejlesztődoboz: bejelentkezés (Ubuntu 24.04 a DATA-n, apt-tal; a saját mappa közös)
     fusion-dev box status|create|remove
     fusion-dev box run <parancs…> egy parancs a dobozban (az aktuális mappában, ha a saját mappán belül van)
@@ -15,7 +19,7 @@
 A rendszerkép nem változik (csak olvasható): minden a DATA-n van, root nélkül. Ami apt-tal települ (pl. a Fúzió
 buildjének eszközei), az a Fejlesztődobozba kerül (rendszergazdai fiók kell). A parancsok a munkamenetben
 (Terminál) a PATH-on vannak: /data/dev/node/bin és ~/.local/bin. Bejelentkezés a Cloudflare-be:
-`wrangler login` (a böngészőben).
+`wrangler login` (a böngészőben). Bejelentkezés a Claude-ba (Pro/Max előfizetés): `claude auth login`.
 """
 import hashlib
 import json
@@ -181,6 +185,113 @@ def npm(*args):
         raise DevError(f"az npm hibával állt le ({rc})")
 
 
+CLAUDE = os.path.join(HOME, ".local", "bin", "claude")
+CLAUDE_DATA = os.path.join(HOME, ".local", "share", "claude")
+CLAUDE_INSTALLER = os.environ.get("FUSION_DEV_CLAUDE_INSTALLER", "https://claude.ai/install.sh")
+AI_SDK = os.path.join(HOME, ".local", "share", "fusion-ai", "python")
+PYPI = os.environ.get("FUSION_DEV_PYPI", "https://pypi.org")
+
+
+def claude_version():
+    if not os.access(CLAUDE, os.X_OK):
+        return ""
+    try:
+        out = subprocess.run([CLAUDE, "--version"], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    m = re.search(r"(\d+\.\d+\.\d+)", out)
+    return m.group(1) if m else out.strip()[:40]
+
+
+def sdk_version():
+    try:
+        for n in os.listdir(AI_SDK):
+            m = re.match(r"claude_agent_sdk-(.+)\.dist-info$", n)
+            if m:
+                return m.group(1)
+    except OSError:
+        pass
+    return ""
+
+
+def pip_wheel():
+    """a pip a PyPI-ról, ellenőrzőösszeggel (a rendszerképben nincs pip; a kerékből közvetlenül fut)"""
+    with fetch(PYPI + "/pypi/pip/json") as r:
+        d = json.load(r)
+    f = next((u for u in d.get("urls", []) if u.get("packagetype") == "bdist_wheel"), None)
+    if not f:
+        raise DevError("a pip kereke nem található a PyPI-n")
+    cache = os.path.join(HOME, ".cache", "fusion-dev")
+    os.makedirs(cache, exist_ok=True)
+    dest = os.path.join(cache, f["filename"])
+    if not os.path.isfile(dest):
+        say(f"{f['filename']} letöltése…")
+        h = hashlib.sha256()
+        tmp = dest + ".part"
+        with fetch(f["url"], timeout=120) as r, open(tmp, "wb") as o:
+            while True:
+                b = r.read(1 << 16)
+                if not b:
+                    break
+                o.write(b)
+                h.update(b)
+        if h.hexdigest() != f.get("digests", {}).get("sha256"):
+            os.unlink(tmp)
+            raise DevError("a pip ellenőrzőösszege nem egyezik — a letöltés sérült, próbálja újra")
+        os.replace(tmp, dest)
+    return dest
+
+
+def install_claude(update=False):
+    # 1) a Claude Code: az Anthropic hivatalos, natív telepítője (root nélkül: ~/.local/bin, ~/.local/share/claude)
+    if claude_version() and update:
+        say("$ claude update")
+        subprocess.run([CLAUDE, "update"])
+    elif not claude_version():
+        say(f"A Claude Code telepítése ({CLAUDE_INSTALLER})…")
+        with fetch(CLAUDE_INSTALLER, timeout=120) as r:
+            script = r.read()
+        rc = subprocess.run(["bash", "-s"], input=script).returncode
+        if rc != 0 or not claude_version():
+            raise DevError(f"a Claude Code telepítője hibával állt le ({rc})")
+    say(f"Claude Code {claude_version()} → {CLAUDE}")
+    # 2) a Claude Agent SDK (Python) a FusionAI-nak: a forráscsomagból, így a Claude Code nem kerül bele még egyszer
+    if sdk_version() and not update:
+        say(f"Claude Agent SDK {sdk_version()} már telepítve")
+    else:
+        whl = pip_wheel()
+        new = AI_SDK + ".new"
+        shutil.rmtree(new, ignore_errors=True)
+        cmd = [sys.executable, os.path.join(whl, "pip"), "install", "--disable-pip-version-check", "--no-input",
+               "--isolated", "--target", new, "--no-binary", "claude-agent-sdk", "claude-agent-sdk"]
+        say("$ pip install --target ~/.local/share/fusion-ai/python claude-agent-sdk")
+        rc = subprocess.run(cmd).returncode
+        if rc != 0:
+            shutil.rmtree(new, ignore_errors=True)
+            raise DevError(f"a pip hibával állt le ({rc}) — a régi SDK (ha volt) megmaradt")
+        old = AI_SDK + ".old"
+        shutil.rmtree(old, ignore_errors=True)
+        if os.path.isdir(AI_SDK):
+            os.rename(AI_SDK, old)
+        os.rename(new, AI_SDK)
+        shutil.rmtree(old, ignore_errors=True)
+        say(f"Claude Agent SDK {sdk_version()} → {AI_SDK}")
+    say("Bejelentkezés (egyszer): claude auth login — a Claude Pro/Max fiókoddal, az Anthropic oldalán")
+
+
+def remove_claude():
+    shutil.rmtree(AI_SDK, ignore_errors=True)
+    if os.path.lexists(CLAUDE):
+        os.unlink(CLAUDE)
+    shutil.rmtree(CLAUDE_DATA, ignore_errors=True)
+    try:
+        os.rmdir(os.path.dirname(AI_SDK))
+    except OSError:
+        pass
+    say("Claude Code és SDK eltávolítva. A bejelentkezés és a munkamenetek (~/.claude, ~/.claude.json) megmaradtak;"
+        " kijelentkezés előtte: claude auth logout")
+
+
 ADMIN = ["sudo", "-n", os.environ.get("FUSION_ADMIN", "/usr/lib/fusion/bin/fusion-admin"), "devbox"]
 
 
@@ -215,12 +326,14 @@ def main(a):
         n, w = node_version(), wrangler_version()
         say(f"Node.js:  {n or 'nincs telepítve (fusion-dev install node)'}" + (f"  (npm {npm_version()})" if n else ""))
         say(f"Wrangler: {w or 'nincs telepítve (fusion-dev install wrangler)'}")
+        c, sv = claude_version(), sdk_version()
+        say(f"Claude:   {c or 'nincs telepítve (fusion-dev install claude)'}" + (f"  (SDK {sv or 'hiányzik'})" if c else ""))
         box_st = box_status()
         say("Doboz:    " + ("kész (fusion-dev box)" if box_st.get("exists") else "nincs (fusion-dev box create)"))
         return 0
     if cmd == "--json":
         print(json.dumps({"node": node_version(), "npm": npm_version() if node_version() else "", "wrangler": wrangler_version(),
-                          "box": box_status()}))
+                          "claude": claude_version(), "claude_sdk": sdk_version(), "box": box_status()}))
         return 0
     if (cmd, what) in (("install", "node"), ("update", "node")):
         install_node(update=cmd == "update")
@@ -231,6 +344,10 @@ def main(a):
         say(f"Wrangler {wrangler_version()} — bejelentkezés: wrangler login")
     elif (cmd, what) == ("remove", "wrangler"):
         npm("uninstall", "-g", "wrangler")
+    elif (cmd, what) in (("install", "claude"), ("update", "claude")):
+        install_claude(update=cmd == "update")
+    elif (cmd, what) == ("remove", "claude"):
+        remove_claude()
     else:
         say(__doc__.strip())
         return 2
