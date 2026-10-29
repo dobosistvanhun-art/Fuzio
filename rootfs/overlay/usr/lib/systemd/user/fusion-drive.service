@@ -8,7 +8,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=notify
 ExecStartPre=/bin/mkdir -p %h/GoogleDrive %h/.cache/fusion/drive %h/.local/share/fusion
-ExecStartPre=-/bin/fusermount3 -uz %h/GoogleDrive
+ExecStartPre=-/bin/sh -c 'grep -qs " %h/GoogleDrive " /proc/self/mounts && exec /bin/fusermount3 -uz %h/GoogleDrive || true'
 ExecStart=/usr/bin/rclone mount gdrive: %h/GoogleDrive \
     --config %h/.config/fusion/rclone.conf \
     --vfs-cache-mode full --vfs-cache-max-size 2G --vfs-cache-max-age 72h \
