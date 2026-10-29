@@ -100,10 +100,29 @@ Eltávolítás: `fusion-dev remove claude` (a `~/.claude` — bejelentkezés, mu
 | Python 3.12 (Ubuntu 24.04) alatt a pip-es SDK-telepítés | ZBook | **nincs ellenőrizve** |
 | a Claude Code hivatalos telepítője a Fúzión | ZBook | **nincs ellenőrizve** |
 
+## 6a. 0.0.61 — a teljes munkafolyamat (4. fázis)
+
+A középső sáv gombjai (ezeket te indítod, nem a Claude — ezért nem kérnek jóváhagyó ablakot; a Claude ugyanezeket csak
+jóváhagyással futtathatja):
+
+| Gomb | Mit csinál |
+| --- | --- |
+| Teszt | a projekt tesztparancsa a projekt mappájában; a kimenet a Napló fülön, az eredmény (és az utolsó sorok) a beszélgetésben |
+| Naplók | `journalctl --user` (300 sor), a rendszernapló figyelmeztetései és hibái (ebben az indításban), a Fúzió-programok naplói |
+| Kimenet → Claude | az utolsó teszt- / naplókimenet (legfeljebb 150 sor) elküldése Claude-nak: „mi a hiba oka, javasolj javítást” |
+| Újraindítás… | a projekt saját újraindító parancsa, megerősítés után, a FusionAI-tól függetlenül indítva |
+| Commit… | a változott fájlok listája, a szerző, a te üzeneted; `git add -A` + `git commit`, előtte pillanatkép; Git-szerző nélkül érthető hiba |
+| Push… | a feltöltendő commitok listája és a cél; `git push` (upstream nélkül `-u origin <ág>`), **soha nem --force** |
+| Beállítások | projektenként a teszt- és az újraindító parancs (`~/.config/fusion/ai.json`); javaslat: Cargo → `fusion-dev box run cargo test`, npm → `npm test`, a Fúzió repó → a FusionAI öntesztje |
+
+Biztonság (0.0.61): a FusionAI szabályai a Claude Code **PreToolUse-horgaként** is futnak, így a tiltott parancs
+akkor is tilos, a kiemelt (commit, push, sudo, élesítés) akkor is kérdez, ha egy Claude Code-szabály (pl. a projekt
+`.claude/settings.json`-ja) magától engedné. ZBookon igazolva (2026-10-29): commit-kérésre piros ablak, Elutasításra
+nincs commit.
+
 ## 7. Következő lépések
 
 1. ZBook: telepítés, bejelentkezés, egy valódi hibakeresési feladat egy repón; a munkamenet folytatása; egy elutasított
    és egy engedélyezett parancs.
 2. Tapasztalat alapján: a besorolási szabályok finomítása (mit kérdezzen kevésbé / jobban).
-3. 4. lépés: tesztfuttatás gombja (a projekt saját tesztparancsa), naplók megnyitása (pl. `journalctl --user`,
-   a Fúzió hibajelentése), jóváhagyott program-újraindítás, commit-üzenet szerkesztése és push külön gombbal.
+3. ~~4. lépés~~ — kész a 0.0.61-ben (6a. fejezet); ZBook-próba hátra.

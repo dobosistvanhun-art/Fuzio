@@ -228,9 +228,36 @@ FWindow {
     // ------------------------------------------------------------ közép: beszélgetés
     Item {
         anchors { top: top.bottom; bottom: bottomBar.top; left: left.right; right: right.left }
+        // a helyi munkafolyamat gombjai (ezeket te indítod, nem a Claude)
+        Flow {
+            id: tools
+            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
+            spacing: 6
+            enabled: ai.project !== ""
+            FButton { text: ai.task === "teszt" ? "Teszt fut…" : "Teszt"; icon: "flask"; enabled: !ai.task && ai.settings.test !== ""
+                      tip: ai.settings.test || "nincs tesztparancs — Beállítások"; onClicked: { win.tab = 2; ai.runTest() } }
+            FButton { text: "Naplók"; icon: "report"; enabled: !ai.task; onClicked: logMenu.open()
+                Menu {
+                    id: logMenu; y: parent.height
+                    MenuItem { text: "A munkamenet naplója"; onTriggered: { win.tab = 2; ai.showLog("user") } }
+                    MenuItem { text: "Rendszernapló (figyelmeztetések, hibák)"; onTriggered: { win.tab = 2; ai.showLog("system") } }
+                    MenuItem { text: "Fúzió-programok naplói"; onTriggered: { win.tab = 2; ai.showLog("fusion") } }
+                }
+            }
+            FButton { text: "Kimenet → Claude"; icon: "copy"; visible: ai.hasOutput; enabled: !ai.busy
+                      tip: "Az utolsó teszt / napló kimenetét elküldi Claude-nak elemzésre"; onClicked: ai.sendOutputToClaude() }
+            FButton { text: "Újraindítás…"; icon: "restart"; enabled: ai.settings.restart !== ""
+                      tip: ai.settings.restart || "nincs újraindító parancs — Beállítások"; onClicked: restartDlg.open() }
+            FButton { text: "Commit…"; icon: "check"; enabled: !ai.task && !ai.busy && (ai.git.files || []).length > 0
+                      onClicked: { commitDlg.info = ai.commitInfo(); commitMsg.text = ""; commitDlg.open() } }
+            FButton { text: "Push…"; icon: "up"; enabled: !ai.task && !ai.busy
+                      onClicked: { pushDlg.info = ai.pushInfo(); pushDlg.open() } }
+            FButton { text: "Beállítások"; icon: "settings"; flat: true
+                      onClicked: { testCmd.text = ai.settings.test || ""; restartCmd.text = ai.settings.restart || ""; setDlg.open() } }
+        }
         ListView {
             id: view
-            anchors { top: parent.top; left: parent.left; right: parent.right; bottom: inputBox.top; margins: 8 }
+            anchors { top: tools.bottom; left: parent.left; right: parent.right; bottom: inputBox.top; margins: 8 }
             clip: true
             spacing: 8
             model: chat
@@ -358,5 +385,88 @@ FWindow {
         onButtonClicked: i => { if (i === 1) ai.restoreSnapshot(sha); close() }
         FLabel { x: 20; y: 16; width: 440; wrapMode: Text.Wrap; elide: Text.ElideNone
                  text: "A projekt fájljai erre az állapotra állnak vissza:\n" + restoreDlg.label + "\n\nA mostani állapotról előbb új pillanatkép készül; a pillanatkép óta keletkezett új fájlok megmaradnak." }
+    }
+
+    // ------------------------------------------------------------ a helyi munkafolyamat ablakai
+    FDialog {
+        id: setDlg
+        title: "Projekt-beállítások — " + ai.project.split("/").pop()
+        buttons: [["Mégse", ""], ["Mentés", "primary"]]
+        width: Math.min(win.width - 80, 640)
+        onButtonClicked: i => { if (i === 1) ai.saveSettings(testCmd.text, restartCmd.text); close() }
+        Column {
+            x: 20; y: 16; width: setDlg.width - 40; spacing: 6
+            FLabel { text: "Tesztparancs (a projekt mappájában fut)"; bold: true }
+            FTextField { id: testCmd; width: parent.width; font.family: Theme.mono
+                         placeholderText: "pl. fusion-dev box run cargo test · npm test · python3 -m pytest -q" }
+            Item { width: 1; height: 6 }
+            FLabel { text: "Újraindító parancs (a te programod újraindítása)"; bold: true }
+            FTextField { id: restartCmd; width: parent.width; font.family: Theme.mono
+                         placeholderText: "pl. pkill -f fusion-tasks; fusion-tasks" }
+            FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true; font.pixelSize: Theme.fsSmall
+                     text: "Ezeket te indítod a gombokkal, ezért nem kérnek külön jóváhagyást (az újraindítás megerősítést kér). Ha a Claude akarja futtatni őket, az továbbra is jóváhagyással megy." }
+        }
+    }
+
+    FDialog {
+        id: restartDlg
+        title: "Újraindítás"
+        buttons: [["Mégse", ""], ["Újraindítás", "primary"]]
+        onButtonClicked: i => { if (i === 1) ai.restartApp(); close() }
+        FLabel { x: 20; y: 16; width: 460; wrapMode: Text.Wrap; elide: Text.ElideNone
+                 text: "Lefut:\n" + (ai.settings.restart || "") }
+    }
+
+    FDialog {
+        id: commitDlg
+        property var info: ({})
+        title: "Commit — " + ((info && info.branch) || "")
+        buttons: [["Mégse", ""], ["Commit", "primary"]]
+        defaultButton: 0
+        width: Math.min(win.width - 80, 700)
+        onButtonClicked: i => { if (i === 1 && commitMsg.text.trim().length) { ai.commitChanges(commitMsg.text, true); close() } else if (i === 0) close() }
+        Column {
+            x: 20; y: 16; width: commitDlg.width - 40; spacing: 6
+            FLabel { width: parent.width; text: "Szerző: " + ((commitDlg.info && commitDlg.info.author) || "NINCS BEÁLLÍTVA — Terminál: git config --global user.name / user.email")
+                     color: commitDlg.info && commitDlg.info.author ? Theme.dim : Theme.danger }
+            FLabel { text: "Minden változás bekerül (" + ((commitDlg.info && commitDlg.info.files) || []).length + " fájl); előtte pillanatkép készül:" }
+            Rectangle {
+                width: parent.width; height: Math.min(140, fileCol.implicitHeight + 10); color: Theme.base; border.color: Theme.border
+                ScrollView { anchors.fill: parent; anchors.margins: 5; clip: true
+                    Column { id: fileCol
+                        Repeater { model: (commitDlg.info && commitDlg.info.files) || []
+                            Text { text: modelData.status + "  " + modelData.path; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fsSmall } } } }
+            }
+            FLabel { text: "Commit-üzenet"; bold: true }
+            Rectangle {
+                width: parent.width; height: 90; color: Theme.base; border.color: commitMsg.activeFocus ? Theme.accent : Theme.border
+                ScrollView { anchors.fill: parent; anchors.margins: 4
+                    TextArea { id: commitMsg; wrapMode: TextArea.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: Theme.fs
+                               background: null; placeholderText: "0.0.N (mérföldkő): rövid összefoglaló"; placeholderTextColor: Theme.dim } }
+            }
+        }
+    }
+
+    FDialog {
+        id: pushDlg
+        property var info: ({})
+        title: "Push — " + ((info && info.branch) || "")
+        buttons: [["Mégse", ""], ["Push", "danger"]]
+        defaultButton: 0
+        width: Math.min(win.width - 80, 640)
+        onButtonClicked: i => { if (i === 1 && ((pushDlg.info && pushDlg.info.commits) || []).length) ai.doPush(); close() }
+        Column {
+            x: 20; y: 16; width: pushDlg.width - 40; spacing: 6
+            FLabel { width: parent.width; text: "Cél: " + ((pushDlg.info && pushDlg.info.upstream) || "") + " (soha nem --force)" }
+            FLabel { text: ((pushDlg.info && pushDlg.info.commits) || []).length ? "Feltöltendő commitok:" : "Nincs feltöltendő commit."; bold: true }
+            Rectangle {
+                width: parent.width; height: Math.min(180, pushCol.implicitHeight + 10); color: Theme.base; border.color: Theme.border
+                visible: ((pushDlg.info && pushDlg.info.commits) || []).length > 0
+                ScrollView { anchors.fill: parent; anchors.margins: 5; clip: true
+                    Column { id: pushCol
+                        Repeater { model: (pushDlg.info && pushDlg.info.commits) || []
+                            Text { text: modelData; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fsSmall } } } }
+            }
+        }
     }
 }

@@ -4,6 +4,13 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+## 2026-10-29 este — webes Claude → ZBook: 0.0.61, a FusionAI 4. fázisa
+- Gombok: Teszt, Naplók, Kimenet → Claude, Újraindítás…, Commit…, Push…, Beállítások (projektenkénti teszt- és
+  újraindító parancs) — `docs/W3-fusionai.md` 6a. Önteszt (próba-Claude, helyi bare remote-tal): teszt ok / hiba,
+  napló, commit szerző nélkül → érthető hiba, commit, push, a remote-on megjelenik — mind ok.
+- István: a besorolás nem kérdez se túl sokat, se túl keveset (változatlan).
+- Nyitott a ZBookon: a Visszavonás és a munkamenet-folytatás próbája; a 0.0.61 gombjainak próbája; Git-szerző beállítása.
+
 ## 2026-10-29 este — webes Claude → ZBook: a kiemelt jóváhagyás nem lehet megkerülhető
 - ZBook-próba (István): a „commitold” kérésre a `git add proba.py && git commit …` lefutott (a commit csak a hiányzó
   Git-szerző miatt állt le). Nem biztos, hogy megjelent a piros ablak — ha nem, egy Claude Code-szabály magától

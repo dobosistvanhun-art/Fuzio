@@ -365,3 +365,121 @@ def system_prompt(project):
 
 def shell_quote(args):
     return " ".join(shlex.quote(a) for a in args)
+
+
+# ---------------------------------------------------------------- 4. fázis: teszt, naplók, újraindítás, commit, push
+
+LOG_SOURCES = {
+    "user": ("A munkamenet naplója (utolsó 300 sor)", ["journalctl", "--user", "-n", "300", "--no-pager", "-o", "short-iso"]),
+    "system": ("Rendszernapló: figyelmeztetések és hibák (ebben az indításban)",
+               ["journalctl", "-b", "-p", "warning", "-n", "300", "--no-pager", "-o", "short-iso"]),
+    "fusion": ("Fúzió-programok naplója", ["sh", "-c", "tail -n 200 ~/.local/state/fusion/*.log ~/.cache/fusion/*.log 2>/dev/null"]),
+}
+
+
+def detect_commands(repo):
+    """javaslat a projekt teszt- és újraindító parancsára (a felhasználó átírhatja)"""
+    test = ""
+    if os.path.exists(os.path.join(repo, "Cargo.toml")):
+        test = "fusion-dev box run cargo test"
+    elif os.path.exists(os.path.join(repo, "package.json")):
+        try:
+            with open(os.path.join(repo, "package.json"), encoding="utf-8") as f:
+                if "test" in (json.load(f).get("scripts") or {}):
+                    test = "npm test"
+        except (OSError, ValueError):
+            pass
+    elif os.path.exists(os.path.join(repo, "desktop", "ai", "fusion_ai_app.py")):
+        test = "python3 desktop/ai/fusion_ai_app.py --selftest"
+    elif any(os.path.exists(os.path.join(repo, f)) for f in ("pytest.ini", "pyproject.toml", "setup.cfg")):
+        test = "python3 -m pytest -q"
+    elif os.path.exists(os.path.join(repo, "Makefile")):
+        test = "make test"
+    return {"test": test, "restart": ""}
+
+
+def project_settings(repo):
+    d = load_config().get("settings", {}).get(repo)
+    base = detect_commands(repo)
+    if isinstance(d, dict):
+        base.update({k: str(v) for k, v in d.items() if k in ("test", "restart")})
+    return base
+
+
+def save_project_settings(repo, test, restart):
+    d = load_config()
+    s = d.get("settings") if isinstance(d.get("settings"), dict) else {}
+    s[repo] = {"test": test.strip(), "restart": restart.strip()}
+    d["settings"] = s
+    save_config(d)
+
+
+def stream(cmd, cwd, on_line, timeout=3600, shell=False):
+    """parancs futtatása soronkénti kimenettel; visszaad: (kód, az utolsó 400 sor)"""
+    tail = []
+    try:
+        p = subprocess.Popen(cmd, cwd=cwd, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             errors="replace", stdin=subprocess.DEVNULL, start_new_session=True,
+                             env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+    except OSError as e:
+        on_line(f"nem indítható: {e}")
+        return 127, [str(e)]
+    t0 = time.monotonic()
+    for ln in p.stdout:
+        ln = ln.rstrip("\n")
+        on_line(ln)
+        tail.append(ln)
+        if len(tail) > 400:
+            del tail[:100]
+        if time.monotonic() - t0 > timeout:
+            p.kill()
+            on_line("(időtúllépés — leállítva)")
+            break
+    return p.wait(), tail
+
+
+def git_identity(repo):
+    _, name, _ = git(repo, "config", "user.name")
+    _, email, _ = git(repo, "config", "user.email")
+    return name.strip(), email.strip()
+
+
+def git_ahead(repo):
+    """a pusholandó commitok: (ág, upstream, [sorok]) — upstream nélkül az összes helyi commit"""
+    _, br, _ = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    br = br.strip()
+    rc, up, _ = git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    up = up.strip() if rc == 0 else ""
+    rng = f"{up}..HEAD" if up else "HEAD"
+    _, log, _ = git(repo, "log", "--oneline", "--no-decorate", "-n", "50", rng)
+    return br, up, [ln for ln in log.splitlines() if ln.strip()]
+
+
+def commit(repo, message, add_all=True):
+    """commit a felhasználó üzenetével (a FusionAI gombjáról, nem a Claude-tól). Előtte pillanatkép."""
+    message = message.strip()
+    if not message:
+        return {"ok": False, "error": "üres a commit-üzenet"}
+    name, email = git_identity(repo)
+    if not name or not email:
+        return {"ok": False, "error": "nincs beállítva a Git-szerző — Terminál: git config --global user.name \"…\" "
+                                      "és git config --global user.email \"…\""}
+    snap = snapshot(repo, "(commit előtt)")
+    if add_all:
+        rc, _, err = git(repo, "add", "-A", timeout=300)
+        if rc != 0:
+            return {"ok": False, "error": err.strip()}
+    rc, out, err = git(repo, "commit", "-m", message, timeout=300)
+    if rc != 0:
+        return {"ok": False, "error": (err or out).strip()[-1500:]}
+    _, sha, _ = git(repo, "rev-parse", "--short", "HEAD")
+    return {"ok": True, "error": "", "sha": sha.strip(), "snapshot": snap.get("ref", "")}
+
+
+def push(repo):
+    """git push (soha nem --force); upstream nélkül: origin + az aktuális ág"""
+    br, up, _ = git_ahead(repo)
+    args = ["push"] if up else ["push", "-u", "origin", br]
+    rc, out, err = git(repo, *args, timeout=600)
+    text = (out + err).strip()
+    return {"ok": rc == 0, "error": "" if rc == 0 else text[-1500:], "output": text[-1500:]}

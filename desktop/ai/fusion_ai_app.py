@@ -55,6 +55,9 @@ class Backend(QObject):
         self._snaps = []
         self._last_user_uuid = ""
         self._pending = {}                        # jóváhagyás azonosító → asyncio.Future
+        self._settings = {"test": "", "restart": ""}
+        self._task = ""                           # futó helyi feladat (teszt, napló, commit, push)
+        self._last_output = ("", [])              # (cím, az utolsó sorok) — „Claude-nak” gomb
         self._client = None
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
@@ -75,6 +78,18 @@ class Backend(QObject):
         s["sdk"] = self._sdk is not None
         s["sdkError"] = self._sdk_err
         return s
+
+    @pyqtProperty("QVariant", notify=changed)
+    def settings(self):
+        return self._settings
+
+    @pyqtProperty(str, notify=changed)
+    def task(self):
+        return self._task
+
+    @pyqtProperty(bool, notify=changed)
+    def hasOutput(self):
+        return bool(self._last_output[1])
 
     @pyqtProperty("QVariant", notify=changed)
     def projects(self):
@@ -138,6 +153,8 @@ class Backend(QObject):
         cfg = core.load_config()
         cfg["last_project"] = path
         core.save_config(cfg)
+        self._settings = core.project_settings(path)
+        self._last_output = ("", [])
         self.refreshSessions()
         self.refreshGit()
         self.item.emit({"kind": "info", "text": f"Projekt: {path}"})
@@ -262,6 +279,140 @@ class Backend(QObject):
         if self._project:
             ui.spawn(["fusion-terminal", "-t", "FusionAI — " + os.path.basename(self._project),
                       f"--working-directory={self._project}"])
+
+    # ------------------------------------------------------------ 4. fázis: teszt, naplók, újraindítás, commit, push
+    # Ezeket a felhasználó indítja a gombokkal (nem a Claude), ezért nincs külön jóváhagyó ablak; a commit és a push
+    # a QML-ben megerősítést kér, az újraindítás is.
+
+    taskDone = pyqtSignal()
+
+    def _run_task(self, name, func):
+        if self._task:
+            self.message.emit(f"már fut: {self._task}", True)
+            return
+        self._task = name
+        self.changed.emit()
+
+        def work():
+            try:
+                func()
+            except Exception as e:
+                self.item.emit({"kind": "error", "text": f"{name}: {e}"})
+                self._log(traceback.format_exc())
+            finally:
+                self._task = ""
+                self.changed.emit()
+                self.taskDone.emit()
+        threading.Thread(target=work, daemon=True).start()
+
+    @pyqtSlot(str, str)
+    def saveSettings(self, test, restart):
+        if self._project:
+            core.save_project_settings(self._project, test, restart)
+            self._settings = core.project_settings(self._project)
+            self.changed.emit()
+            self.message.emit("a projekt parancsai mentve", False)
+
+    def _stream(self, title, cmd, shell):
+        self._log(f"── {title}: {cmd if shell else core.shell_quote(cmd)}")
+        rc, tail = core.stream(cmd, self._project or core.HOME, self._log, shell=shell)
+        self._last_output = (title, tail)
+        return rc, tail
+
+    @pyqtSlot()
+    def runTest(self):
+        cmd = self._settings.get("test", "").strip()
+        if not self._project or not cmd:
+            self.message.emit("nincs megadva tesztparancs (Projekt-beállítások)", True)
+            return
+
+        def go():
+            t0 = time.monotonic()
+            rc, tail = self._stream("Teszt", cmd, True)
+            secs = time.monotonic() - t0
+            last = "\n".join(tail[-12:])
+            if rc == 0:
+                self.item.emit({"kind": "result", "text": f"Teszt rendben ({secs:.0f} mp): {cmd}\n{last}"})
+            else:
+                self.item.emit({"kind": "error", "text": f"Teszt HIBA (kód {rc}, {secs:.0f} mp): {cmd}\n{last}"})
+        self._run_task("teszt", go)
+
+    @pyqtSlot(str)
+    def showLog(self, kind):
+        src = core.LOG_SOURCES.get(kind)
+        if not src:
+            return
+
+        def go():
+            rc, tail = self._stream(src[0], src[1], False)
+            n = len(tail)
+            self.item.emit({"kind": "info" if rc == 0 else "error",
+                            "text": f"{src[0]}: {n} sor a Napló fülön" + ("" if rc == 0 else f" (kód {rc})")})
+        self._run_task("napló", go)
+
+    @pyqtSlot()
+    def restartApp(self):
+        cmd = self._settings.get("restart", "").strip()
+        if not self._project or not cmd:
+            self.message.emit("nincs megadva újraindító parancs (Projekt-beállítások)", True)
+            return
+        import subprocess
+        try:
+            subprocess.Popen(["sh", "-c", cmd], cwd=self._project, start_new_session=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ok = True
+        except OSError:
+            ok = False
+        self.item.emit({"kind": "info" if ok else "error", "text": f"Újraindítás{'' if ok else ' nem sikerült'}: {cmd}"})
+
+    @pyqtSlot()
+    def sendOutputToClaude(self):
+        title, tail = self._last_output
+        if not tail:
+            return
+        body = "\n".join(tail[-150:])
+        self.send(f"A(z) „{title}” kimenete (az utolsó {min(len(tail), 150)} sor). Nézd meg, mi a hiba oka, és javasolj "
+                  f"javítást:\n```\n{body}\n```")
+
+    @pyqtSlot(result="QVariant")
+    def commitInfo(self):
+        if not self._project:
+            return {}
+        st = core.git_state(self._project)
+        name, email = core.git_identity(self._project)
+        return {"files": st.get("files", []), "branch": st.get("branch", ""), "author": f"{name} <{email}>" if name and email else ""}
+
+    @pyqtSlot(str, bool)
+    def commitChanges(self, msg, add_all):
+        if self._busy:
+            self.message.emit("Claude még dolgozik — előbb várd meg", True)
+            return
+
+        def go():
+            r = core.commit(self._project, msg, add_all)
+            if r["ok"]:
+                self.item.emit({"kind": "result", "text": f"Commit kész: {r['sha']} — {msg.splitlines()[0]}"})
+            else:
+                self.item.emit({"kind": "error", "text": "A commit nem sikerült: " + r["error"]})
+            self.refreshGitLater.emit()
+        self._run_task("commit", go)
+
+    @pyqtSlot(result="QVariant")
+    def pushInfo(self):
+        if not self._project:
+            return {}
+        br, up, commits = core.git_ahead(self._project)
+        return {"branch": br, "upstream": up or "(még nincs: origin/" + br + ")", "commits": commits}
+
+    @pyqtSlot()
+    def doPush(self):
+        def go():
+            r = core.push(self._project)
+            self._log("── push\n" + r["output"])
+            self.item.emit({"kind": "result" if r["ok"] else "error",
+                            "text": ("Push kész.\n" + r["output"][-400:]) if r["ok"] else "A push nem sikerült: " + r["error"]})
+            self.refreshGitLater.emit()
+        self._run_task("push", go)
 
     # ------------------------------------------------------------ a Claude Code-szál (asyncio)
 
@@ -561,6 +712,50 @@ def selftest():
     check("ARGS", "--permission-mode" in a and a[a.index("--permission-mode") + 1] == "default"
           and os.path.realpath(last["cwd"]) == os.path.realpath(repo)
           and not any(x in a for x in ("bypassPermissions", "--dangerously-skip-permissions")), " ".join(a)[:200])
+
+    # 4. fázis: teszt, napló, commit, push (a felhasználó gombjai)
+    def wait_task(sec=60):
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < sec:
+            app.processEvents()
+            if not be.task:
+                app.processEvents()
+                return True
+            time.sleep(0.02)
+        return False
+    check("DETECT", be.settings.get("test") == "" and core.detect_commands(HERE + "/../..")["test"].endswith("--selftest"))
+    be.saveSettings("python3 -c \"print('teszt-ok')\"", "true")
+    items.clear()
+    be.runTest()
+    check("TEST-RUN", wait_task() and any(i["kind"] == "result" and "teszt-ok" in i["text"] for i in items))
+    be.saveSettings("sh -c 'echo hiba-sor; exit 3'", "true")
+    items.clear()
+    be.runTest()
+    check("TEST-FAIL", wait_task() and any(i["kind"] == "error" and "kód 3" in i["text"] and "hiba-sor" in i["text"] for i in items))
+    check("OUTPUT-KEPT", be.hasOutput)
+    be.showLog("fusion")
+    check("LOG", wait_task())
+    r0 = core.commit(repo, "nincs szerző", True)
+    check("COMMIT-NO-IDENTITY", (not r0["ok"] and "Git-szerző" in r0["error"]) or r0["ok"] is False or
+          bool(core.git_identity(repo)[0]), r0.get("error", "")[:60])
+    subprocess.run(g[:3] + ["config", "user.name", "Teszt"], check=True)
+    subprocess.run(g[:3] + ["config", "user.email", "t@t"], check=True)
+    remote = os.path.join(tmp, "remote.git")
+    subprocess.run(["git", "init", "-q", "--bare", remote], check=True)
+    subprocess.run(g[:3] + ["remote", "add", "origin", remote], check=True)
+    items.clear()
+    be.commitChanges("próba commit a FusionAI-ból", True)
+    check("COMMIT", wait_task() and any(i["kind"] == "result" and "Commit kész" in i["text"] for i in items))
+    _, log2, _ = core.git(repo, "log", "--oneline")
+    check("COMMIT-LOG", len(log2.splitlines()) == 2 and "próba commit" in log2)
+    info = be.pushInfo()
+    check("PUSH-INFO", len(info.get("commits", [])) == 2 and "még nincs" in info.get("upstream", ""))
+    items.clear()
+    be.doPush()
+    check("PUSH", wait_task() and any(i["kind"] == "result" and "Push kész" in i["text"] for i in items))
+    _, rlog, _ = core.git(remote, "log", "--oneline")
+    check("PUSH-REMOTE", "próba commit" in rlog)
+    check("PUSH-NOTHING-LEFT", be.pushInfo().get("commits") == [])
 
     # osztályozás: néhány kézi eset
     cases = [("Bash", {"command": "git checkout -- ."}, "deny"), ("Bash", {"command": "git restore src/a.rs"}, "deny"),
