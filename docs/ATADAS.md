@@ -11,6 +11,7 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 - Javítás: a FusionAI szabályai most **PreToolUse-horogként** is futnak (`fusion_ai_app.py: _pre_tool_use`): a tiltott
   tilos, a kiemelt mindig kérdez, bármit engedne a Claude Code magától. A próba-Claude ezt utánozza („megengedő
   szabály”); horog nélkül a DENY-AUTO és a COMMIT-DANGER próba elbukik, vele átmegy.
+- **ZBookon igazolva (István, 17:20):** a javítás után a commit kérésére a piros ablak megjelenik, Elutasításra nincs commit.
 - Tudnivaló: a Visszaállítás a pillanatkép óta keletkezett új fájlokat (pl. `proba.py`) szándékosan megtartja és
   felsorolja; a stagingből `git restore --staged proba.py` veszi ki.
 
