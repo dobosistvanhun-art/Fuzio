@@ -286,6 +286,9 @@ class Backend(QObject):
             setting_sources=["project"],
             system_prompt={"type": "preset", "preset": "claude_code", "append": core.system_prompt(self._project)},
             stderr=lambda ln: self._log("claude: " + ln),
+            # a FusionAI szabályai minden eszközhívás előtt (PreToolUse-horog): a tiltott tilos, a kiemelt mindig
+            # kérdez — akkor is, ha a Claude Code egy szabálya (pl. a projekt .claude/settings.json-ja) magától engedné
+            hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[self._pre_tool_use])]},
         )
 
     async def _ensure_client(self):
@@ -364,6 +367,18 @@ class Backend(QObject):
         if "cli not found" in low or "no such file" in low:
             return "A Claude Code nem található: fusion-dev install claude. " + s[:300]
         return s[:1500]
+
+    async def _pre_tool_use(self, data, tool_use_id, ctx):
+        data = data if isinstance(data, dict) else {}
+        c = core.classify(str(data.get("tool_name") or ""), data.get("tool_input") or {}, self._project)
+        if c["level"] == "deny":
+            self.item.emit({"kind": "denied", "text": f"{c['summary'][:300]} — {c['why']}"})
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": f"A FusionAI ezt nem engedi: {c['why']}"}}
+        if c["level"] == "danger":
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
+                                           "permissionDecisionReason": f"kiemelt jóváhagyás: {c['why']}"}}
+        return {}
 
     async def _can_use_tool(self, tool, inp, ctx):
         sdk = self._sdk

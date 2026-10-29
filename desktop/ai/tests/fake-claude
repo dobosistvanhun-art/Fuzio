@@ -5,7 +5,8 @@ A Claude Code SDK-felületének (stream-json, vezérlőkérések) annyit utánoz
 (indítás, folyamatos válasz, jóváhagyás, munkamenet-folytatás, megszakítás) ellenőrzéséhez kell:
   - „javítsd”  → Edit-jóváhagyást kér a calc.py-re; ha megkapja, kijavítja (a - helyett +)
   - „töröld”   → `git reset --hard`-ot kér (a FusionAI-nak magától el kell utasítania)
-  - „commit”   → `git commit -am …`-ot kér (kiemelt jóváhagyás)
+  - „commit”   → `git add … && git commit …`-ot kér úgy, mintha egy szabály magától engedné (a FusionAI
+                 PreToolUse-horgának kell kiemelt jóváhagyásra kényszerítenie)
   - más        → felsorolja a projekt fájljait, szavanként (folyamatos válasz)
 A munkamenet: ~/.cache/fake-claude/<id>.json (a --resume-hoz).
 """
@@ -63,10 +64,45 @@ def control(req_id, resp):
     out({"type": "control_response", "response": {"subtype": "success", "request_id": req_id, "response": resp}})
 
 
+HOOKS = []          # a PreToolUse-horgok azonosítói (az initialize-ból)
+
+
 def handle_control(m):
     sub = m["request"].get("subtype")
+    if sub == "initialize":
+        for mt in ((m["request"].get("hooks") or {}).get("PreToolUse") or []):
+            HOOKS.extend(mt.get("hookCallbackIds") or [])
     control(m["request_id"], {"commands": [], "models": []} if sub == "initialize" else {})
     return sub
+
+
+def request(req):
+    rid = "fake-" + uuid.uuid4().hex[:8]
+    out({"type": "control_request", "request_id": rid, "request": req})
+    while True:
+        m = read()
+        if m.get("type") == "control_response" and m["response"].get("request_id") == rid:
+            return m["response"].get("response", {}) if m["response"].get("subtype") == "success" else {}
+        if m.get("type") == "control_request":
+            handle_control(m)
+            continue
+        pending.append(m)
+
+
+def use(tool, inp, auto=False):
+    """mint a Claude Code: előbb a PreToolUse-horgok, aztán a szabályok (auto = egy szabály magától engedné),
+    végül a jóváhagyás (can_use_tool)"""
+    decision = ""
+    for hid in HOOKS:
+        r = request({"subtype": "hook_callback", "callback_id": hid, "tool_use_id": "tu-x",
+                     "input": {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": inp}})
+        d = ((r or {}).get("hookSpecificOutput") or {}).get("permissionDecision", "")
+        if d == "deny":
+            return {"behavior": "deny", "message": ((r.get("hookSpecificOutput") or {}).get("permissionDecisionReason", ""))}
+        decision = decision or d
+    if decision == "allow" or (auto and decision != "ask"):
+        return {"behavior": "allow"}
+    return ask(tool, inp)
 
 
 def ask(tool, inp):
@@ -120,7 +156,7 @@ def turn(prompt):
     if "javítsd" in p:
         path = os.path.join(CWD, "calc.py")
         inp = {"file_path": path, "old_string": "return a - b", "new_string": "return a + b"}
-        r = ask("Edit", inp)
+        r = use("Edit", inp)
         if r.get("behavior") == "allow":
             s = open(path).read().replace("return a - b", "return a + b")
             open(path, "w").write(s)
@@ -131,11 +167,11 @@ def turn(prompt):
             say("Nem kaptam engedélyt a módosításra.")
     elif "töröld" in p:
         inp = {"command": "git reset --hard", "description": "minden változás eldobása"}
-        r = ask("Bash", inp)
+        r = use("Bash", inp, auto=True)
         say("Elutasítva: " + r.get("message", "") if r.get("behavior") != "allow" else "Lefutott.")
     elif "commit" in p:
-        inp = {"command": "git commit -am 'javítás'"}
-        r = ask("Bash", inp)
+        inp = {"command": "git add proba.py && git commit -m 'javítás'"}
+        r = use("Bash", inp, auto=True)     # egy megengedő szabály magától engedné — a horognak kell megállítania
         say("A commit " + ("engedélyezve." if r.get("behavior") == "allow" else "elutasítva."))
     else:
         files = sorted(f for f in os.listdir(CWD) if not f.startswith("."))

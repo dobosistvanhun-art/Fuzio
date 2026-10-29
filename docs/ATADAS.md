@@ -4,6 +4,16 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+## 2026-10-29 este — webes Claude → ZBook: a kiemelt jóváhagyás nem lehet megkerülhető
+- ZBook-próba (István): a „commitold” kérésre a `git add proba.py && git commit …` lefutott (a commit csak a hiányzó
+  Git-szerző miatt állt le). Nem biztos, hogy megjelent a piros ablak — ha nem, egy Claude Code-szabály magától
+  engedte, és a FusionAI `can_use_tool`-ja meg sem kapta.
+- Javítás: a FusionAI szabályai most **PreToolUse-horogként** is futnak (`fusion_ai_app.py: _pre_tool_use`): a tiltott
+  tilos, a kiemelt mindig kérdez, bármit engedne a Claude Code magától. A próba-Claude ezt utánozza („megengedő
+  szabály”); horog nélkül a DENY-AUTO és a COMMIT-DANGER próba elbukik, vele átmegy.
+- Tudnivaló: a Visszaállítás a pillanatkép óta keletkezett új fájlokat (pl. `proba.py`) szándékosan megtartja és
+  felsorolja; a stagingből `git restore --staged proba.py` veszi ki.
+
 ## 2026-10-29 — webes Claude → ZBook: a FusionAI-beszélgetés összefoglalója (2026-10-26 … 29)
 **Kérés (István):** natív QML „FusionAI” alkalmazás a Fúzióban, amelyből a hivatalos Claude Code a ZBookon, a helyi
 Git-repókon dolgozik (hibakeresés, javítás, teszt, újraindítás; commit/push csak jóváhagyással), a saját Pro/Max
