@@ -4,6 +4,7 @@
 A Claude Code SDK-felületének (stream-json, vezérlőkérések) annyit utánoz, amennyi a FusionAI csővezetékének
 (indítás, folyamatos válasz, jóváhagyás, munkamenet-folytatás, megszakítás) ellenőrzéséhez kell:
   - „javítsd”  → Edit-jóváhagyást kér a calc.py-re; ha megkapja, kijavítja (a - helyett +)
+  - „hozzáír”  → Bash-sel ír a calc.py végére (a Visszavonásnak ezt is vissza kell vonnia)
   - „töröld”   → `git reset --hard`-ot kér (a FusionAI-nak magától el kell utasítania)
   - „commit”   → `git add … && git commit …`-ot kér úgy, mintha egy szabály magától engedné (a FusionAI
                  PreToolUse-horgának kell kiemelt jóváhagyásra kényszerítenie)
@@ -165,6 +166,14 @@ def turn(prompt):
         else:
             tool_use("Edit", inp, r.get("message", "elutasítva"), True)
             say("Nem kaptam engedélyt a módosításra.")
+    elif "hozzáír" in p:
+        inp = {"command": "printf '\\npróba\\n' >> calc.py"}
+        r = use("Bash", inp)
+        if r.get("behavior") == "allow":
+            with open(os.path.join(CWD, "calc.py"), "a") as f:
+                f.write("\npróba\n")
+            tool_use("Bash", inp, "")
+        say("Hozzáírtam a calc.py végére (Bash-sel).")
     elif "töröld" in p:
         inp = {"command": "git reset --hard", "description": "minden változás eldobása"}
         r = use("Bash", inp, auto=True)

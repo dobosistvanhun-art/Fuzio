@@ -70,8 +70,9 @@ felhasználói `~/.claude/settings.json` engedélyei a FusionAI-ban nem érvény
   ágakat nem érinti. Kézzel is: „Pillanatkép most”.
 - **Visszaállítás** (Pillanatképek fül): előbb a mostani állapotról is pillanatkép készül, így ez is visszavonható; a
   pillanatkép óta keletkezett új fájlok megmaradnak (a felület felsorolja őket).
-- **Visszavonás** gomb: az utolsó kérés óta Claude által végzett fájlmódosítások (Claude Code file checkpointing,
-  `rewind_files`).
+- **Visszavonás** gomb (0.0.64-től): minden kérés előtt pillanatkép készül (ha az állapot nem változott, nem új); a
+  gomb a munkafát erre állítja vissza — a Claude parancsokkal (Bash) végzett módosításait is, amelyeket a Claude Code
+  saját `rewind_files`-a nem követ. A kérés óta keletkezett új fájlok megmaradnak (a FusionAI kiírja őket).
 - Parancssorból: `git for-each-ref refs/fusion-ai` · `git diff <sha>` · `git restore --source=<sha> --worktree -- .`
   (előtte érdemes a mostani állapotot commitolni vagy pillanatképezni) · törlés: `git update-ref -d refs/fusion-ai/<név>`.
 

@@ -4,6 +4,12 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+## 2026-10-29 18:10 — webes Claude: 0.0.64 (Visszavonás)
+- ZBook-próba (István, 17:54): a Claude a `docs/ATADAS.md` végére Bash-sel (`printf >>`) írt, a Visszavonás azt írta
+  „visszavonva”, de a sor megmaradt — a Claude Code `rewind_files`-a csak az Edit/Write-ot követi.
+- Javítás: minden kérés előtt pillanatkép (dedupe), a Visszavonás arra állítja vissza a munkafát, és ellenőrzi:
+  „Visszavonva” csak akkor, ha a munkafa tényleg azonos; különben kiírja, mi maradt. Önteszt: TURN-BASH, UNDO ok.
+
 ## 2026-10-29 18:00 — webes Claude: 0.0.63
 - A Commit ablak üres üzenetmezővel nyílt, ezért lett a 0.0.62 üzenete „p”. Most javaslattal nyílik: a README új
   változatsorából („0.0.N (mérföldkő): …”), különben a módosított fájlok neveiből; átírható. Önteszt: COMMIT-SUGGEST ok.

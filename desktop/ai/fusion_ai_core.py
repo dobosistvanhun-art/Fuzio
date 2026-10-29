@@ -13,6 +13,7 @@ import os
 import re
 import shlex
 import subprocess
+import threading
 import sys
 import time
 
@@ -281,13 +282,11 @@ def git_diff(repo):
     return text or "Nincs nem commitolt változás."
 
 
-def snapshot(repo, label=""):
-    """a munkafa teljes állapota (a követett és az új, nem ignorált fájlok) egy commit-objektumban, a
-    refs/fusion-ai/<idő> alatt. A munkafát, az indexet és a stash-t nem érinti. Visszaad: {"ref", "sha"}"""
-    idx = os.path.join(repo, ".git", f"fusion-ai-index-{os.getpid()}")
-    gitdir_rc, gitdir, _ = git(repo, "rev-parse", "--absolute-git-dir")
-    if gitdir_rc == 0:
-        idx = os.path.join(gitdir.strip(), f"fusion-ai-index-{os.getpid()}")
+def _worktree_tree(repo):
+    """a munkafa teljes állapota (követett + új, nem ignorált fájlok) tree-objektumként, külön indexszel — a munkafát,
+    az indexet és a stash-t nem érinti. Visszaad: (tree, HEAD, hiba)"""
+    rc, gitdir, _ = git(repo, "rev-parse", "--absolute-git-dir")
+    idx = os.path.join(gitdir.strip() if rc == 0 else os.path.join(repo, ".git"), f"fusion-ai-index-{os.getpid()}-{threading.get_ident()}")
     env = {"GIT_INDEX_FILE": idx}
     try:
         rc, head, _ = git(repo, "rev-parse", "--verify", "-q", "HEAD")
@@ -296,26 +295,49 @@ def snapshot(repo, label=""):
             git(repo, "read-tree", head, env=env)
         rc, _, err = git(repo, "add", "-A", ".", env=env, timeout=300)
         if rc != 0:
-            return {"ref": "", "sha": "", "error": err.strip()}
+            return "", head, err.strip()
         rc, tree, err = git(repo, "write-tree", env=env)
-        if rc != 0:
-            return {"ref": "", "sha": "", "error": err.strip()}
-        msg = f"FusionAI pillanatkép {time.strftime('%Y-%m-%d %H:%M:%S')} {label}".strip()
-        args = ["commit-tree", tree.strip(), "-m", msg] + (["-p", head] if head else [])
-        cenv = {"GIT_AUTHOR_NAME": "FusionAI", "GIT_AUTHOR_EMAIL": "fusion-ai@localhost",
-                "GIT_COMMITTER_NAME": "FusionAI", "GIT_COMMITTER_EMAIL": "fusion-ai@localhost"}
-        rc, sha, err = git(repo, *args, env=cenv)
-        if rc != 0:
-            return {"ref": "", "sha": "", "error": err.strip()}
-        sha = sha.strip()
-        ref = SNAP_REF + time.strftime("%Y%m%d-%H%M%S") + f"-{sha[:7]}"
-        git(repo, "update-ref", ref, sha)
-        return {"ref": ref, "sha": sha, "error": ""}
+        return (tree.strip(), head, "") if rc == 0 else ("", head, err.strip())
     finally:
         try:
             os.unlink(idx)
         except OSError:
             pass
+
+
+def snapshot(repo, label="", dedupe=False):
+    """pillanatkép: a munkafa teljes állapota egy commit-objektumban, a refs/fusion-ai/<idő> alatt.
+    dedupe: ha a legutóbbi pillanatkép ugyanez az állapot, azt adja vissza (nem készül új).
+    Visszaad: {"ref", "sha", "error"}"""
+    tree, head, err = _worktree_tree(repo)
+    if not tree:
+        return {"ref": "", "sha": "", "error": err}
+    if dedupe:
+        last = snapshots(repo)[:1]
+        if last:
+            _, ltree, _ = git(repo, "rev-parse", last[0]["sha"] + "^{tree}")
+            if ltree.strip() == tree:
+                return {"ref": last[0]["ref"], "sha": last[0]["sha"], "error": "", "reused": True}
+    msg = f"FusionAI pillanatkép {time.strftime('%Y-%m-%d %H:%M:%S')} {label}".strip()
+    args = ["commit-tree", tree, "-m", msg] + (["-p", head] if head else [])
+    cenv = {"GIT_AUTHOR_NAME": "FusionAI", "GIT_AUTHOR_EMAIL": "fusion-ai@localhost",
+            "GIT_COMMITTER_NAME": "FusionAI", "GIT_COMMITTER_EMAIL": "fusion-ai@localhost"}
+    rc, sha, err = git(repo, *args, env=cenv)
+    if rc != 0:
+        return {"ref": "", "sha": "", "error": err.strip()}
+    sha = sha.strip()
+    ref = SNAP_REF + time.strftime("%Y%m%d-%H%M%S") + f"-{sha[:7]}"
+    git(repo, "update-ref", ref, sha)
+    return {"ref": ref, "sha": sha, "error": ""}
+
+
+def differs_from(repo, sha):
+    """mely fájlokban tér el a munkafa a pillanatképtől (üres lista: azonos)"""
+    tree, _, err = _worktree_tree(repo)
+    if not tree:
+        return [f"(nem ellenőrizhető: {err})"]
+    _, out, _ = git(repo, "diff", "--name-only", sha + "^{tree}", tree)
+    return [ln for ln in out.splitlines() if ln.strip()]
 
 
 def snapshots(repo):

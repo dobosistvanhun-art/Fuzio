@@ -54,6 +54,7 @@ class Backend(QObject):
         self._git = {}
         self._snaps = []
         self._last_user_uuid = ""
+        self._turn_snap = ""                      # a munkafa az utolsó kérés előtt (pillanatkép) — Visszavonás
         self._pending = {}                        # jóváhagyás azonosító → asyncio.Future
         self._settings = {"test": "", "restart": ""}
         self._task = ""                           # futó helyi feladat (teszt, napló, commit, push)
@@ -129,7 +130,7 @@ class Backend(QObject):
 
     @pyqtProperty(bool, notify=changed)
     def canUndoTurn(self):
-        return bool(self._last_user_uuid) and self._connected and not self._busy
+        return bool(self._turn_snap) and not self._busy and not self._task
 
     # ------------------------------------------------------------ műveletek (QML)
 
@@ -149,7 +150,7 @@ class Backend(QObject):
             core.add_project(path)
             self._projects = core.projects()
         self._close_client()
-        self._project, self._session, self._last_user_uuid = path, "", ""
+        self._project, self._session, self._last_user_uuid, self._turn_snap = path, "", "", ""
         cfg = core.load_config()
         cfg["last_project"] = path
         core.save_config(cfg)
@@ -182,14 +183,14 @@ class Backend(QObject):
     @pyqtSlot()
     def newSession(self):
         self._close_client()
-        self._session, self._last_user_uuid = "", ""
+        self._session, self._last_user_uuid, self._turn_snap = "", "", ""
         self.item.emit({"kind": "info", "text": "Új munkamenet"})
         self.changed.emit()
 
     @pyqtSlot(str)
     def resumeSession(self, sid):
         self._close_client()
-        self._session, self._last_user_uuid = sid, ""
+        self._session, self._last_user_uuid, self._turn_snap = sid, "", ""
         self.item.emit({"kind": "info", "text": f"Munkamenet folytatása: {sid[:8]}…"})
         self.changed.emit()
 
@@ -259,9 +260,32 @@ class Backend(QObject):
 
     @pyqtSlot()
     def undoTurn(self):
-        """az utolsó kérés óta a Claude által végzett fájlmódosítások visszavonása (Claude Code: rewind_files)"""
-        if self._client is not None and self._last_user_uuid and not self._busy:
-            asyncio.run_coroutine_threadsafe(self._rewind(self._last_user_uuid), self._loop)
+        """az utolsó kérés óta történt fájlmódosítások visszavonása: a munkafa vissza a kérés előtti pillanatképre
+        (a Claude parancsokkal — pl. Bash-sel — végzett módosításai is; a Claude Code rewind_files-a ezeket nem
+        követi). A mostani állapot előtte pillanatképbe kerül, így a visszavonás is visszavonható."""
+        if not self._turn_snap or self._busy or not self._project:
+            return
+        sha, uuid = self._turn_snap, self._last_user_uuid
+
+        def go():
+            if self._client is not None and uuid:      # a Claude Code saját nyilvántartása (az általa írt új fájlok)
+                try:
+                    asyncio.run_coroutine_threadsafe(self._client.rewind_files(uuid), self._loop).result(timeout=30)
+                except Exception as e:
+                    self._log(f"rewind_files: {e}")
+            r = core.restore(self._project, sha)
+            if not r["ok"]:
+                self.item.emit({"kind": "error", "text": "A visszavonás nem sikerült: " + r["error"]})
+                return
+            left = core.differs_from(self._project, sha)
+            if not left:
+                self.item.emit({"kind": "info", "text": f"Visszavonva: a munkafa ugyanaz, mint a kérés előtt (a visszavonás előtti állapot: {r['before']})."})
+            else:
+                self.item.emit({"kind": "error", "text": "Részben visszavonva — a kérés óta keletkezett új fájlok megmaradtak: "
+                                + ", ".join(left[:10]) + (" …" if len(left) > 10 else "") + f" (az előző állapot: {r['before']})"})
+            self._turn_snap, self._last_user_uuid = "", ""
+            self.refreshGitLater.emit()
+        self._run_task("visszavonás", go)
 
     @pyqtSlot()
     def login(self):
@@ -456,6 +480,8 @@ class Backend(QObject):
         sdk = self._sdk
         try:
             await self._ensure_client()
+            snap = core.snapshot(self._project, "(kérés előtt)", dedupe=True)
+            self._turn_snap = snap.get("sha", "")
             await self._client.query(text)
             streaming = False
             async for msg in self._client.receive_response():
@@ -691,6 +717,24 @@ def selftest():
     check("COMMIT-DANGER", any(p["level"] == "danger" and "commit" in p["summary"] for p in perms))
     _, log, _ = core.git(repo, "log", "--oneline")
     check("NO-COMMIT", len(log.splitlines()) == 1)
+
+    # Visszavonás: a Claude Bash-sel írt a fájlba (a rewind_files ezt nem követi) — a kérés előtti állapotnak kell visszajönnie
+    perms_allow[0] = True
+    before_text = open(os.path.join(repo, "calc.py")).read()
+    be.send("hozzáírás Bash-sel")
+    check("TURN-BASH", wait_idle())
+    check("BASH-WROTE", open(os.path.join(repo, "calc.py")).read() != before_text)
+    check("UNDO-ENABLED", be.canUndoTurn)
+    items.clear()
+    be.undoTurn()
+    t0 = time.monotonic()
+    while be.task and time.monotonic() - t0 < 30:
+        app.processEvents()
+        time.sleep(0.02)
+    app.processEvents()
+    check("UNDO", open(os.path.join(repo, "calc.py")).read() == before_text
+          and any(i["kind"] == "info" and i["text"].startswith("Visszavonva") for i in items), str(items[-1:])[:120])
+    perms_allow[0] = False
 
     # visszaállítás a munkamenet eleji pillanatképre: a javítás eltűnik, a jegyzet marad, a mostani állapot mentve
     r = core.restore(repo, snap0)
