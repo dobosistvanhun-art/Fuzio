@@ -4,6 +4,12 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+
+## 2026-10-29 19:10 — holnapi feladat (István)
+- **Hiba:** a Beállítások → Rendszerfrissítés még mindig percekig keresi a frissítőfájlt (`.fupd`). Meg kell nézni,
+  mit vizsgál végig (mappák, pendrive-ok, Google Drive, build-kimenet), és miért lassú; mérés előtt nem javítunk.
+- A nap eredménye: a FusionAI a ZBookon minden próbán átment (0.0.65); a motoros projekt privát GitHub-repóban,
+  1.29.1 (szuperadmin-rate-limit) a FusionAI-val elkészítve és élesítve.
 ## 2026-10-29 18:20 — a FusionAI minden tervezett próbán átment (ZBook) + 0.0.65
 - ZBookon igazolva (István): jóváhagyás, tiltás, kiemelt jóváhagyás (commit), Commit/Push gomb, Visszavonás (Bash-sel
   írt sor is, 0.0.64), munkamenet folytatása újraindítás után, átadás új munkamenetbe a naplóból.
