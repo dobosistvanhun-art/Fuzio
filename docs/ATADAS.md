@@ -4,6 +4,15 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+## 2026-10-29 17:45 — a teljes kör a ZBookon (István + FusionAI)
+- A FusionAI a „Kimenet → Claude” gombbal elemezte a munkamenet naplóját (nincs valódi hiba, csak zaj), és jóváhagyással
+  megcsinálta a 0.0.62-t: `fusion-drive.service` — a `fusermount3 -uz` csak akkor fut, ha a `~/GoogleDrive` csatolva van.
+- Commit a FusionAI Commit gombjával, push a Push gombbal (a8e25a9; az üzenet véletlenül csak „p” — a történetet nem
+  írjuk át). A ZBookon a Git-szerző és a GitHub-token (fine-grained, Fuzio + solidcraft, Contents írás,
+  `credential.helper store`) beállítva.
+- Nyitott: a 0.0.62 buildje és a ZBook-próba (`journalctl --user -b -u fusion-drive | grep fusermount` üres);
+  a Visszavonás és a munkamenet-folytatás próbája. A `proba-mentes` ág a ZBookon törölhető.
+
 ## 2026-10-29 este — webes Claude → ZBook: 0.0.61, a FusionAI 4. fázisa
 - Gombok: Teszt, Naplók, Kimenet → Claude, Újraindítás…, Commit…, Push…, Beállítások (projektenkénti teszt- és
   újraindító parancs) — `docs/W3-fusionai.md` 6a. Önteszt (próba-Claude, helyi bare remote-tal): teszt ok / hiba,
