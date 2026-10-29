@@ -554,7 +554,11 @@ def selftest():
              ("Bash", {"command": "git push -f origin x"}, "deny"), ("Read", {"file_path": "/etc/passwd"}, "ask"),
              ("Edit", {"file_path": "/etc/fstab"}, "danger"), ("Read", {"file_path": os.path.join(core.HOME, ".ssh", "id_ed25519")}, "deny"),
              ("Read", {"file_path": "calc.py"}, "auto"), ("Write", {"file_path": "uj.py"}, "ask"),
-             ("Bash", {"command": "cat ~/.ssh/id_rsa"}, "deny"), ("Bash", {"command": "rm -rf build"}, "danger")]
+             ("Bash", {"command": "cat ~/.ssh/id_rsa"}, "deny"), ("Bash", {"command": "rm -rf build"}, "danger"),
+             ("Bash", {"command": "npm run deploy"}, "danger"), ("Bash", {"command": "npx wrangler deploy"}, "danger"),
+             ("Bash", {"command": "npx wrangler d1 migrations apply motoros-tura-db --remote"}, "danger"),
+             ("Bash", {"command": "npx wrangler d1 migrations apply motoros-tura-db --local"}, "ask"),
+             ("Bash", {"command": "npm test"}, "ask")]
     for tool, inp, want in cases:
         got = core.classify(tool, inp, repo)["level"]
         check(f"CLASSIFY {tool} {list(inp.values())[0]}", got == want, f"{got} (várt: {want})")

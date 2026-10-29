@@ -168,6 +168,9 @@ DANGER_CMD = [
     (r"\brm\s+(-\w*[rR]\w*|--recursive)\b", "mappa törlése"),
     (r"\b(chmod|chown)\b.*\s/", "jogosultság módosítása"),
     (r"\b(kill|pkill|killall)\b", "folyamat leállítása"),
+    (r"\bwrangler\s+(deploy|publish|secret|delete|rollback|versions\s+deploy)\b|\bnpm\s+run\s+deploy\b", "élesítés (Cloudflare)"),
+    (r"\bwrangler\s+d1\s+(execute|migrations\s+apply)\b.*--remote\b", "az éles adatbázis módosítása (D1)"),
+    (r"\bwrangler\s+(kv|r2)\b.*\b(put|delete)\b", "éles tároló módosítása (KV/R2)"),
 ]
 
 
