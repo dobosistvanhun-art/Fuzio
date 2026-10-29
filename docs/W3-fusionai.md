@@ -97,7 +97,7 @@ Eltávolítás: `fusion-dev remove claude` (a `~/.claude` — bejelentkezés, mu
 | `fusion-ai --selftest`: indítás, folyamatos válasz, munkamenet-azonosító, pillanatkép, Edit-jóváhagyás és a módosítás, diff, `git reset --hard` magától elutasítva (a munka megmaradt), commit kiemelt jóváhagyással elutasítva (nincs commit), visszaállítás és annak visszavonhatósága, folytatás `--resume`-mal, a CLI-argumentumok (default mód, a repó a munkamappa, nincs bypass), 14 besorolási eset | fejlesztőgép, **próba-Claude-dal** (`desktop/ai/tests/fake-claude` — a Claude Code SDK-felületét utánozza, nem AI) | ok |
 | `fusion-dev install claude` → `status` → `remove claude` | fejlesztőgép, a telepítő helyett próba-szkripttel; a pip (a kerékből) és az SDK a valódi PyPI-ról, Python 3.13 | ok |
 | a felület (QML) | fejlesztőgép, offscreen képernyőképek: beszélgetés, jóváhagyás, kiemelt jóváhagyás, diff | ok |
-| **valódi Claude Code + Pro/Max bejelentkezés** | ZBook | **nincs ellenőrizve** |
+| **valódi Claude Code + Pro/Max bejelentkezés**, jóváhagyás, tiltás, kiemelt jóváhagyás, Commit/Push, Visszavonás, munkamenet-folytatás | ZBook | **ok (István, 2026-10-29)** |
 | Python 3.12 (Ubuntu 24.04) alatt a pip-es SDK-telepítés | ZBook | **nincs ellenőrizve** |
 | a Claude Code hivatalos telepítője a Fúzión | ZBook | **nincs ellenőrizve** |
 

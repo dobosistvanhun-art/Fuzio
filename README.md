@@ -46,6 +46,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **0.0.40 (j8)**: beépített kamera (Kamera program, Eszközök és kamera), Bluetooth (Beállítások → Bluetooth: párosítás, fejhallgató, egér, billentyűzet), papírnyomtatók (Beállítások → Nyomtatók: CUPS, driverless, PDF-nyomtató); `fusion cameras | bluetooth | printers` — `docs/J8-kamera-bluetooth-nyomtato.md`
 - **0.0.41 (m9a)**: jogosultságok első lépése — `input` csoport ki, hibajelentés: JOGOSULTSÁGOK, Programkezelő: Védelem, leíró: `allow.files` / `allow.net` / `sandbox`, `fusion permissions` (Klipper és LightBurn változatlan) — `docs/M9a-jogosultsagok.md`
 - **0.0.42 (j9)**: Kamera: élőkép szoftveres felületnél is (a Kamera mindig OpenGL-lel rajzol), jobb képminőség (a legjobb formátum 1280×720-ig) — `docs/J8-kamera-bluetooth-nyomtato.md`
+- **0.0.65 (w2)**: FusionAI: Visszavonás után a következő kéréshez megjegyzés kerül Claude-nak („a módosításokat visszavontad”), így nem állít elavultat a fájlokról
 - **0.0.64 (w2)**: FusionAI: a **Visszavonás** a parancsokkal (Bash) végzett módosításokat is visszavonja — minden kérés előtt pillanatkép készül (azonos állapotnál nem új), a gomb arra áll vissza, és megmondja, ha valami (új fájl) megmaradt
 - **0.0.63 (w2)**: FusionAI: a Commit ablak üzenet-javaslattal nyílik (a README új változatsorából, különben a módosított fájlokból) — átírható
 - **0.0.62 (w2)**: Google Drive: indításkor csak akkor fut a `fusermount3 -uz`, ha a `~/GoogleDrive` tényleg csatolva van — eltűnik a naplóból a „entry … not found in /etc/mtab” zaj (a beragadt csatolás takarítása megmarad)

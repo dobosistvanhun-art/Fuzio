@@ -12,6 +12,7 @@ Telepítés: fusion-dev install claude. Ha a Claude Code nincs telepítve vagy n
 kiírja, a Fúzió többi része ettől független.
 """
 import asyncio
+import json
 import os
 import sys
 import threading
@@ -55,6 +56,7 @@ class Backend(QObject):
         self._snaps = []
         self._last_user_uuid = ""
         self._turn_snap = ""                      # a munkafa az utolsó kérés előtt (pillanatkép) — Visszavonás
+        self._note = ""                           # a következő kéréshez fűzött megjegyzés Claude-nak (pl. visszavonás)
         self._pending = {}                        # jóváhagyás azonosító → asyncio.Future
         self._settings = {"test": "", "restart": ""}
         self._task = ""                           # futó helyi feladat (teszt, napló, commit, push)
@@ -214,6 +216,8 @@ class Backend(QObject):
         self._busy = True
         self.changed.emit()
         self.item.emit({"kind": "user", "text": text})
+        if self._note:          # amit a FusionAI a Claude tudta nélkül csinált (pl. Visszavonás) — hogy ne higgyen elavultat
+            text, self._note = f"[FusionAI megjegyzés: {self._note}]\n\n{text}", ""
         asyncio.run_coroutine_threadsafe(self._turn(text), self._loop)
 
     @pyqtSlot()
@@ -283,6 +287,8 @@ class Backend(QObject):
             else:
                 self.item.emit({"kind": "error", "text": "Részben visszavonva — a kérés óta keletkezett új fájlok megmaradtak: "
                                 + ", ".join(left[:10]) + (" …" if len(left) > 10 else "") + f" (az előző állapot: {r['before']})"})
+            self._note = ("a felhasználó a Visszavonás gombbal visszavonta az előző kérés fájlmódosításait — a munkafa "
+                          "olyan, mint előtte" + ("" if not left else ", kivéve: " + ", ".join(left[:10])))
             self._turn_snap, self._last_user_uuid = "", ""
             self.refreshGitLater.emit()
         self._run_task("visszavonás", go)
@@ -732,6 +738,10 @@ def selftest():
         app.processEvents()
         time.sleep(0.02)
     app.processEvents()
+    be.send("Mi van a projektben?")
+    check("TURN-AFTER-UNDO", wait_idle())
+    hist = json.load(open(os.path.join(tmp, ".cache", "fake-claude", be.session + ".json")))
+    check("UNDO-NOTE", "Visszavonás gombbal" in hist[-1] and "Mi van a projektben?" in hist[-1])
     check("UNDO", open(os.path.join(repo, "calc.py")).read() == before_text
           and any(i["kind"] == "info" and i["text"].startswith("Visszavonva") for i in items), str(items[-1:])[:120])
     perms_allow[0] = False
