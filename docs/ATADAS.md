@@ -4,6 +4,10 @@ Kétirányú napló: a helyben (FusionAI / Claude Code) és a webes Claude-dal (
 hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felül. A FusionAI a munkamenet elején a
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
+## 2026-10-29 18:00 — webes Claude: 0.0.63
+- A Commit ablak üres üzenetmezővel nyílt, ezért lett a 0.0.62 üzenete „p”. Most javaslattal nyílik: a README új
+  változatsorából („0.0.N (mérföldkő): …”), különben a módosított fájlok neveiből; átírható. Önteszt: COMMIT-SUGGEST ok.
+
 ## 2026-10-29 17:45 — a teljes kör a ZBookon (István + FusionAI)
 - A FusionAI a „Kimenet → Claude” gombbal elemezte a munkamenet naplóját (nincs valódi hiba, csak zaj), és jóváhagyással
   megcsinálta a 0.0.62-t: `fusion-drive.service` — a `fusermount3 -uz` csak akkor fut, ha a `~/GoogleDrive` csatolva van.

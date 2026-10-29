@@ -380,7 +380,8 @@ class Backend(QObject):
             return {}
         st = core.git_state(self._project)
         name, email = core.git_identity(self._project)
-        return {"files": st.get("files", []), "branch": st.get("branch", ""), "author": f"{name} <{email}>" if name and email else ""}
+        return {"files": st.get("files", []), "branch": st.get("branch", ""), "author": f"{name} <{email}>" if name and email else "",
+                "message": core.suggest_commit_message(self._project)}
 
     @pyqtSlot(str, bool)
     def commitChanges(self, msg, add_all):
@@ -743,13 +744,19 @@ def selftest():
     remote = os.path.join(tmp, "remote.git")
     subprocess.run(["git", "init", "-q", "--bare", remote], check=True)
     subprocess.run(g[:3] + ["remote", "add", "origin", remote], check=True)
+    open(os.path.join(repo, "README.md"), "w").write("# próba\n- **0.0.1 (w1)**: régi\n")
+    subprocess.run(g + ["add", "README.md"], check=True)
+    subprocess.run(g + ["commit", "-qm", "readme"], check=True)
+    open(os.path.join(repo, "README.md"), "w").write("# próba\n- **0.0.2 (w1)**: a **calc** javítása (`add`) — `docs/x.md`\n- **0.0.1 (w1)**: régi\n")
+    sug = be.commitInfo().get("message", "")
+    check("COMMIT-SUGGEST", sug == "0.0.2 (w1): a calc javítása (add)", repr(sug))
     items.clear()
     be.commitChanges("próba commit a FusionAI-ból", True)
     check("COMMIT", wait_task() and any(i["kind"] == "result" and "Commit kész" in i["text"] for i in items))
     _, log2, _ = core.git(repo, "log", "--oneline")
-    check("COMMIT-LOG", len(log2.splitlines()) == 2 and "próba commit" in log2)
+    check("COMMIT-LOG", len(log2.splitlines()) == 3 and "próba commit" in log2)
     info = be.pushInfo()
-    check("PUSH-INFO", len(info.get("commits", [])) == 2 and "még nincs" in info.get("upstream", ""))
+    check("PUSH-INFO", len(info.get("commits", [])) == 3 and "még nincs" in info.get("upstream", ""))
     items.clear()
     be.doPush()
     check("PUSH", wait_task() and any(i["kind"] == "result" and "Push kész" in i["text"] for i in items))

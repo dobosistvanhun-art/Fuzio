@@ -249,7 +249,7 @@ FWindow {
             FButton { text: "Újraindítás…"; icon: "restart"; enabled: ai.settings.restart !== ""
                       tip: ai.settings.restart || "nincs újraindító parancs — Beállítások"; onClicked: restartDlg.open() }
             FButton { text: "Commit…"; icon: "check"; enabled: !ai.task && !ai.busy && (ai.git.files || []).length > 0
-                      onClicked: { commitDlg.info = ai.commitInfo(); commitMsg.text = ""; commitDlg.open() } }
+                      onClicked: { commitDlg.info = ai.commitInfo(); commitMsg.text = commitDlg.info.message || ""; commitDlg.open(); commitMsg.forceActiveFocus() } }
             FButton { text: "Push…"; icon: "up"; enabled: !ai.task && !ai.busy
                       onClicked: { pushDlg.info = ai.pushInfo(); pushDlg.open() } }
             FButton { text: "Beállítások"; icon: "settings"; flat: true
@@ -437,7 +437,7 @@ FWindow {
                         Repeater { model: (commitDlg.info && commitDlg.info.files) || []
                             Text { text: modelData.status + "  " + modelData.path; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fsSmall } } } }
             }
-            FLabel { text: "Commit-üzenet"; bold: true }
+            FLabel { text: "Commit-üzenet (javaslat a változásokból — írd át, ha kell)"; bold: true }
             Rectangle {
                 width: parent.width; height: 90; color: Theme.base; border.color: commitMsg.activeFocus ? Theme.accent : Theme.border
                 ScrollView { anchors.fill: parent; anchors.margins: 4

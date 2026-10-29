@@ -483,3 +483,23 @@ def push(repo):
     rc, out, err = git(repo, *args, timeout=600)
     text = (out + err).strip()
     return {"ok": rc == 0, "error": "" if rc == 0 else text[-1500:], "output": text[-1500:]}
+
+
+def suggest_commit_message(repo):
+    """commit-üzenet javaslat a változásokból: ha a VERSION nőtt és a README-be új változatsor került, abból
+    („0.0.N (mérföldkő): …”); különben a módosított fájlok listája. A felhasználó átírhatja."""
+    _, diff, _ = git(repo, "diff", "HEAD", "--no-color", "-U0", "--", "README.md")
+    for ln in diff.splitlines():
+        m = re.match(r"^\+- \*\*(\d+\.\d+\.\d+)(?: \(([^)]*)\))?\*\*:\s*(.+)$", ln)
+        if m:
+            ver, ms, text = m.group(1), m.group(2), m.group(3)
+            text = re.split(r" — `docs/", text)[0]
+            text = re.sub(r"\*\*|`", "", text).strip()
+            if len(text) > 160:
+                text = text[:157].rsplit(" ", 1)[0] + "…"
+            return f"{ver}{f' ({ms})' if ms else ''}: {text}"
+    files = [f["path"] for f in git_state(repo).get("files", [])]
+    if not files:
+        return ""
+    names = ", ".join(os.path.basename(f.split(" -> ")[-1]) for f in files[:4])
+    return f"Módosítva: {names}" + (f" és még {len(files) - 4}" if len(files) > 4 else "")
