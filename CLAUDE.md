@@ -37,8 +37,9 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 - Commit és push **csak István kifejezett kérésére**. Commit-üzenet: magyarul, `0.0.N (mérföldkő): rövid összefoglaló`.
 - A nem commitolt munkát soha ne dobd el (reset --hard, checkout --, clean, stash drop).
 
-## Átadás a webes Claude-nak (claude.ai)
-A claude.ai-os beszélgetések a GitHubról látják a repót, a helyi munkameneteket nem. Ezért egy munka végén
+## Átadás (ZBook ⇄ webes Claude)
+**A munkamenet elején olvasd el a `docs/ATADAS.md` legfelső bejegyzéseit** — ott van, amit a webes Claude-dal
+(claude.ai) végeztünk. A claude.ai-os beszélgetések a GitHubról látják a repót, a helyi munkameneteket nem. Ezért egy munka végén
 (ha István kéri a commitot) frissítsd a `docs/ATADAS.md`-t: dátum, mi készült (fájlok, commit), mi lett kipróbálva
 és hogyan, mi maradt nyitva / ellenőrizetlen, döntések, amiket István hozott. Rövid, a legfrissebb bejegyzés felül;
 a régieket 10 bejegyzés fölött tömörítsd.
