@@ -45,11 +45,15 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 a régieket 10 bejegyzés fölött tömörítsd.
 
 ## Build és frissítés (a ZBookon)
+A gép frissítése a forrásból: **Beállítások → Rendszerfrissítés → Új változat a forrásból** (vagy parancssorban
+`fusion-dev rebuild`): ellenőrzés → git pull → fetch → rendszerkép → build a Fejlesztődobozban → .fupd, a végén
+rákérdez a telepítésre. Kézzel (a Fejlesztő terminálban):
 ```sh
 cd ~/Projektek/fusionos && git pull
-build/fusion-build fetch
-build/fusion-build all          # → .fupd; telepítés: Beállítások → Rendszerfrissítés
+build/fusion-build fetch && build/fusion-build rootfs && build/fusion-build build   # → build/out/release/*.fupd
+build/fusion-build all          # a teljes készlet (lemezképek is) — csak mérföldkő-kiadáshoz
 ```
+A VirtualBox-os fejlesztői környezet (vdi, vm) 0.0.69 óta nincs.
 
 ## Fontos dokumentumok
 - `docs/` — mérföldkövenként az ellenőrzési leírások és döntések (pl. `docs/W3-fusionai.md`: a FusionAI).

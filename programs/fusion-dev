@@ -12,6 +12,11 @@
                                   Claude Agent SDK a FusionAI-hoz (PyPI, ~/.local/share/fusion-ai/python)
     fusion-dev update claude
     fusion-dev remove claude      a Claude Code és az SDK törlése (a bejelentkezés és a munkamenetek: ~/.claude marad)
+    fusion-dev rebuild [--check [--json]]
+                                  új Fúzió-változat a forrásból (~/Projektek/fusionos): ellenőrzés (nem commitolt
+                                  munka, eltérő ág, hely, töltő) → git pull → fetch → rendszerkép → build → .fupd
+                                  (a Fejlesztődobozban); --check: csak az ellenőrzés. Telepítés: Beállítások →
+                                  Rendszerfrissítés (a gomb is ezt futtatja, a végén rákérdez)
     fusion-dev box                Fejlesztődoboz: bejelentkezés (Ubuntu 24.04 a DATA-n, apt-tal; a saját mappa közös)
     fusion-dev box status|create|remove
     fusion-dev box run <parancs…> egy parancs a dobozban (az aktuális mappában, ha a saját mappán belül van)
@@ -30,6 +35,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 
 DEV = os.environ.get("FUSION_DEV_DIR", "/data/dev")
@@ -292,6 +298,186 @@ def remove_claude():
         " kijelentkezés előtte: claude auth logout")
 
 
+# ---------------------------------------------------------------- új változat a forrásból (rebuild)
+
+REBUILD_STATE = os.path.join(HOME, ".cache", "fusion-dev", "rebuild.json")
+MIN_FREE = int(os.environ.get("FUSION_DEV_MIN_FREE_GB", "10")) << 30     # legalább ennyi szabad hely a build előtt
+
+
+def fusion_src():
+    """a Fúzió forrásfája: FUSION_SRC, különben ~/Projektek/fusionos (vagy ~/Projektek/fuzio)"""
+    cands = [os.environ.get("FUSION_SRC", "")] + [os.path.join(HOME, "Projektek", n) for n in ("fusionos", "fuzio", "Fuzio")]
+    for c in cands:
+        if c and os.path.isfile(os.path.join(c, "build", "fusion-build")) and os.path.isdir(os.path.join(c, ".git")):
+            return os.path.realpath(c)
+    return ""
+
+
+def _git(src, *a, timeout=120):
+    try:
+        r = subprocess.run(["git", "-C", src, *a], capture_output=True, text=True, timeout=timeout,
+                           env=dict(os.environ, GIT_TERMINAL_PROMPT="0", LC_ALL="C"))
+        return r.returncode, (r.stdout or "").rstrip(), (r.stderr or "").strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+
+
+def _on_ac():
+    """töltőn van-e (None: nem megállapítható, pl. asztali gép)"""
+    base = "/sys/class/power_supply"
+    try:
+        found = None
+        for n in os.listdir(base):
+            try:
+                with open(os.path.join(base, n, "type")) as f:
+                    t = f.read().strip()
+                if t == "Mains":
+                    with open(os.path.join(base, n, "online")) as f:
+                        if f.read().strip() == "1":
+                            return True
+                    found = False
+            except OSError:
+                continue
+        return found
+    except OSError:
+        return None
+
+
+def rebuild_check(fetch=True):
+    """mit találna a rebuild — semmit nem módosít (a git fetch csak a távoli ág állapotát frissíti)"""
+    st = {"src": fusion_src(), "ok": False, "problems": [], "warnings": [], "head": "", "behind": 0, "ahead": 0,
+          "dirty": [], "free": 0, "ac": None, "box": False, "last": {}}
+    try:
+        with open(REBUILD_STATE, encoding="utf-8") as f:
+            st["last"] = json.load(f)
+    except (OSError, ValueError):
+        pass
+    src = st["src"]
+    if not src:
+        st["problems"].append("nem találom a Fúzió forrását (~/Projektek/fusionos)")
+        return st
+    rc, out, _ = _git(src, "status", "--porcelain", "--untracked-files=no")
+    st["dirty"] = [ln[3:] for ln in out.splitlines() if ln.strip()]
+    if st["dirty"]:
+        st["problems"].append("nem commitolt módosítás: " + ", ".join(st["dirty"][:6]) + (" …" if len(st["dirty"]) > 6 else "")
+                              + " — előbb commit (FusionAI: Commit gomb) vagy git stash")
+    _, st["head"], _ = _git(src, "log", "-1", "--format=%h %s")
+    if fetch:
+        rc, _, err = _git(src, "fetch", "-q", "origin", timeout=180)
+        if rc != 0:
+            st["warnings"].append("a GitHub nem érhető el (git fetch): " + err[-160:] + " — a helyi állapotból épít")
+    rc, out, _ = _git(src, "rev-list", "--left-right", "--count", "HEAD...@{u}")
+    if rc == 0 and len(out.split()) == 2:
+        st["ahead"], st["behind"] = (int(x) for x in out.split())
+    if st["ahead"]:
+        st["problems"].append(f"a helyi ágon {st['ahead']} commit van, ami nincs fent a GitHubon — előbb push "
+                              "(FusionAI: Push gomb), vagy ha a GitHubon is van új, kézzel kell rendezni")
+    try:
+        st["free"] = shutil.disk_usage(src).free
+    except OSError:
+        pass
+    if st["free"] and st["free"] < MIN_FREE:
+        st["problems"].append(f"kevés a szabad hely: {st['free'] >> 30} GB (legalább {MIN_FREE >> 30} GB kell)")
+    st["ac"] = _on_ac()
+    if st["ac"] is False:
+        st["warnings"].append("a gép akkumulátorról megy — a build hosszú, érdemes töltőre tenni")
+    st["box"] = bool(box_status().get("exists"))
+    if not st["box"]:
+        st["problems"].append("nincs Fejlesztődoboz (Beállítások → Programkezelő → Fejlesztődoboz → Létrehozás)")
+    st["ok"] = not st["problems"]
+    return st
+
+
+def _fupds(src):
+    out = []
+    for d, _, files in os.walk(os.path.join(src, "build", "out")):
+        out += [os.path.join(d, f) for f in files if f.endswith(".fupd")]
+    return sorted(out, key=lambda p: os.path.getmtime(p), reverse=True)
+
+
+def rebuild(a):
+    if "--check" in a:
+        st = rebuild_check()
+        if "--json" in a:
+            print(json.dumps(st, ensure_ascii=False))
+        else:
+            say(f"forrás:  {st['src'] or '—'}\nHEAD:    {st['head']}\nGitHubon újabb: {st['behind']} commit, csak helyben: {st['ahead']}")
+            for w in st["warnings"]:
+                say("figyelem: " + w)
+            for p in st["problems"]:
+                say("AKADÁLY: " + p)
+            say("rendben, indítható" if st["ok"] else "nem indítható")
+        return 0 if st["ok"] else 1
+    t_start = time.time()
+    n = 6
+    say(f"LÉPÉS 1/{n}: ellenőrzés")
+    say("PROGRESS 1")
+    st = rebuild_check()
+    for w in st["warnings"]:
+        say("figyelem: " + w)
+    if not st["ok"]:
+        raise DevError("; ".join(st["problems"]))
+    src = st["src"]
+    say(f"forrás: {src} — {st['head']}")
+    say(f"LÉPÉS 2/{n}: git pull")
+    say("PROGRESS 3")
+    if st["behind"]:
+        rc, out, err = _git(src, "pull", "--ff-only", "-q", timeout=300)
+        if rc != 0:
+            raise DevError("git pull: " + (err or out)[-300:])
+        _, head, _ = _git(src, "log", "-1", "--format=%h %s")
+        say(f"frissítve ({st['behind']} új commit): {head}")
+    else:
+        say("nincs új commit a GitHubon — a mostani állapotból épül")
+    os.chdir(src)
+    runner = os.environ.get("FUSION_DEV_BUILD_RUNNER")      # próbához: a doboz helyett közvetlenül
+    steps = [(3, "letöltések (fetch)", ["build/fusion-build", "fetch"], 10),
+             (4, "rendszerkép (ha a forrás változott)", ["build/fusion-build", "rootfs"], 30),
+             (5, "build: UKI-k, ESP, .fupd", ["build/fusion-build", "build"], 85)]
+    before = set(_fupds(src))
+    for i, title, cmd, prog in steps:
+        say(f"LÉPÉS {i}/{n}: {title}")
+        rc = subprocess.call(cmd) if runner else box(["run"] + cmd)
+        if rc != 0:
+            raise DevError(f"a(z) „{title}” lépés hibával állt le ({rc}) — a részletek fent")
+        say(f"PROGRESS {prog}")
+    say(f"LÉPÉS 6/{n}: takarítás")
+    removed = 0
+    for d, _, files in os.walk(os.path.join(src, "build", "out")):
+        for f in files:
+            if f.endswith(".vdi"):                     # a VirtualBox-os fejlesztői lemezkép (megszűnt, 0.0.69)
+                try:
+                    removed += os.path.getsize(os.path.join(d, f))
+                    os.unlink(os.path.join(d, f))
+                    say(f"törölve: {f} (VirtualBox-lemezkép, már nem kell)")
+                except OSError:
+                    pass
+    fupds = _fupds(src)
+    for old in fupds[3:]:                              # a három legújabb .fupd marad
+        try:
+            removed += os.path.getsize(old)
+            os.unlink(old)
+            say(f"törölve: {os.path.basename(old)} (régi frissítőfájl)")
+        except OSError:
+            pass
+    if removed:
+        say(f"felszabadult: {removed >> 20} MB")
+    new = [p for p in fupds[:3] if p not in before] or fupds[:1]
+    if not new:
+        raise DevError("nem készült .fupd — a részletek fent")
+    secs = int(time.time() - t_start)
+    try:
+        os.makedirs(os.path.dirname(REBUILD_STATE), exist_ok=True)
+        with open(REBUILD_STATE, "w", encoding="utf-8") as f:
+            json.dump({"finished": time.time(), "secs": secs, "fupd": new[0]}, f)
+    except OSError:
+        pass
+    say("PROGRESS 100")
+    say("FUPD: " + new[0])
+    say(f"KÉSZ: {os.path.basename(new[0])} elkészült ({secs // 60} perc {secs % 60} mp)")
+    return 0
+
+
 ADMIN = ["sudo", "-n", os.environ.get("FUSION_ADMIN", "/usr/lib/fusion/bin/fusion-admin"), "devbox"]
 
 
@@ -319,6 +505,8 @@ def main(a):
     what = a[1] if len(a) > 1 else ""
     if cmd == "box":
         return box(a[1:])
+    if cmd == "rebuild":
+        return rebuild(a[1:])
     if cmd in ("-h", "--help", "help"):
         say(__doc__.strip())
         return 0

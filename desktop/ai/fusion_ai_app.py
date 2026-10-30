@@ -415,6 +415,22 @@ class Backend(QObject):
             ok = False
         self.item.emit({"kind": "info" if ok else "error", "text": f"Újraindítás{'' if ok else ' nem sikerült'}: {cmd}"})
 
+    @pyqtSlot(str)
+    def loadOutput(self, path):
+        """egy naplófájl (pl. a Fúzió buildjének naplója) betöltése a „Kimenet → Claude” gombhoz"""
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                lines = [ln for ln in f.read().splitlines() if not ln.startswith(("PROGRESS ", "RC="))]
+        except OSError as e:
+            self.message.emit(f"a napló nem olvasható: {e}", True)
+            return
+        self._last_output = (os.path.basename(path), lines[-400:])
+        for ln in lines[-400:]:
+            self.logLine.emit(ln)
+        self.item.emit({"kind": "info", "text": f"Napló betöltve: {path} ({len(lines)} sor) — a „Kimenet → Claude” gombbal "
+                                                 "elküldheted elemzésre."})
+        self.changed.emit()
+
     @pyqtSlot()
     def sendOutputToClaude(self):
         title, tail = self._last_output
@@ -817,6 +833,10 @@ def selftest():
     be.runTest()
     check("TEST-FAIL", wait_task() and any(i["kind"] == "error" and "kód 3" in i["text"] and "hiba-sor" in i["text"] for i in items))
     check("OUTPUT-KEPT", be.hasOutput)
+    lp = os.path.join(tmp, "build.log")
+    open(lp, "w").write("LÉPÉS 5/6: build\nPROGRESS 85\nhiba: valami eltört\nRC=1\n")
+    be.loadOutput(lp)
+    check("LOAD-OUTPUT", be._last_output[1] == ["LÉPÉS 5/6: build", "hiba: valami eltört"], str(be._last_output[1]))
     be.showLog("fusion")
     check("LOG", wait_task())
     r0 = core.commit(repo, "nincs szerző", True)
@@ -878,18 +898,26 @@ def main():
         print(__doc__.strip())
         return 0
     from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-    project = next((a for a in sys.argv[1:] if not a.startswith("-")), "")
+    args = sys.argv[1:]
+    output = ""
+    if "--kimenet" in args:               # egy napló (pl. a Fúzió buildje) a „Kimenet → Claude” gombhoz
+        i = args.index("--kimenet")
+        output = os.path.realpath(args[i + 1]) if i + 1 < len(args) else ""
+        args = args[:i] + args[i + 2:]
+    project = next((a for a in args if not a.startswith("-")), "")
     name = f"fusion-ai-{os.getuid()}"
     sock = QLocalSocket()
     sock.connectToServer(name)
     if sock.waitForConnected(300):          # már fut: előre hozzuk (és átadjuk a projektet)
         import json
-        sock.write((json.dumps({"raise": True, "project": project}) + "\n").encode())
+        sock.write((json.dumps({"raise": True, "project": project, "output": output}) + "\n").encode())
         sock.waitForBytesWritten(500)
         return 0
     app, engine = ui.create_app("fusion-ai", "FusionAI", "ai")
     be = Backend(project)
     wire(be)
+    if output:
+        be.loadOutput(output)
     server = QLocalServer()
     QLocalServer.removeServer(name)
     server.listen(name)
@@ -907,6 +935,8 @@ def main():
                 d = {}
             if d.get("project"):
                 be.openProject(d["project"])
+            if d.get("output"):
+                be.loadOutput(d["output"])
             be.message.emit("__raise__", False)
         c.readyRead.connect(rd)
     server.newConnection.connect(on_conn)

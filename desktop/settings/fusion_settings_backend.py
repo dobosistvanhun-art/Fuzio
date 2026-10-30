@@ -321,7 +321,24 @@ def update_state():
     stamp = running["name"].split("-")[-2] if running and running["name"].count("-") >= 4 else running_stamp()
     return {"version": rel.get("FUSION_VERSION", "?"), "milestone": rel.get("FUSION_MILESTONE", ""),
             "slot": st.get("slot", _read("/run/fusion/slot", "?")), "state": st.get("state", ""),
-            "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "stamp": stamp}
+            "entries": st.get("entries", []), "error": "" if rc == 0 else out.strip()[:200], "stamp": stamp,
+            "src": fusion_src()}
+
+
+# --- Új változat a forrásból (0.0.69): fusion-dev rebuild a Fejlesztődobozban, a végén telepítés kérdéssel ---
+def fusion_src():
+    """a Fúzió forrásfája a saját gépen (ha nincs: üres — tesztelőknél a gomb nem látszik)"""
+    home = os.path.expanduser("~")
+    for c in [os.environ.get("FUSION_SRC", "")] + [os.path.join(home, "Projektek", n) for n in ("fusionos", "fuzio", "Fuzio")]:
+        if c and os.path.isfile(os.path.join(c, "build", "fusion-build")) and os.path.isdir(os.path.join(c, ".git")):
+            return os.path.realpath(c)
+    return ""
+
+
+def _from_src(src, rel, fallback):
+    """a forrásfa saját példánya (mindig a legújabb), különben a rendszerkép parancsa"""
+    p = os.path.join(src, rel) if src else ""
+    return ["python3", p] if p and os.path.isfile(p) else [fallback]
 
 
 # --- Indítás (UEFI-bejegyzések) ---
@@ -1132,6 +1149,54 @@ class Settings(QObject):
         return self._job("Rendszerfrissítés: Fúzió " + info.get("version", "?"), [path], kind="update",
                          cmd=("sudo", "-n", ui.ADMIN, "update-apply"), app="Rendszerfrissítés", icon="update",
                          okpat="^KÉSZ:")
+
+    @pyqtSlot()
+    def rebuildCheck(self):
+        def go():
+            src = fusion_src()
+            rc, out = ui.run(_from_src(src, "programs/fusion-dev", "fusion-dev") + ["rebuild", "--check", "--json"], timeout=240)
+            try:
+                return json.loads(out.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                return {"ok": False, "problems": [out.strip()[-300:] or "a fusion-dev nem válaszolt"], "warnings": []}
+        self._async("rebuild-check", go)
+
+    @pyqtSlot(result=str)
+    def rebuildStart(self):
+        src = fusion_src()
+        if not src:
+            return "nem találom a Fúzió forrását (~/Projektek/fusionos)"
+        return self._job("Új változat a forrásból", ["rebuild"], kind="rebuild",
+                         cmd=tuple(_from_src(src, "programs/fusion-dev", "fusion-dev")), app="Rendszerfrissítés",
+                         icon="update", okpat="^KÉSZ:")
+
+    @pyqtSlot()
+    def rebuildJobWatch(self):
+        st = self._job_state("rebuild")
+        self.result.emit("rebuild-job", st)
+        if st["running"]:
+            self._job_watch("rebuild")
+
+    @pyqtSlot(result=str)
+    def rebuildFupd(self):
+        """a legutóbbi sikeres build .fupd-je (a feladat naplójából)"""
+        try:
+            with open(fjobs._paths("rebuild")[1], encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except (OSError, ValueError):
+            return ""
+        p = next((ln[6:].strip() for ln in reversed(lines) if ln.startswith("FUPD: ")), "")
+        return p if p.endswith(".fupd") and os.path.isfile(p) else ""
+
+    @pyqtSlot()
+    def rebuildToAI(self):
+        """a build naplója a FusionAI-ba (Kimenet → Claude), a Fúzió forrásával mint projekttel"""
+        src = fusion_src()
+        try:
+            log = fjobs._paths("rebuild")[1]
+        except ValueError:
+            return
+        ui.spawn(_from_src(src, "desktop/ai/fusion_ai_app.py", "fusion-ai") + ([src] if src else []) + ["--kimenet", log])
 
     @pyqtSlot()
     def updateJobWatch(self):

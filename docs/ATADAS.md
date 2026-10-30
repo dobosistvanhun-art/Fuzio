@@ -7,6 +7,13 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+
+## 2026-10-30 — webes Claude: 0.0.69, új változat a forrásból egy gombbal; VirtualBox ki
+- István döntései: a gomb a Rendszerfrissítés oldalon legyen; a build végén kérdezze meg a telepítést; a VirtualBox-os
+  rész (vdi, vm) végleg törölve; a teljes lemezkép-készlet csak mérföldkő-kiadáshoz.
+- Kész: `fusion-dev rebuild`, a Beállítások gombja és ablakai, a FusionAI `--kimenet` (build-napló elemzése),
+  `build/steps/vm.sh` törölve, `all` VDI nélkül — leírás: `docs/W4-forrasbol-frissites.md`.
+- Nyitott: ZBook-próba (a Beállítások a forrásból: `python3 ~/Projektek/fusionos/desktop/settings/fusion_settings.py update`).
 ## 2026-10-30 — webes Claude: 0.0.68, modell a FusionAI-ban
 - István döntése: a FusionAI Opus 5.5-tel, medium erőfeszítéssel dolgozzon. Alapból így indul (`--model claude-opus-5-5
   --effort medium`); a fejlécben választható (a `~/.config/fusion/ai.json` őrzi). Önteszt: MODEL-ARGS ok.

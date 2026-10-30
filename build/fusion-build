@@ -13,12 +13,11 @@
 #    printer            Klipper + Moonraker futtatókörnyezet (M5) — root kell (sudo)
 #    rootfs [--force]   a Fúzió rendszerkép (EROFS) építése — root kell (sudo)
 #    build              initramfs-ek + UKI-k (Fúzió + diagnosztika) + ESP-fa
-#    image              GPT lemezkép (VirtualBox / QEMU)
-#    vdi                a lemezkép VDI-vé alakítása
-#    vm [--usb]         FusionOS-dev VirtualBox VM létrehozása / frissítése
-#                       (--usb: lézer + nyomtató USB-átadása, Extension Pack kell)
-#    vm-start           a VM indítása
-#    all                fetch + rootfs (sudo-t kér, ha kell) + build + image + vdi
+#    image              GPT lemezkép (QEMU, pendrive, kiadás)
+#    all                fetch + rootfs (sudo-t kér, ha kell) + build + image + telepítő-lemezkép — a teljes
+#                       készlet a mérföldkő-kiadásokhoz; a gép frissítéséhez elég a .fupd:
+#                       fetch + rootfs + build (vagy: Beállítások → Rendszerfrissítés → Új változat a forrásból,
+#                       illetve fusion-dev rebuild)
 #    test               automatikus EFI boot-teszt QEMU + OVMF alatt
 #    usb <eszköz>       felírás pendrive-ra (root: sudo build/fusion-build usb /dev/sdX)
 #    install <eszköz> [--internal] [--data-from <FUSION_DATA>] [--wifi-file <fájl>]
@@ -56,8 +55,6 @@ step_deps() {
         if have "$c"; then info "megvan:   $c"; else warn "hiányzik: $c"; lack=1; fi
     done
     if [ -r /usr/lib/systemd/boot/efi/systemd-bootx64.efi ]; then info "megvan:   systemd-boot EFI"; else warn "hiányzik: systemd-boot-efi"; lack=1; fi
-    if have qemu-img; then info "megvan:   qemu-img"; else warn "hiányzik: qemu-img (a VDI-hez; tartalék: VBoxManage)"; fi
-    if have VBoxManage; then info "megvan:   VBoxManage (VirtualBox)"; else warn "VirtualBox nincs telepítve (a 'vm' lépéshez kell)"; fi
     if have qemu-system-x86_64; then info "megvan:   qemu-system-x86_64 (opcionális, 'test')"; else info "opcionális: qemu-system-x86 ovmf (a 'test' lépéshez)"; fi
     echo
     info "Telepítés:  sudo apt install $DEPS_PKGS"
@@ -92,12 +89,8 @@ case "$cmd" in
     rootfs)   if [ "$(id -u)" -eq 0 ]; then step_rootfs; else ensure_rootfs "$@"; fi ;;
     build)    step_build ;;
     image)    step_image ;;
-    vdi)      step_vdi ;;
-    vm)       step_vm "$@" ;;
-    vm-start) step_vm_start ;;
     all)      step_deps >/dev/null 2>&1 || { step_deps || true; die "hiányzik egy build-függőség — telepítés: build/fusion-build deps --install"; }
-              step_fetch; ensure_rootfs; step_build; step_image; step_installer_image
-              if have qemu-img || have VBoxManage; then step_vdi; else warn "VDI kihagyva (nincs qemu-img/VBoxManage)"; fi ;;
+              step_fetch; ensure_rootfs; step_build; step_image; step_installer_image ;;
     test)     step_test ;;
     usb)      step_usb "$@" ;;
     install)  step_install "$@" ;;

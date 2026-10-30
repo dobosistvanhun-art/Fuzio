@@ -17,9 +17,13 @@ SettingsPage {
     property bool searching: false          // a csatolt kötetek (pendrive, Tárhely) keresése még tart
     property var mjob: ({ running: false, lines: [], rc: null, title: "" })
     property var mdisks: []
+    // 0.0.69: új változat a forrásból (fusion-dev rebuild)
+    property var rjob: ({ running: false, lines: [], rc: null, title: "", step: {}, progress: null })
+    property var rcheck: null               // az ellenőrzés eredménye (a párbeszédablakban)
+    property bool rasked: false             // a „Telepítsem most?” kérdés egy buildnél egyszer jön
     busy: job.running
     onRefresh: settings.updateRefresh()
-    Component.onCompleted: { settings.updateRefresh(); settings.updateJobWatch(); settings.mediaJobWatch() }
+    Component.onCompleted: { settings.updateRefresh(); settings.updateJobWatch(); settings.mediaJobWatch(); settings.rebuildJobWatch() }
     Timer { interval: 8000; running: p.visible && !p.job.running; repeat: true; onTriggered: settings.updateRefresh() }
     Connections {
         target: settings
@@ -37,6 +41,19 @@ SettingsPage {
                 p.mjob = r
             } else if (tag === "media-disks") {
                 p.mdisks = r.disks
+            } else if (tag === "rebuild-check") {
+                p.rcheck = r
+            } else if (tag === "rebuild-job") {
+                var wasR = p.rjob.running
+                p.rjob = r
+                if (wasR && !r.running) {
+                    settings.updateRefresh()
+                    if (r.rc === 0 && !p.rasked) {
+                        p.rasked = true
+                        installAsk.fupd = settings.rebuildFupd()
+                        if (installAsk.fupd) installAsk.open()
+                    }
+                }
             } else if (tag === "update-job") {
                 var was = p.job.running || p.pending
                 p.job = r
@@ -96,6 +113,41 @@ SettingsPage {
         }
     }
 
+
+    // --- 0.0.69: új változat a forrásból ---
+    Section {
+        visible: (p.s.src || "") !== ""
+        title: "ÚJ VÁLTOZAT A FORRÁSBÓL"
+        InfoRow { icon: "update"; label: "Forrás"; value: (p.s.src || "") + "\nGit-frissítés → letöltések → rendszerkép → build a Fejlesztődobozban; a végén rákérdez a telepítésre" }
+        Item {
+            width: parent.width; height: 46
+            FButton { x: 12; anchors.verticalCenter: parent.verticalCenter
+                      text: p.rjob.running ? "Épül…" : "Új változat a forrásból…"; icon: "update"; primary: !p.rjob.running
+                      enabled: !p.rjob.running && !p.job.running
+                      onClicked: { p.rcheck = null; settings.rebuildCheck(); rebuildDlg.open() } }
+            FButton { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                      visible: !p.rjob.running && p.rjob.rc !== null && p.rjob.rc !== undefined && p.rjob.rc !== 0 && p.rjob.recent === true
+                      text: "Elemzés a FusionAI-val"; icon: "app-ai"; onClicked: settings.rebuildToAI() }
+        }
+        Column {
+            visible: p.rjob.title !== "" && p.rjob.recent === true && (p.rjob.running || (p.rjob.rc !== null && p.rjob.rc !== undefined))
+            x: 12; width: parent.width - 24; spacing: 4; bottomPadding: 8
+            Text { text: p.rjob.running ? ("Folyamatban — " + ((p.rjob.step || {}).text ? (p.rjob.step.i + "/" + p.rjob.step.n + ": " + p.rjob.step.text) : "indul…"))
+                                        : (p.rjob.rc === 0 ? "Kész." : "Sikertelen (kód: " + p.rjob.rc + ") — az ok az utolsó sorokban")
+                   color: p.rjob.running ? Theme.text : (p.rjob.rc === 0 ? Theme.ok : Theme.danger); font.family: Theme.font; font.pixelSize: 13; font.bold: true }
+            Rectangle {
+                visible: p.rjob.running; width: parent.width; height: 6; radius: 3; color: Theme.base
+                Rectangle { width: parent.width * Math.max(0.02, (p.rjob.progress || 0) / 100); height: parent.height; radius: 3; color: Theme.accent }
+            }
+            Repeater {
+                model: (p.rjob.lines || []).filter(l => !/^(PROGRESS |LÉPÉS )/.test(l)).slice(-10)
+                Text { width: parent.width; text: modelData; elide: Text.ElideMiddle; textFormat: Text.PlainText
+                       color: /hiba|nem sikerült|sikertelen|fusion-dev:|error|AKADÁLY/i.test(modelData) ? Theme.danger : Theme.dim
+                       font.family: Theme.mono; font.pixelSize: 11 }
+            }
+        }
+    }
+
     Section {
         title: "FRISSÍTŐFÁJL (.fupd)"
         Repeater {
@@ -142,6 +194,58 @@ SettingsPage {
                        font.family: Theme.mono; font.pixelSize: 11 }
             }
         }
+    }
+    FDialog {
+        id: rebuildDlg
+        objectName: "rebuildDlg"
+        title: "Új változat a forrásból"
+        buttons: [["Mégse", ""], ["Indítás", "primary"]]
+        defaultButton: 0
+        onButtonClicked: (i) => {
+            if (i === 1 && p.rcheck && p.rcheck.ok) {
+                var e = settings.rebuildStart()
+                p.msg = e ? "hiba: " + e : ""
+                if (!e) { p.rasked = false; settings.rebuildJobWatch() }
+            }
+            close()
+        }
+        Column {
+            x: 20; y: 16; width: 560; spacing: 8
+            Text { visible: p.rcheck === null; text: "Ellenőrzés… (nem commitolt munka, GitHub, szabad hely, töltő, Fejlesztődoboz)"
+                   color: Theme.dim; font.family: Theme.font; font.pixelSize: 13 }
+            Text { visible: p.rcheck !== null; width: parent.width; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 13
+                   text: !p.rcheck ? "" : "Mostani állapot: " + (p.rcheck.head || "?") + "\n" +
+                         (p.rcheck.behind > 0 ? "A GitHubon " + p.rcheck.behind + " új commit van — letöltöm, és abból építek."
+                                              : "Nincs új commit a GitHubon — a mostani állapotból építek újra.") +
+                         ((p.rcheck.last || {}).secs ? "\nA legutóbbi build " + Math.round(p.rcheck.last.secs / 60) + " percig tartott." : "") +
+                         "\nA végén megkérdezem, telepítsem-e. Közben dolgozhatsz, az ablak be is zárható." }
+            Repeater {
+                model: p.rcheck ? (p.rcheck.warnings || []) : []
+                Text { width: 560; wrapMode: Text.Wrap; text: "⚠ " + modelData; color: Theme.warn; font.family: Theme.font; font.pixelSize: 12 }
+            }
+            Repeater {
+                model: p.rcheck ? (p.rcheck.problems || []) : []
+                Text { width: 560; wrapMode: Text.Wrap; text: "✖ " + modelData; color: Theme.danger; font.family: Theme.font; font.pixelSize: 12 }
+            }
+        }
+    }
+    FDialog {
+        id: installAsk
+        objectName: "installAsk"
+        property string fupd: ""
+        title: "Elkészült az új változat"
+        buttons: [["Később", ""], ["Telepítés most", "primary"]]
+        onButtonClicked: (i) => {
+            if (i === 1 && fupd) {
+                var e = settings.updateInstall(fupd)
+                p.msg = e ? "hiba: " + e : ""
+                if (!e) p.pending = true
+            }
+            close()
+        }
+        Text { x: 20; y: 16; width: 520; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.font; font.pixelSize: 13
+               text: "Elkészült: " + installAsk.fupd.replace(/^.*\//, "") + "\n\nTelepítsem most? A frissítés a másik rendszer-slotba kerül; " +
+                     "az újraindítást utána te indítod. „Később”: a fájl a frissítőfájlok között marad." }
     }
     FDialog {
         id: mediaDlg
