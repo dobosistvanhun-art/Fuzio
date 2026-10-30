@@ -238,6 +238,21 @@ class Backend(QObject):
         if fut is not None:
             self._loop.call_soon_threadsafe(self._resolve, fut, allow, note)
 
+    @pyqtProperty("QVariant", notify=changed)
+    def modelChoice(self):
+        ms = core.model_settings()
+        return {"model": ms["model"], "effort": ms["effort"],
+                "models": [{"id": i, "label": l} for i, l in core.MODELS], "efforts": core.EFFORTS}
+
+    @pyqtSlot(str, str)
+    def setModel(self, model, effort):
+        """a modell és az erőfeszítés a következő kapcsolódástól él; a munkamenet folytatódik (resume)"""
+        core.save_model_settings(model, effort)
+        if self._client is not None and not self._busy:
+            self._close_client()        # a következő kérés ugyanazt a munkamenetet folytatja az új beállítással
+        self.message.emit(f"modell: {model or 'alapértelmezett'}, erőfeszítés: {effort} — a következő kéréstől", False)
+        self.changed.emit()
+
     @pyqtSlot(bool)
     def setAcceptEdits(self, on):
         """a Claude Code hivatalos „acceptEdits” módja: a projekten belüli fájlmódosítások kérdés nélkül
@@ -464,6 +479,8 @@ class Backend(QObject):
         return sdk.ClaudeAgentOptions(
             cwd=self._project,
             cli_path=core.CLI,
+            model=core.model_settings()["model"] or None,
+            effort=core.model_settings()["effort"],
             permission_mode="acceptEdits" if self._accept_edits else "default",
             can_use_tool=self._can_use_tool,
             resume=self._session or None,
@@ -774,6 +791,8 @@ def selftest():
     import json as _j
     last = _j.load(open(os.path.join(tmp, ".cache", "fake-claude", "last-args.json")))
     a = last["args"]
+    check("MODEL-ARGS", "--model" in a and a[a.index("--model") + 1] == "claude-opus-5-5"
+          and "--effort" in a and a[a.index("--effort") + 1] == "medium", " ".join(x for x in a if x.startswith("--"))[:200])
     check("ARGS", "--permission-mode" in a and a[a.index("--permission-mode") + 1] == "default"
           and os.path.realpath(last["cwd"]) == os.path.realpath(repo)
           and not any(x in a for x in ("bypassPermissions", "--dangerously-skip-permissions")), " ".join(a)[:200])

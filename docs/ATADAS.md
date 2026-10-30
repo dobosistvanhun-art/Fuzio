@@ -6,6 +6,10 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+
+## 2026-10-30 — webes Claude: 0.0.68, modell a FusionAI-ban
+- István döntése: a FusionAI Opus 5.5-tel, medium erőfeszítéssel dolgozzon. Alapból így indul (`--model claude-opus-5-5
+  --effort medium`); a fejlécben választható (a `~/.config/fusion/ai.json` őrzi). Önteszt: MODEL-ARGS ok.
 ## 2026-10-30 — webes Claude: 0.0.67, a lassú .fupd-keresés oka és javítása
 - Mérés a ZBookon (`fupd-gyorsmeres.sh`, hidegen indítva): `glob ~/*/build/out/release` **60 mp fölött** (időtúllépés),
   `~/*/*/build…` 7 mp, ugyanez Google Drive nélkül 0,08 mp, a teljes keresés melegen 0,5 mp. Ok: a build-kimenet keresése

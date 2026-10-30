@@ -68,6 +68,28 @@ def cli_status():
     return st
 
 
+# ---------------------------------------------------------------- modell és erőfeszítés (István: Opus 5.5, medium)
+
+MODELS = [("claude-opus-5-5", "Opus 5.5"), ("claude-sonnet-5", "Sonnet 5"), ("claude-haiku-4-5", "Haiku 4.5"),
+          ("", "a Claude Code alapértelmezése")]
+EFFORTS = ["low", "medium", "high", "xhigh", "max"]
+DEFAULT_MODEL, DEFAULT_EFFORT = "claude-opus-5-5", "medium"
+
+
+def model_settings():
+    d = load_config()
+    m = d.get("model", DEFAULT_MODEL)
+    e = d.get("effort", DEFAULT_EFFORT)
+    return {"model": m if isinstance(m, str) else DEFAULT_MODEL, "effort": e if e in EFFORTS else DEFAULT_EFFORT}
+
+
+def save_model_settings(model, effort):
+    d = load_config()
+    d["model"] = model.strip()
+    d["effort"] = effort if effort in EFFORTS else DEFAULT_EFFORT
+    save_config(d)
+
+
 # ---------------------------------------------------------------- projektek
 
 def load_config():

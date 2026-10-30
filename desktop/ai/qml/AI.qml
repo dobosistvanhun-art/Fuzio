@@ -89,6 +89,25 @@ FWindow {
             FButton { text: !st.installed || !st.sdk ? "Telepítés…" : "Bejelentkezés…"; visible: !st.installed || !st.sdk || !st.loggedIn
                       primary: true; onClicked: ai.login() }
             FButton { text: "Frissítés"; icon: "refresh"; flat: true; onClicked: { ai.refresh(); ai.refreshGit(); ai.refreshSessions() } }
+            ComboBox {
+                id: modelBox
+                anchors.verticalCenter: parent.verticalCenter
+                width: 150; height: 28
+                readonly property var mc: ai.modelChoice || ({ models: [], efforts: [] })
+                model: mc.models.map(m => m.label)
+                currentIndex: mc.models.findIndex(m => m.id === mc.model)
+                onActivated: i => ai.setModel(mc.models[i].id, effortBox.currentText)
+                ToolTip.visible: hovered; ToolTip.text: "Modell (a következő kéréstől; a munkamenet folytatódik)"
+            }
+            ComboBox {
+                id: effortBox
+                anchors.verticalCenter: parent.verticalCenter
+                width: 120; height: 28
+                model: modelBox.mc.efforts
+                currentIndex: modelBox.mc.efforts.indexOf(modelBox.mc.model !== undefined ? modelBox.mc.effort : "medium")
+                onActivated: i => ai.setModel(modelBox.mc.model, modelBox.mc.efforts[i])
+                ToolTip.visible: hovered; ToolTip.text: "Erőfeszítés (effort): low · medium · high · xhigh · max"
+            }
         }
         Row {
             anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8

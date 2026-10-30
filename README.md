@@ -46,6 +46,7 @@ Ellenőrzés a ZBookon: `docs/M6-ellenorzes.md`.
 - **0.0.40 (j8)**: beépített kamera (Kamera program, Eszközök és kamera), Bluetooth (Beállítások → Bluetooth: párosítás, fejhallgató, egér, billentyűzet), papírnyomtatók (Beállítások → Nyomtatók: CUPS, driverless, PDF-nyomtató); `fusion cameras | bluetooth | printers` — `docs/J8-kamera-bluetooth-nyomtato.md`
 - **0.0.41 (m9a)**: jogosultságok első lépése — `input` csoport ki, hibajelentés: JOGOSULTSÁGOK, Programkezelő: Védelem, leíró: `allow.files` / `allow.net` / `sandbox`, `fusion permissions` (Klipper és LightBurn változatlan) — `docs/M9a-jogosultsagok.md`
 - **0.0.42 (j9)**: Kamera: élőkép szoftveres felületnél is (a Kamera mindig OpenGL-lel rajzol), jobb képminőség (a legjobb formátum 1280×720-ig) — `docs/J8-kamera-bluetooth-nyomtato.md`
+- **0.0.68 (w2)**: FusionAI: modell- és erőfeszítés-választó a fejlécben — alapból **Opus 5.5, medium** (István); a változás a következő kéréstől él, a munkamenet folytatódik
 - **0.0.67 (w2)**: Rendszerfrissítés: a .fupd-keresés nem lép be a Google Drive-ba és más csatolt kötetbe a saját mappán belül (a build-kimenet keresése a hideg rclone-gyorsítótárnál percekig várt — ZBook-mérés: a `~/*/build` glob 60 mp fölött); a csatolási pontokat a /proc/self/mounts-ból ismeri fel, stat nélkül
 - **0.0.66 (w2)**: FusionAI: a fejlécben látszik, melyik modellel dolgozik a Claude Code (az első kérés után)
 - **0.0.65 (w2)**: FusionAI: Visszavonás után a következő kéréshez megjegyzés kerül Claude-nak („a módosításokat visszavontad”), így nem állít elavultat a fájlokról
