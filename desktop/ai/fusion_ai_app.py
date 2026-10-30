@@ -110,6 +110,11 @@ class Backend(QObject):
     def session(self):
         return self._session
 
+    @pyqtProperty(str, notify=changed)
+    def model(self):
+        """a modell, amellyel a Claude Code ebben a munkamenetben dolgozik (az indulási üzenetéből)"""
+        return getattr(self, "_model", "")
+
     @pyqtProperty(bool, notify=changed)
     def busy(self):
         return self._busy
@@ -500,6 +505,10 @@ class Backend(QObject):
                         self.delta.emit(ev["delta"].get("text", ""))
                 elif isinstance(msg, sdk.SystemMessage):
                     if msg.subtype == "init":
+                        mdl = str((msg.data or {}).get("model") or "")
+                        if mdl and mdl != getattr(self, "_model", ""):
+                            self._model = mdl
+                            self.changed.emit()
                         sid = (msg.data or {}).get("session_id", "")
                         if sid and sid != self._session:
                             self._session = sid
@@ -701,6 +710,7 @@ def selftest():
     check("STREAM", "calc.py" in streamed and "jegyzet.txt" in streamed, repr(streamed[:80]))
     sid = be.session
     check("SESSION", len(sid) > 10, sid[:8])
+    check("MODEL", be.model == "fake-modell-1", be.model)
     check("SNAPSHOT", len(core.snapshots(repo)) >= 1)
     snap0 = core.snapshots(repo)[-1]["sha"]
 

@@ -93,7 +93,7 @@ FWindow {
         Row {
             anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8
             FLabel { anchors.verticalCenter: parent.verticalCenter; dim: true
-                     text: ai.session ? "munkamenet: " + ai.session.substring(0, 8) : "új munkamenet" }
+                     text: (ai.model ? "modell: " + ai.model + "  ·  " : "") + (ai.session ? "munkamenet: " + ai.session.substring(0, 8) : "új munkamenet") }
             FButton { text: "Terminál"; icon: "terminal"; enabled: ai.project !== ""; onClicked: ai.openTerminal() }
         }
     }

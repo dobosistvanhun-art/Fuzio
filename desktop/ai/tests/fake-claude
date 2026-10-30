@@ -149,7 +149,7 @@ def turn(prompt):
     history.append(prompt)
     json.dump(history, open(HIST, "w"))
     out({"type": "system", "subtype": "init", "session_id": SID, "cwd": CWD, "tools": ["Read", "Edit", "Bash"],
-         "model": "fake", "permissionMode": arg("--permission-mode") or "default", "uuid": str(uuid.uuid4())})
+         "model": "fake-modell-1", "permissionMode": arg("--permission-mode") or "default", "uuid": str(uuid.uuid4())})
     out({"type": "user", "session_id": SID, "uuid": str(uuid.uuid4()), "message": {"role": "user", "content": prompt}})
     if len(history) > 1:
         say(f"Folytatom a munkamenetet ({len(history) - 1} korábbi kérés).")
