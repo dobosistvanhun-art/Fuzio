@@ -210,15 +210,44 @@ def fupd_info(path):
     return info
 
 
+# a saját mappa alatt ezekbe soha nem nézünk bele: hálózati / külső kötetek (a Google Drive rclone-csatolása hideg
+# gyorsítótárral egyetlen mappanévért is percekig várhat — ZBook-mérés, 2026-10-30: `~/*/build` glob 60 mp fölött)
+_UPDATE_SKIP = ("GoogleDrive", "Tárhely", "drive_c", "cache")
+
+
+def _mount_points():
+    """a csatolási pontok a /proc/self/mounts-ból — stat nélkül (egy beragadt hálózati kötet stat-ja is várakozhat)"""
+    try:
+        with open("/proc/self/mounts", encoding="utf-8", errors="replace") as f:
+            return {ln.split()[1].replace("\\040", " ") for ln in f if len(ln.split()) > 1}
+    except OSError:
+        return set()
+
+
+def _plain_subdirs(path, mounts):
+    """a mappa közvetlen almappái, a rejtettek, a kihagyottak és a csatolási pontok nélkül; a d_type-ot használja
+    (nincs stat), a symlinkeket nem követi — így egy kötetbe vezető hivatkozás sem lassít"""
+    try:
+        with os.scandir(path) as it:
+            return [e.path for e in it if not e.name.startswith(".") and e.name not in _UPDATE_SKIP
+                    and e.path not in mounts and e.is_dir(follow_symlinks=False)]
+    except OSError:
+        return []
+
+
 def update_roots():
     """a keresési helyek, a valószínűek elöl: a saját build kimenete, Letöltések, /data/import, a saját mappa, végül
-    a csatolt kötetek (pendrive, Tárhely)"""
+    a csatolt kötetek (pendrive, Tárhely). A saját mappa alatt csatolt kötetbe (Google Drive) nem lép be."""
     home = os.path.expanduser("~")
-    # a saját build kimenete (Fejlesztődoboz: ~/Projektek/fusionos/build/out/release — mélyebben van, mint amit a saját
-    # mappa bejárása elér)
-    builds = sorted(set(glob.glob(os.path.join(home, "*", "build", "out", "release"))
-                        + glob.glob(os.path.join(home, "*", "*", "build", "out", "release"))))
-    fast = builds + [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), "/data/import", home]
+    mounts = _mount_points()
+    # a saját build kimenete (Fejlesztődoboz: ~/Projektek/fusionos/build/out/release) — legfeljebb két szint mélyen
+    builds = []
+    for d in _plain_subdirs(home, mounts):
+        for cand in [d] + _plain_subdirs(d, mounts):
+            rel = os.path.join(cand, "build", "out", "release")
+            if os.path.isdir(rel):
+                builds.append(rel)
+    fast = sorted(set(builds)) + [os.path.join(home, "Letöltések"), os.path.join(home, "Downloads"), "/data/import", home]
     return fast, sorted(glob.glob(fusion.MEDIA + "/*"))
 
 
@@ -229,6 +258,7 @@ def update_files(roots=None, budget=None):
         fast, media = update_roots()
         roots = fast + media
     t0 = time.monotonic()
+    mounts = _mount_points()
     seen, out = set(), []
     for r in roots:
         if not os.path.isdir(r):
@@ -240,8 +270,8 @@ def update_files(roots=None, budget=None):
                 break
             if dirpath.count("/") - base >= 2:
                 dirs[:] = []
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("drive_c", "GoogleDrive", "Tárhely", "cache")
-                       and not os.path.ismount(os.path.join(dirpath, d))]
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _UPDATE_SKIP
+                       and os.path.join(dirpath, d) not in mounts]
             for f in files:
                 if not f.lower().endswith(".fupd"):
                     continue

@@ -5,6 +5,18 @@ hogy a másik oldal folytatni tudja. Mindkét oldal ide ír; a legfrissebb felü
 legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
+
+## 2026-10-30 — webes Claude: 0.0.67, a lassú .fupd-keresés oka és javítása
+- Mérés a ZBookon (`fupd-gyorsmeres.sh`, hidegen indítva): `glob ~/*/build/out/release` **60 mp fölött** (időtúllépés),
+  `~/*/*/build…` 7 mp, ugyanez Google Drive nélkül 0,08 mp, a teljes keresés melegen 0,5 mp. Ok: a build-kimenet keresése
+  (`update_roots`, 0.0.48 óta) időkorlát nélkül belépett a `~/GoogleDrive` rclone-csatolásba; hideg gyorsítótárnál ez
+  percekig várt. A 0.0.54-es javítás csak a bejárást korlátozta, ezt nem.
+- Javítás: a saját mappa almappáit `scandir`-ral nézi (d_type, stat és symlink-követés nélkül), kihagyja a
+  GoogleDrive / Tárhely / rejtett mappákat és minden csatolási pontot (`/proc/self/mounts`); a bejárás is a mount-listát
+  használja `ismount` (stat) helyett. Próba (fejlesztőgép): a régi kód belép a „Drive”-ba, az új nem; a talált .fupd-k
+  ugyanazok.
+- Nyitott: ZBook-próba (a Beállítások a forrásból vagy a 0.0.67 buildje után); a FusionAI 16:43-kor indított mérése
+  elakadt (valószínűleg ugyanezen) — leállítva.
 ## 2026-10-29 19:10 — holnapi feladat (István)
 - **Hiba:** a Beállítások → Rendszerfrissítés még mindig percekig keresi a frissítőfájlt (`.fupd`). Meg kell nézni,
   mit vizsgál végig (mappák, pendrive-ok, Google Drive, build-kimenet), és miért lassú; mérés előtt nem javítunk.
