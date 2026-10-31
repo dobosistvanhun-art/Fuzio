@@ -1,0 +1,12 @@
+# Fúzió — naponta egyszer megnézi, kell-e automatikus mentés (hetente egy, ha be van kapcsolva)
+[Unit]
+Description=Fúzió — automatikus mentés (napi ellenőrzés)
+
+[Timer]
+OnCalendar=*-*-* 12:30
+OnBootSec=20min
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target

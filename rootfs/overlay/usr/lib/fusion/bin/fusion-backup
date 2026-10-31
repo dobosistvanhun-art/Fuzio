@@ -3,6 +3,11 @@
 
     fusion-backup list                  a lehetséges célok (csatolt külső kötetek) és a meglévő mentések (JSON)
     fusion-backup create <kötet>        mentés a <kötet>/FusionOS-mentes/ mappába (a kötet: /run/media/…)
+    fusion-backup auto-get              az automatikus mentés beállítása és a legutóbbi automatikus mentés (JSON)
+    fusion-backup auto-set on|off [<db>] automatikus mentés a Tárhelyre (Adatlemez) hetente; <db>: ennyi marad (4)
+    fusion-backup auto [--most]         (a fusion-backup-auto.timer hívja naponta) ha be van kapcsolva és az utolsó
+                                        mentés 7 napnál régebbi (--most: mindenképp), ment a Tárhelyre, a régi
+                                        automatikus mentésekből a beállított számú marad; értesítést küld
 
 A mentés: fusion-data-<dátum>.tar.zst (tar, zstd-tömörítéssel) — a programok (Windows-programok, Flatpak,
 Linux-programok), a beállítások, a Wi-Fi, a saját fájlok, a nyomtató adatai; a tulajdonosok, jogok és
@@ -22,7 +27,11 @@ import time
 
 os.environ["PATH"] = "/usr/sbin:/usr/bin:/sbin:/bin"
 os.environ["LC_ALL"] = "C.UTF-8"
-MEDIA = "/run/media/fusion"   # = fusion.MEDIA
+MEDIA = os.environ.get("FUSION_BACKUP_MEDIA", "/run/media/fusion")   # = fusion.MEDIA (más érték: csak próbához)
+SYSDIR = os.environ.get("FUSION_BACKUP_SYSDIR", "/data/system")
+AUTO_CONF = os.path.join(SYSDIR, "backup-auto.json")
+STORAGE_CONF = os.path.join(SYSDIR, "storage.json")
+AUTO_DAYS = 7
 DATA = os.environ.get("FUSION_BACKUP_DATA", "/data")    # a másik érték csak fejlesztői próbához (a sudo nem engedi át)
 DIR = "FusionOS-mentes"
 PART = 3900 * 1024 * 1024
@@ -110,7 +119,7 @@ def cmd_list():
     print()
 
 
-def cmd_create(mp):
+def cmd_create(mp, auto=False):
     mp = os.path.realpath(mp)
     m = next((x for x in media_mounts() if x[1] == mp), None)
     if not m:
@@ -128,7 +137,7 @@ def cmd_create(mp):
     base = os.path.join(d, f"fusion-data-{stamp}.tar.zst")
     info = {"format": 1, "version": rel.get("FUSION_VERSION", "?"), "milestone": rel.get("FUSION_MILESTONE", ""),
             "date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "dataUsed": used,
-            "split": m[2] == "vfat", "complete": False}
+            "split": m[2] == "vfat", "complete": False, "auto": bool(auto)}
     tmpinfo = "/run/fusion/fusion-backup.info"
     with open(tmpinfo, "w") as f:
         json.dump(info, f, ensure_ascii=False)
@@ -219,6 +228,141 @@ def cmd_create(mp):
     say("PROGRESS 100")
     say(f"kész: {base} ({written >> 20} MiB, {len(final)} fájl, {int(time.time() - t0)} mp)"
         + (f" — figyelmeztetés: {errs[-1]}" if errs else ""))
+    return info
+
+
+# ---------------------------------------------------------------- automatikus mentés (0.0.70)
+
+def auto_conf():
+    try:
+        with open(AUTO_CONF, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    keep = d.get("keep", 4)
+    return {"enabled": bool(d.get("enabled")), "keep": keep if isinstance(keep, int) and 1 <= keep <= 20 else 4}
+
+
+def storage_mountpoint(mount=True):
+    """az Adatlemez (Tárhely) csatolási pontja; ha nincs csatolva, csatolja (fusion-disk storage-mount)"""
+    try:
+        with open(STORAGE_CONF, encoding="utf-8") as f:
+            uuid = (json.load(f) or {}).get("uuid", "")
+    except (OSError, ValueError):
+        uuid = ""
+    if not uuid:
+        return "", "nincs Adatlemez (Tárhely) beállítva — Lemezkezelő → Adatlemez"
+    link = f"/dev/disk/by-uuid/{uuid}"
+
+    def find():
+        dev = os.path.realpath(link)
+        return next((mp for d, mp, _, ro in media_mounts() if os.path.realpath(d) == dev and not ro), "")
+    mp = find() if os.path.exists(link) or os.environ.get("FUSION_BACKUP_MEDIA") else ""
+    if not mp and mount and os.path.exists(link):
+        subprocess.run(["/usr/lib/fusion/bin/fusion-disk", "storage-mount"], capture_output=True, timeout=120)
+        mp = find()
+    if not mp and os.environ.get("FUSION_BACKUP_MEDIA"):      # próbához: az egyetlen csatolt kötet
+        mm = media_mounts()
+        mp = mm[0][1] if len(mm) == 1 else ""
+    return mp, "" if mp else "a Tárhely (Adatlemez) nem érhető el — be van dugva / csatolva?"
+
+
+def auto_list(mp):
+    return sorted((b for b in backups_in(mp) if b.get("auto")), key=lambda b: b.get("date", ""), reverse=True)
+
+
+def notify_users(title, body, urgency="normal"):
+    """értesítés a bejelentkezett felhasználóknak (a root szolgáltatásból, a saját munkamenet-buszukon)"""
+    try:
+        uids = sorted(int(n) for n in os.listdir("/run/user") if n.isdigit() and int(n) >= 1000)
+    except OSError:
+        uids = []
+    import pwd
+    for uid in uids:
+        if not os.path.exists(f"/run/user/{uid}/bus"):
+            continue
+        try:
+            name = pwd.getpwuid(uid).pw_name
+            subprocess.run(["runuser", "-u", name, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{uid}",
+                            f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus", "fusion-notify",
+                            "-i", "archive-in", "-a", "Mentés", "-u", urgency, title, body],
+                           capture_output=True, timeout=15)
+        except (KeyError, OSError, subprocess.TimeoutExpired):
+            pass
+
+
+def cmd_auto_get():
+    c = auto_conf()
+    mp, why = storage_mountpoint(mount=False)
+    last = auto_list(mp)[:1] if mp else []
+    anyb = sorted(backups_in(mp), key=lambda b: b.get("date", ""), reverse=True)[:1] if mp else []
+    json.dump(dict(c, target=mp, targetError=why, days=AUTO_DAYS,
+                   last=(last[0] if last else None), lastAny=(anyb[0] if anyb else None),
+                   count=len(auto_list(mp)) if mp else 0), sys.stdout, ensure_ascii=False)
+    print()
+
+
+def cmd_auto_set(onoff, keep=None):
+    if onoff not in ("on", "off"):
+        raise BackupError("használat: auto-set on|off [<db>]")
+    c = auto_conf()
+    c["enabled"] = onoff == "on"
+    if keep is not None:
+        if not (keep.isdigit() and 1 <= int(keep) <= 20):
+            raise BackupError("a megtartott mentések száma 1 és 20 között")
+        c["keep"] = int(keep)
+    os.makedirs(SYSDIR, exist_ok=True)
+    tmp = AUTO_CONF + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(c, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, AUTO_CONF)
+    say(f"automatikus mentés: {'be' if c['enabled'] else 'ki'} (megtartva: {c['keep']})")
+
+
+def remove_backup(b):
+    for p in b.get("parts", []):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    try:
+        os.unlink(b["path"] + ".info.json")
+    except OSError:
+        pass
+
+
+def cmd_auto(force=False):
+    c = auto_conf()
+    if not c["enabled"] and not force:
+        say("az automatikus mentés ki van kapcsolva")
+        return 0
+    mp, why = storage_mountpoint()
+    if not mp:
+        notify_users("Az automatikus mentés elmaradt", why, "critical")
+        raise BackupError(why)
+    prev = sorted(backups_in(mp), key=lambda b: b.get("date", ""), reverse=True)
+    if prev and not force:
+        try:
+            age = datetime.datetime.now().astimezone() - datetime.datetime.fromisoformat(prev[0]["date"])
+        except (ValueError, TypeError):
+            age = datetime.timedelta(days=AUTO_DAYS)
+        if age < datetime.timedelta(days=AUTO_DAYS):
+            say(f"a legutóbbi mentés {age.days} napos ({prev[0]['date']}) — most nem kell")
+            return 0
+    try:
+        info = cmd_create(mp, auto=True)
+    except BackupError as e:
+        notify_users("Az automatikus mentés nem sikerült", str(e), "critical")
+        raise
+    removed = 0
+    for old in auto_list(mp)[c["keep"]:]:
+        remove_backup(old)
+        removed += 1
+        say(f"régi automatikus mentés törölve: {os.path.basename(old['path'])}")
+    notify_users("A DATA mentése kész", f"{info.get('bytes', 0) >> 20} MiB a Tárhelyre ({os.path.basename(mp)}), "
+                 f"{info.get('seconds', 0) // 60} perc" + (f"; {removed} régi mentés törölve" if removed else ""))
+    return 0
 
 
 def main(argv):
@@ -232,6 +376,14 @@ def main(argv):
             if not shutil.which("zstd"):
                 raise BackupError("hiányzik a zstd")
             cmd_create(argv[1])
+        elif argv == ["auto-get"]:
+            cmd_auto_get()
+        elif len(argv) in (2, 3) and argv[0] == "auto-set":
+            cmd_auto_set(argv[1], argv[2] if len(argv) == 3 else None)
+        elif argv[:1] == ["auto"] and argv[1:] in ([], ["--most"]):
+            if not shutil.which("zstd"):
+                raise BackupError("hiányzik a zstd")
+            return cmd_auto(force=argv[1:] == ["--most"])
         else:
             print(__doc__, file=sys.stderr)
             return 2

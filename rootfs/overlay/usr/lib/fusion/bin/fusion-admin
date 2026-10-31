@@ -31,6 +31,8 @@
 #    installer-media <fájl.fupd> <lemez> <megerősítés>
 #                                     telepítő pendrive készítése egy .fupd-ből (a futó Fúzióból is)
 #    backup list | create <kötet>     a DATA mentése egy csatolt külső kötetre (fusion-backup)
+#    backup auto-get | auto-set on|off [<db>] | auto-now
+#                                     automatikus heti mentés a Tárhelyre (fusion-backup-auto.timer)
 #    devbox status|create|remove doboz | run [--cwd <mappa>] [-- <parancs…>]
 #                                     Fejlesztődoboz (fusion-devbox): Ubuntu 24.04 a DATA-n, systemd-nspawn
 #    boot list | first <szám> | next <szám> | delete <szám> <megerősítés>
@@ -299,7 +301,14 @@ case "$cmd" in
             list) [ $# -eq 1 ] || fail "használat: backup list" ;;
             create) [ $# -eq 2 ] || fail "használat: backup create <kötet>"
                     case "$(realpath -m "$2")" in "$MEDIA"/?*) ;; *) fail "csak a $MEDIA alatti kötetre lehet menteni" ;; esac ;;
-            *) fail "használat: backup list | create <kötet>" ;;
+            auto-get) [ $# -eq 1 ] || fail "használat: backup auto-get" ;;
+            auto-set) { [ $# -eq 2 ] || [ $# -eq 3 ]; } || fail "használat: backup auto-set on|off [<db>]"
+                      case "$2" in on|off) ;; *) fail "használat: backup auto-set on|off [<db>]" ;; esac
+                      [ $# -eq 2 ] || case "$3" in [1-9]|1[0-9]|20) ;; *) fail "a megtartott mentések száma 1–20" ;; esac ;;
+            auto-now) [ $# -eq 1 ] || fail "használat: backup auto-now"
+                      exec /usr/bin/systemd-inhibit --what=sleep:handle-lid-switch --who=Fúzió --why="A DATA mentése" \
+                          /usr/lib/fusion/bin/fusion-backup auto --most ;;
+            *) fail "használat: backup list | create <kötet> | auto-get | auto-set on|off [<db>] | auto-now" ;;
         esac
         exec /usr/lib/fusion/bin/fusion-backup "$@" ;;
     boot)

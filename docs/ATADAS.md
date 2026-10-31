@@ -9,6 +9,14 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-10-31 — webes Claude: 0.0.70, automatikus heti DATA-mentés a Tárhelyre
+- Kész: `fusion-backup auto | auto-get | auto-set`, `fusion-backup-auto.service/.timer` (naponta 12:30 körül +
+  indításkor 20 perc múlva; csak töltőn; altatás-tiltással), `fusion-admin backup auto-get|auto-set|auto-now`,
+  Beállítások → Mentés: „AUTOMATIKUS MENTÉS A TÁRHELYRE” szakasz. Leírás: `docs/W5-automatikus-mentes.md`.
+- Kipróbálva (fejlesztőgépen): a mentés-logika tmpfs-en (7 napon belül kihagy, `--most` ment, a régiekből `keep` marad,
+  hiányzó Tárhely → érthető hiba); a Beállítások oldal képernyőképpel (bekapcsolva / Tárhely nélkül); `--selftest` QML ok.
+- **ZBookon ellenőrizetlen:** a timer valódi futása, az értesítés, a valódi Tárhely-csatolás, az altatás-tiltás.
+- Ugyanekkor a motoros projektben: 1.30.0 (éjszakai D1 → R2 mentés) — commitolva, **nincs élesítve** (ott: `docs/MENTES.md`).
 ## 2026-10-31 — állapot (István)
 - 0.0.67–0.0.69 a ZBookon működik (a .fupd-keresés gyors, az „Új változat a forrásból” gomb végigment).
 - Az altatás / ébredés hibája (2026-10-20) **megoldva, működik** — nem nyitott.

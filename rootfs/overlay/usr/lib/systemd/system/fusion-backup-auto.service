@@ -1,0 +1,15 @@
+# Fúzió — automatikus DATA-mentés a Tárhelyre (Beállítások → Mentés → Automatikus mentés)
+# A fusion-backup-auto.timer indítja naponta; maga dönti el, kell-e (be van-e kapcsolva, 7 napnál régebbi-e a
+# legutóbbi mentés). Csak töltőn; mentés közben a gép nem alszik el (a fedél lecsukására sem).
+[Unit]
+Description=Fúzió — automatikus mentés a Tárhelyre
+ConditionPathExists=/data/system/backup-auto.json
+ConditionACPower=true
+After=fusion-storage.service
+RequiresMountsFor=/data
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:handle-lid-switch --who=Fúzió "--why=A DATA mentése" /usr/lib/fusion/bin/fusion-backup auto

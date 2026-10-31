@@ -12,9 +12,11 @@ SettingsPage {
     property var job: ({ running: false, lines: [], rc: null, title: "" })
     property string chosen: ""
     property string msg: ""
+    property var auto: ({ enabled: false, keep: 4, target: "", targetError: "", last: null, lastText: "", days: 7, error: "" })
+    function setKeep(n) { var e = settings.backupAutoSet(p.auto.enabled === true, n); p.msg = e ? "hiba: " + e : "" }
     busy: job.running
     onRefresh: settings.backupRefresh()
-    Component.onCompleted: { settings.backupRefresh(); settings.backupJobWatch() }
+    Component.onCompleted: { settings.backupRefresh(); settings.backupJobWatch(); settings.backupAutoRefresh() }
     Timer { interval: 6000; running: p.visible && !p.job.running; repeat: true; onTriggered: settings.backupRefresh() }
     Connections {
         target: settings
@@ -24,10 +26,12 @@ SettingsPage {
                 if (r.job && !p.job.running) p.job = r.job
                 if (p.chosen && !r.targets.find(t => t.mountpoint === p.chosen && t.ok)) p.chosen = ""
                 if (!p.chosen) { var t = r.targets.find(x => x.ok); if (t) p.chosen = t.mountpoint }
+            } else if (tag === "backup-auto") {
+                p.auto = r
             } else if (tag === "backup-job") {
                 var was = p.job.running
                 p.job = r
-                if (was && !r.running) settings.backupRefresh()
+                if (was && !r.running) { settings.backupRefresh(); settings.backupAutoRefresh() }
             }
         }
     }
@@ -37,6 +41,36 @@ SettingsPage {
         InfoRow { icon: "archive-in"; label: "DATA"; value: (p.s.dataUsedText || "…") + " — a telepített programok (LightBurn, Flatpak), beállítások, Wi-Fi, Google Drive-bejelentkezés, saját fájlok, a nyomtató adatai" }
         InfoRow { label: "Visszaállítás"; value: "a Fúzió Telepítőben: Új telepítés → „DATA visszaállítása mentésből” (a mentést tartalmazó lemez legyen bedugva)" }
         InfoRow { label: "Figyelem"; value: "a mentés jelszavakat is tartalmaz (Wi-Fi, Google Drive) — tartsa biztonságban"; valueColor: Theme.warn }
+    }
+    Section {
+        title: "AUTOMATIKUS MENTÉS A TÁRHELYRE"
+        Item {
+            width: parent.width; height: 44
+            FCheck { id: autoChk; x: 10; anchors.verticalCenter: parent.verticalCenter
+                     text: "Hetente automatikus mentés a Tárhelyre (Adatlemez)"
+                     checked: p.auto.enabled === true
+                     onToggled: { var e = settings.backupAutoSet(checked, p.auto.keep || 4); p.msg = e ? "hiba: " + e : "" } }
+            Row {
+                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "megtartott mentések:"; color: Theme.dim; font.family: Theme.font; font.pixelSize: 12 }
+                FButton { text: "−"; enabled: (p.auto.keep || 4) > 1; onClicked: p.setKeep((p.auto.keep || 4) - 1) }
+                Text { anchors.verticalCenter: parent.verticalCenter; width: 24; horizontalAlignment: Text.AlignHCenter
+                       text: p.auto.keep || 4; color: Theme.text; font.family: Theme.font; font.pixelSize: 13 }
+                FButton { text: "+"; enabled: (p.auto.keep || 4) < 20; onClicked: p.setKeep((p.auto.keep || 4) + 1) }
+            }
+        }
+        InfoRow { icon: "drive"; label: "Cél"
+                  value: p.auto.target ? p.auto.target.replace("/run/media/fusion/", "") + " (Tárhely)" : (p.auto.targetError || "…")
+                  valueColor: p.auto.target ? Theme.text : Theme.warn }
+        InfoRow { label: "Legutóbbi"; value: p.auto.lastText || "még nincs mentés a Tárhelyen" }
+        InfoRow { label: "Hogyan"; value: "naponta egyszer megnézi (napközben, csak töltőn); ha a legutóbbi mentés " + (p.auto.days || 7) +
+                  " napnál régebbi, ment. Közben a gép nem alszik el. A régi automatikus mentésekből a beállított számú marad, a kézi mentésekhez nem nyúl. Értesítést küld." }
+        Item {
+            width: parent.width; height: 44
+            FButton { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "Automatikus mentés most"; icon: "archive-in"
+                      enabled: !p.job.running && (p.auto.target || "") !== ""
+                      onClicked: { var e = settings.backupAutoNow(); p.msg = e ? "hiba: " + e : "" } }
+        }
     }
     Section {
         title: "CÉL (CSATOLT KÜLSŐ KÖTET)"

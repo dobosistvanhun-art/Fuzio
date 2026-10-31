@@ -1212,6 +1212,33 @@ class Settings(QObject):
     def backupRefresh(self):
         self._async("backup", lambda: dict(backup_state(), job=self._job_state("backup")))
 
+    @pyqtSlot()
+    def backupAutoRefresh(self):
+        def go():
+            rc, out = ui.admin("backup", "auto-get", timeout=60)
+            try:
+                d = json.loads(out[out.index("{"):])
+            except ValueError:
+                return {"error": (out.strip().splitlines() or ["ismeretlen hiba"])[-1].replace("fusion-admin: ", "")}
+            d["error"] = ""
+            last = d.get("last") or d.get("lastAny")
+            if last:
+                d["lastText"] = (last.get("date", "")[:16].replace("T", " ") + "   ·   " + ui.human_size(last.get("bytes", 0))
+                                 + ("" if last.get("auto") else "   ·   kézi mentés"))
+            return d
+        self._async("backup-auto", go)
+
+    @pyqtSlot(bool, int, result=str)
+    def backupAutoSet(self, on, keep):
+        rc, out = ui.admin("backup", "auto-set", "on" if on else "off", str(max(1, min(20, keep))), timeout=30)
+        self.backupAutoRefresh()
+        return "" if rc == 0 else out.strip().replace("fusion-admin: ", "").replace("fusion-backup: ", "")
+
+    @pyqtSlot(result=str)
+    def backupAutoNow(self):
+        return self._job("Automatikus mentés most (Tárhely)", [], kind="backup", cmd=("sudo", "-n", ui.ADMIN, "backup", "auto-now"),
+                         app="Mentés", icon="archive-in", okpat="^kész")
+
     @pyqtSlot(str, result=str)
     def backupCreate(self, mountpoint):
         return self._job("DATA mentése", [mountpoint], kind="backup", cmd=("sudo", "-n", ui.ADMIN, "backup", "create"),

@@ -350,6 +350,9 @@ rm -f "$R/usr/lib/systemd/system-sleep/nvidia" "$R/lib/systemd/system-sleep/nvid
 chmod 0755 "$R/usr/lib/systemd/system-sleep/fusion"
 in_root systemctl enable fusion-lid.service >/dev/null 2>&1 \
     || echo "  [customize] FIGYELEM: a fusion-lid szolgáltatás nem engedélyezhető"
+# automatikus heti mentés a Tárhelyre (0.0.70): a napi időzítő csak akkor ment, ha a Beállításokban be van kapcsolva
+in_root systemctl enable fusion-backup-auto.timer >/dev/null 2>&1 \
+    || { echo "  [customize] HIBA: a fusion-backup-auto.timer nem engedélyezhető"; exit 1; }
 # a noble login-PAM-ja a pam_lastlog-ot kéri, de a modul nincs a csomagban → minden belépéskor hibaüzenet a naplóban
 sed -i '/pam_lastlog\.so/d' "$R/etc/pam.d/login"
 # Terminál: több soros parancs beillesztése (pl. egy leírásból) soronként fusson, ne kerüljenek a sorba
