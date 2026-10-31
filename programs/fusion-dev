@@ -381,9 +381,14 @@ def rebuild_check(fetch=True):
     st["ac"] = _on_ac()
     if st["ac"] is False:
         st["warnings"].append("a gép akkumulátorról megy — a build hosszú, érdemes töltőre tenni")
-    st["box"] = bool(box_status().get("exists"))
+    bs = box_status()
+    st["box"] = bool(bs.get("exists"))
     if not st["box"]:
         st["problems"].append("nincs Fejlesztődoboz (Beállítások → Programkezelő → Fejlesztődoboz → Létrehozás)")
+    elif bs.get("running"):
+        # a doboz egyszerre csak egy ablakban futhat — a build nem tudna belépni
+        st["problems"].append("a Fejlesztődoboz nyitva van egy másik ablakban (Fejlesztő terminál) — ott lépj ki "
+                              "(exit vagy az ablak bezárása), aztán indítsd újra")
     st["ok"] = not st["problems"]
     return st
 
