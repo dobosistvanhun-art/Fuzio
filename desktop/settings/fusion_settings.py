@@ -85,6 +85,16 @@ def selftest():
         if c.status() != QQmlComponent.Status.Ready:
             bad.append(page + ": " + "; ".join(e.toString() for e in c.errors())[:300])
     print("FUSION-SETTINGS: QML " + ("ok" if not bad else "HIBA " + " | ".join(bad)), flush=True)
+    # 0.0.71: minden `settings.<név>`, amit a QML hív, létezik a háttér objektumán (a részekre bontás őre)
+    import re
+    mo = be.metaObject()
+    have = {bytes(mo.method(i).name()).decode() for i in range(mo.methodCount())}
+    used = set()
+    for f in os.listdir(os.path.join(HERE, "qml")):
+        if f.endswith(".qml"):
+            used |= set(re.findall(r"\bsettings\.([A-Za-z_]\w*)", open(os.path.join(HERE, "qml", f), encoding="utf-8").read()))
+    missing = sorted(used - have)
+    print(f"FUSION-SETTINGS: SLOTS used={len(used)} " + ("ok" if not missing else "HIÁNYZIK " + ",".join(missing)), flush=True)
     all_apps = fusion_apps.load()
     print("FUSION-SETTINGS: APPS " + ",".join(a["id"] for a in all_apps if not a["search_only"]), flush=True)
     return 0

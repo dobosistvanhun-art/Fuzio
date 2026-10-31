@@ -9,6 +9,18 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-10-31 — webes Claude: 0.0.71, rendrakás: a Beállítások háttere részekre bontva
+- `desktop/settings/fusion_settings_parts/`: base (közös segédek, SettingsBase, feladat-protokoll), net, display,
+  devices, programs, update, backup, system; a `fusion_settings_backend.py` csak összerakja (mixinek) és a régi
+  neveken továbbadja a függvényeket. Kód nem változott, csak áthelyeződött (gépi szétválasztás, sorról sorra ellenőrizve).
+- Ellenőrizve (fejlesztőgépen, PyQt 6.11 és a noble-é, a **6.6.1** alatt is): a 114 slot neve és típusa egyezik a
+  szétszedés előttivel; pyflakes tiszta; `fusion-settings --selftest`: QML ok, SLOTS ok; a Mentés oldal képernyőképe;
+  a .fupd-keresés próbája; a `customize.sh` modul- és QML-ellenőrzése (egy szándékosan hibás QML-lel is: elkapja).
+- Új őr: a Beállítások QML-je csak létező slotot hívhat (selftest `SLOTS`, build: `customize.sh`).
+- Döntés (webes Claude javaslata): a „közös függvények a Fúzió API-ba” lépés most elmarad — a keresés szerint alig van
+  valódi ismétlődés (a /proc/meminfo olvasása 3 helyen, néhány sor); a frissítés/mentés lekérdezései akkor kerülnek
+  a `fusion` csomagba, ha egy második program (pl. a Shell) is használná őket.
+- ZBookon ellenőrizetlen: a 0.0.71 build és a Beállítások minden oldalának kattintgatása.
 ## 2026-10-31 — webes Claude: 0.0.70, automatikus heti DATA-mentés a Tárhelyre
 - Kész: `fusion-backup auto | auto-get | auto-set`, `fusion-backup-auto.service/.timer` (naponta 12:30 körül +
   indításkor 20 perc múlva; csak töltőn; altatás-tiltással), `fusion-admin backup auto-get|auto-set|auto-now`,

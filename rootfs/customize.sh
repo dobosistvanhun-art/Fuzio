@@ -247,6 +247,16 @@ app = QGuiApplication(sys.argv)
 eng = QQmlEngine()
 eng.addImportPath("/usr/lib/fusion/desktop/qml")
 bad = 0
+# 0.0.71: a Beállítások QML-je csak létező háttér-slotot hívhat (a fusion_settings_parts részekre bontás őre)
+import re
+mo = fusion_settings_backend.Settings().metaObject()
+have = {bytes(mo.method(i).name()).decode() for i in range(mo.methodCount())}
+used = set()
+for f in glob.glob("/usr/lib/fusion/desktop/settings/qml/*.qml"):
+    used |= set(re.findall(r"\bsettings\.([A-Za-z_]\w*)", open(f, encoding="utf-8").read()))
+if used - have:
+    bad += 1
+    print("  Beállítások: a QML nem létező slotot hív:", ", ".join(sorted(used - have)))
 for f in sorted(glob.glob("/usr/lib/fusion/desktop/*/qml/*.qml")):
     c = QQmlComponent(eng, QUrl.fromLocalFile(f))
     # a kontextus-objektumok (shell, files, settings) hiánya itt nem hiba: csak a fordítást nézzük

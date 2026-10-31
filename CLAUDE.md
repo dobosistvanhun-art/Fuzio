@@ -16,6 +16,9 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 - Felület: Qt 6 / QML + Python (PyQt6), a közös `FusionUI` modullal (`desktop/qml/FusionUI`, `desktop/lib/fusion_ui.py`).
   Program = `desktop/<név>/fusion_<név>_app.py` + `qml/`; bejegyzés: `desktop/apps.json`; a képbe: `rootfs/customize.sh`
   (a másolási lista, a chmod-lista, `ln -sf … /usr/bin/fusion-<név>`). A QML csak felület, a műveletet a háttér végzi.
+- A Beállítások háttere oldalcsoportonként: `desktop/settings/fusion_settings_parts/` (base, net, display, devices,
+  programs, update, backup, system); a `fusion_settings_backend.py` rakja össze a QML `settings` objektumát. Új slot a
+  megfelelő részbe; a QML csak létező slotot hívhat (a selftest és a build ellenőrzi).
 - A Fúzió API: a `fusion` Python-csomag (`desktop/lib/fusion`), leírás: `docs/api/`. D-Bus-szolgáltatás egyelőre nincs.
 - A rendszerkép (`/usr`) **csak olvasható** (A/B frissítés): apt a futó rendszerben nincs. Rendszerösszetevő →
   `rootfs/packages.list`; fejlesztői eszköz → `fusion-dev` (root nélkül); fordítás → Fejlesztődoboz:
