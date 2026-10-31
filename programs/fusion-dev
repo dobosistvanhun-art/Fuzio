@@ -457,6 +457,18 @@ def rebuild(a):
                     say(f"törölve: {f} (VirtualBox-lemezkép, már nem kell)")
                 except OSError:
                     pass
+    # a teljes lemezképek (fusionos.img, fusionos-telepito.img) csak a `fusion-build all` készíti (mérföldkő);
+    # a mostani build előttiek elavultak, a gombos frissítéshez nem kellenek (0.0.72)
+    rel = os.path.join(src, "build", "out", "release")
+    for f in sorted(os.listdir(rel)) if os.path.isdir(rel) else []:
+        p = os.path.join(rel, f)
+        try:
+            if f.endswith(".img") and os.path.isfile(p) and os.path.getmtime(p) < t_start:
+                removed += os.stat(p).st_blocks * 512         # a ritka (sparse) képnél a valódi foglalás
+                os.unlink(p)
+                say(f"törölve: {f} (régi lemezkép egy korábbi teljes buildből)")
+        except OSError:
+            pass
     fupds = _fupds(src)
     for old in fupds[3:]:                              # a három legújabb .fupd marad
         try:

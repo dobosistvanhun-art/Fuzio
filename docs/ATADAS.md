@@ -9,6 +9,14 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-10-31 — webes Claude: 0.0.72, helytakarítás a DATA-n
+- István kérdése: mi foglalja a DATA-t (38 GB / 109 GB). Mérés: 34 GB a saját mappa; ebből `fusionos-regi/build`
+  8,4 GB (a 0.0.55 buildje — törölve), `solidcraft/target` 4,3 GB (törölhető, `rm -rf`; a dobozban a `cargo` nincs a
+  PATH-on), `build/out/release` régi `fusionos.img` + `fusionos-telepito.img` (0.0.69-es `all`, kb. 3,3 GB valódi
+  foglalás — törlendő), Flatpak 4,7 GB (nincs nem használt futtatókörnyezet).
+- 0.0.72: a `fusion-dev rebuild` takarítása a régi `.img`-ket is törli (próba: ritka 12 GB-os és valódi kép törölve,
+  a .fupd marad). ZBookon ellenőrizetlen.
+- István döntése: a mentésből **nem** hagyjuk ki a build-mappákat (a javasolt kizárás elvetve).
 ## 2026-10-31 — webes Claude: 0.0.71, rendrakás: a Beállítások háttere részekre bontva
 - `desktop/settings/fusion_settings_parts/`: base (közös segédek, SettingsBase, feladat-protokoll), net, display,
   devices, programs, update, backup, system; a `fusion_settings_backend.py` csak összerakja (mixinek) és a régi
