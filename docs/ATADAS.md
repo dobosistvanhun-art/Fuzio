@@ -8,6 +8,12 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+
+## 2026-10-31 — állapot (István)
+- 0.0.67–0.0.69 a ZBookon működik (a .fupd-keresés gyors, az „Új változat a forrásból” gomb végigment).
+- Az altatás / ébredés hibája (2026-10-20) **megoldva, működik** — nem nyitott.
+- Javasolt sorrend a folytatáshoz (webes Claude): 1. motoros: tesztkészlet + staging; 2. automatikus mentés (Fúzió
+  DATA → Tárhely, motoros D1 → R2); 3. rendrakás (Beállítások háttere szétszedve, közös függvények a Fúzió API-ba).
 ## 2026-10-30 — webes Claude: 0.0.69, új változat a forrásból egy gombbal; VirtualBox ki
 - István döntései: a gomb a Rendszerfrissítés oldalon legyen; a build végén kérdezze meg a telepítést; a VirtualBox-os
   rész (vdi, vm) végleg törölve; a teljes lemezkép-készlet csak mérföldkő-kiadáshoz.
