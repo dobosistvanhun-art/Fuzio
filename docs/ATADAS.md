@@ -17,7 +17,7 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
   `desktop/files/fusion_files_backend.py`: felhő-/hálózati kötetnél 0,25 mp után háttérben fejeződik be a listázás.
 - Próba (fejlesztőgépen, lassított próba-kötettel): gyors mappa szinkron; lassú mappa 0,25 mp-en belül vált, a lista
   megérkezik, a kijelölés a korábbi mappán; továbblépéskor a késő lista eldobva; hiba a háttérben kijelezve;
-  `fusion-files --selftest` ok. ZBookon (valódi Drive) ellenőrizetlen.
+  `fusion-files --selftest` ok. ZBookon (valódi Drive): István, 2026-11-01 — „jobb lett”.
 ## 2026-10-31 — webes Claude: 0.0.72, helytakarítás a DATA-n
 - István kérdése: mi foglalja a DATA-t (38 GB / 109 GB). Mérés: 34 GB a saját mappa; ebből `fusionos-regi/build`
   8,4 GB (a 0.0.55 buildje — törölve), `solidcraft/target` 4,3 GB (törölhető, `rm -rf`; a dobozban a `cargo` nincs a
