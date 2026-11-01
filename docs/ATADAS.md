@@ -9,6 +9,10 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-01 — ötlet későbbre (István: „ne most, majd ha lesz vele dolgunk”)
+- FusionAI: munkamenet indításakor (vagy egy gombbal) magától `git pull --ff-only` a kiválasztott projekten, hogy a
+  webes Claude-dal készült változások (`CLAUDE.md`, `docs/ATADAS.md`) kézi parancs nélkül meglegyenek. Nem
+  commitolt munka / eltérő ág esetén ne húzzon, csak szóljon.
 ## 2026-11-01 — webes Claude: 0.0.73, lassú Google Drive a Fájlkezelőben
 - István: „a Google a fájlkezelőben iszonyat lassú”. Ok (a forrásból): a `fusion-drive.service` `--dir-cache-time 30s`-e
   miatt 30 mp után minden mappa megnyitása újra a Google API-hoz fordult, és a Fájlkezelő `load()`-ja ezt a felület
