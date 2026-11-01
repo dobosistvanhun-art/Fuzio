@@ -159,6 +159,9 @@ class DirModel(QAbstractListModel):
         self.freeReady.connect(self.statusChanged)
         self._scanned.connect(self._apply_scan)
         self._scanning = False
+        self._loadedAsync.connect(self._apply_load)
+        self._loadGen = 0            # a háttérben betöltött mappa csak akkor kerül ki, ha közben nem léptünk tovább
+        self._loading = False
 
     # --- Qt-modell ---
     def roleNames(self):
@@ -205,6 +208,8 @@ class DirModel(QAbstractListModel):
 
     @pyqtProperty(str, notify=statusChanged)
     def status(self):
+        if self._loading:
+            return "Betöltés a felhőből…"
         files = [i for i in self._items if not i["isParent"]]
         marked = [i for i in files if i["marked"]]
         tot = sum(i["size"] for i in files if not i["isDir"])
@@ -285,19 +290,84 @@ class DirModel(QAbstractListModel):
         files.sort(key=key, reverse=self._desc)
         return items + dirs + files
 
+    ASYNC_WAIT = 0.25            # hálózati / felhő-kötet: eddig várunk, utána a háttérben fejeződik be
+
     @pyqtSlot(str, str, result=int)
     def load(self, path, select=""):
-        """könyvtár betöltése; visszaadja a kijelölendő sor indexét"""
+        """könyvtár betöltése; visszaadja a kijelölendő sor indexét.
+        Hálózati / felhő-köteten (Google Drive) a listázás a szolgáltatóhoz fordulhat: ha ASYNC_WAIT alatt nincs
+        meg, a felület azonnal átvált (csak a „..” sor és „Betöltés…”), a lista a háttérből érkezik (0.0.73)."""
         path = os.path.abspath(os.path.expanduser(path or "/"))
         prev = self._path
         t0 = time.monotonic()
-        try:
-            items = self._scan(path)
-            slow("megnyitás: " + path, t0)
-        except OSError as e:
-            self._error = f"{path}: {e.strerror or e}"
+        self._loadGen += 1
+        gen = self._loadGen
+        if trashlib.is_network(path):
+            box = {}
+
+            def work():
+                try:
+                    box["items"] = self._scan(path)
+                except OSError as e:
+                    box["error"] = f"{path}: {e.strerror or e}"
+                if box.get("late"):
+                    slow("megnyitás (háttérben): " + path, t0)
+                    self._loadedAsync.emit(gen, path, box)
+            th = threading.Thread(target=work, daemon=True)
+            th.start()
+            th.join(self.ASYNC_WAIT)
+            if th.is_alive():
+                box["select"] = select
+                box["prev"] = prev
+                box["late"] = True
+                if th.is_alive():          # a szál a végén nézi a „late”-et; ha addigra végzett, itt kezeljük
+                    return self._show_loading(path, prev)
+                th.join()
+            if "error" in box:
+                self._error = box["error"]
+                self.errorChanged.emit()
+                return -1
+            items = box["items"]
+        else:
+            try:
+                items = self._scan(path)
+                slow("megnyitás: " + path, t0)
+            except OSError as e:
+                self._error = f"{path}: {e.strerror or e}"
+                self.errorChanged.emit()
+                return -1
+        return self._show(path, prev, items, select)
+
+    _loadedAsync = pyqtSignal(int, str, "QVariant")
+
+    def _show_loading(self, path, prev):
+        parent = os.path.dirname(path.rstrip("/")) or "/"
+        items = [{"name": "..", "ext": "", "isDir": True, "isLink": False, "isParent": True, "size": 0,
+                  "sizeText": "", "dateText": "", "attr": "", "marked": False, "hidden": False,
+                  "icon": "folder-up", "full": parent}] if path != "/" else []
+        return self._show(path, prev, items, "", loading=True)
+
+    def _apply_load(self, gen, path, box):
+        if gen != self._loadGen or path != self._path:
+            return                       # közben máshova léptünk: a késve érkezett lista nem kell
+        self._loading = False
+        if "error" in box:
+            self._error = box["error"]
             self.errorChanged.emit()
-            return -1
+            self.statusChanged.emit()
+            return
+        select = box.get("select") or ""
+        prev = box.get("prev") or ""
+        if not select and prev and prev != path and (os.path.dirname(prev.rstrip("/")) or "/") == path:
+            select = os.path.basename(prev.rstrip("/"))
+        self.beginResetModel()
+        self._items = box["items"]
+        self.endResetModel()
+        self.statusChanged.emit()
+        self.reloaded.emit(max(0, self.indexOf(select)) if select else 0)
+
+    def _show(self, path, prev, items, select, loading=False):
+        self._loading = loading
         self.beginResetModel()
         self._items = items
         self.endResetModel()
@@ -345,6 +415,7 @@ class DirModel(QAbstractListModel):
         self._set_items(items)
 
     def _set_items(self, items):
+        self._loading = False
         marked = {i["name"] for i in self._items if i["marked"]}
         cur = self.current
         for i in items:

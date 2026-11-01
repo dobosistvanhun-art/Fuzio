@@ -9,6 +9,15 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-01 — webes Claude: 0.0.73, lassú Google Drive a Fájlkezelőben
+- István: „a Google a fájlkezelőben iszonyat lassú”. Ok (a forrásból): a `fusion-drive.service` `--dir-cache-time 30s`-e
+  miatt 30 mp után minden mappa megnyitása újra a Google API-hoz fordult, és a Fájlkezelő `load()`-ja ezt a felület
+  szálán várta ki (megakadt). Mérés a ZBookon nem volt; a `~/.local/share/fusion/files.log` „lassú (… mp)” sorai mutatják.
+- Javítás: `--dir-cache-time 1000h` (a `--poll-interval 30s` a Drive változásfolyamával érvényteleníti — rclone ajánlás);
+  `desktop/files/fusion_files_backend.py`: felhő-/hálózati kötetnél 0,25 mp után háttérben fejeződik be a listázás.
+- Próba (fejlesztőgépen, lassított próba-kötettel): gyors mappa szinkron; lassú mappa 0,25 mp-en belül vált, a lista
+  megérkezik, a kijelölés a korábbi mappán; továbblépéskor a késő lista eldobva; hiba a háttérben kijelezve;
+  `fusion-files --selftest` ok. ZBookon (valódi Drive) ellenőrizetlen.
 ## 2026-10-31 — webes Claude: 0.0.72, helytakarítás a DATA-n
 - István kérdése: mi foglalja a DATA-t (38 GB / 109 GB). Mérés: 34 GB a saját mappa; ebből `fusionos-regi/build`
   8,4 GB (a 0.0.55 buildje — törölve), `solidcraft/target` 4,3 GB (törölhető, `rm -rf`; a dobozban a `cargo` nincs a
