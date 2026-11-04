@@ -9,6 +9,16 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-04 — 0.0.74: a Firefox „Megnyitás mappában” a Fájlkezelőt nyitja
+- István (képernyőkép): a Firefox Letöltések ablakában a mappa ikonra „Open With… / No Apps available” jön. Ok: a
+  képben nem volt `.desktop`-bejegyzés `inode/directory`-ra, így a portál (xdg-desktop-portal-gtk) nem talált mappakezelőt.
+- Javítás: `desktop/files/fusion-files.desktop` (`Exec=fusion-files %U`, `MimeType=inode/directory`, `NoDisplay`), a
+  `rootfs/customize.sh` a `/usr/share/applications/`-ba teszi, és `mimeapps.list`-ben alapértelmezettnek jelöli;
+  `fusion_files.py`: `start_path()` — `file://` cím, fájl → a mappája, idegen cím / nem létező → saját mappa.
+- Próba: a `start_path` 8 esete (ékezetes, szóközös, `localhost`, idegen gép, https, nem létező) jó, a
+  `customize.sh` szintaxisa jó. **Nem próbált:** a teljes `fusion-files --selftest` (itt nincs PyQt6), a build és a
+  Firefox-gomb a ZBookon — a 0.0.74 telepítése után kell megnézni (Firefox → Letöltések → mappa ikon).
+- Visszavonás: a két új sor a `customize.sh`-ban és a `.desktop` fájl törlése.
 ## 2026-11-01 — ötlet későbbre (István: „ne most, majd ha lesz vele dolgunk”)
 - FusionAI: munkamenet indításakor (vagy egy gombbal) magától `git pull --ff-only` a kiválasztott projekten, hogy a
   webes Claude-dal készült változások (`CLAUDE.md`, `docs/ATADAS.md`) kézi parancs nélkül meglegyenek. Nem

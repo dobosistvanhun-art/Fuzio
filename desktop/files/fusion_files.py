@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Fúzió — Fájlkezelő (fusion-files): kétpaneles, billentyűzettel gyors fájlkezelés
 
-    fusion-files [bal mappa] [jobb mappa]
+    fusion-files [bal mappa] [jobb mappa]        mappa vagy file:// cím; fájlnál a fájl mappája
     fusion-files --selftest <üres munkakönyvtár>     a műveletek ellenőrzése felület nélkül
 
 Billentyűk: F3 megtekintés, F4 szerkesztés, F5 másolás, F6 mozgatás, F7 új mappa, F8 / Del törlés,
@@ -19,6 +19,25 @@ import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 STATE = os.path.join(ui.CONFIG, "files.json")
+
+
+def start_path(arg):
+    """egy indítási paraméter mappája: útvonal vagy file:// cím (a rendszer így adja át, pl. a Firefox
+    „Megnyitás mappában” gombja); fájlnál a fájlt tartalmazó mappa; nem létezőnél None"""
+    if not arg:
+        return None
+    if arg.startswith("file://"):
+        from urllib.parse import unquote, urlsplit
+        u = urlsplit(arg)
+        if u.netloc not in ("", "localhost"):
+            return None
+        arg = unquote(u.path)
+    elif "://" in arg:
+        return None
+    p = os.path.abspath(os.path.expanduser(arg))
+    if os.path.isfile(p):
+        p = os.path.dirname(p)
+    return p if os.path.isdir(p) else None
 
 
 def selftest(work):
@@ -137,6 +156,12 @@ def selftest(work):
         files.resetAssociation(sv)
         check("OPENWITH", ch["key"] == ".svg" and r1 == "" and saved == fb.fp.BUILTIN and ".svg" not in fb.fp._assoc_user(),
               f"key={ch['key']} saved={saved} items={len(ch['items'])}")
+    # indítás a rendszertől: file:// cím (ékezettel, szóközzel kódolva), fájl → a mappája, idegen cím nem
+    sp = os.path.join(a, "szöveg ékezettel.txt")
+    from urllib.parse import quote
+    check("STARTPATH", start_path("file://" + quote(a)) == a and start_path(sp) == a and start_path("file://" + quote(sp)) == a
+          and start_path("https://example.com/x") is None and start_path("file://masik-gep/tmp") is None
+          and start_path(os.path.join(a, "nincs-ilyen")) is None)
     vols = fb.volumes()
     check("VOLUMES", any(v["path"] == os.path.expanduser("~") for v in vols), ", ".join(f"{v['name']}={v['path'] or v['dev']}" for v in vols))
     print(f"FUSION-FILES: RESULT {'ok' if ok else 'HIBA'}", flush=True)
@@ -154,8 +179,8 @@ def main():
     files = fb.Files(left, right)
     st = ui.load_json(STATE, {})
     home = os.path.expanduser("~")
-    lp = args[0] if len(args) > 0 else st.get("left", home)
-    rp = args[1] if len(args) > 1 else st.get("right", "/data" if os.path.isdir("/data") else home)
+    lp = (start_path(args[0]) or home) if len(args) > 0 else st.get("left", home)
+    rp = (start_path(args[1]) or home) if len(args) > 1 else st.get("right", "/data" if os.path.isdir("/data") else home)
     for mdl, key in ((left, "leftSort"), (right, "rightSort")):
         s = st.get(key)
         if isinstance(s, list) and len(s) == 2 and s[0] in ("name", "ext", "size", "date"):

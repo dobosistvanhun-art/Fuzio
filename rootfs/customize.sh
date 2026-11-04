@@ -180,6 +180,15 @@ in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, f
     || { echo "  [customize] HIBA: a Fúzió API (python3 -c 'import fusion') nem tölthető be"; exit 1; }
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
+# A Fájlkezelő a mappák kezelője: a „Megnyitás mappában” (Firefox-portál, xdg-open) ezt nyitja, választóablak nélkül.
+install -D -m 0644 "$FUSION_ROOT/desktop/files/fusion-files.desktop" "$R/usr/share/applications/fusion-files.desktop"
+cat > "$R/usr/share/applications/mimeapps.list" <<'MIMEAPPS'
+[Default Applications]
+inode/directory=fusion-files.desktop
+MIMEAPPS
+if in_root sh -c 'command -v update-desktop-database' >/dev/null 2>&1; then
+    in_root update-desktop-database -q /usr/share/applications || true
+fi
 ln -sf /usr/lib/fusion/desktop/settings/fusion_settings.py "$R/usr/bin/fusion-settings"
 ln -sf /usr/lib/fusion/desktop/bin/fusion "$R/usr/bin/fusion"
 ln -sf /usr/lib/fusion/desktop/bin/fusion-notify "$R/usr/bin/fusion-notify"

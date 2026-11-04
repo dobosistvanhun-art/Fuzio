@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fájlkezelő
+Name[en]=Files
+Comment=Kétpaneles fájlkezelő
+Exec=fusion-files %U
+Icon=/usr/lib/fusion/desktop/icons/app-files.svg
+Terminal=false
+MimeType=inode/directory;
+Categories=System;FileManager;
+NoDisplay=true
