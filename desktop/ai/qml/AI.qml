@@ -271,8 +271,12 @@ FWindow {
                       onClicked: { commitDlg.info = ai.commitInfo(); commitMsg.text = commitDlg.info.message || ""; commitDlg.open(); commitMsg.forceActiveFocus() } }
             FButton { text: "Push…"; icon: "up"; enabled: !ai.task && !ai.busy
                       onClicked: { pushDlg.info = ai.pushInfo(); pushDlg.open() } }
+            FButton { text: ai.task === "pull" ? "Pull fut…" : "Pull"; icon: "download"; enabled: !ai.task && !ai.busy
+                      tip: "git pull --ff-only: a GitHubon lévő új commitok (pl. a webes Claude-dal készült CLAUDE.md, ATADAS) letöltése. Nem commitolt munka, más ág vagy eltérés esetén nem húz, csak szól."
+                      onClicked: ai.pullProject(false) }
             FButton { text: "Beállítások"; icon: "settings"; flat: true
-                      onClicked: { testCmd.text = ai.settings.test || ""; restartCmd.text = ai.settings.restart || ""; setDlg.open() } }
+                      onClicked: { testCmd.text = ai.settings.test || ""; restartCmd.text = ai.settings.restart || ""
+                                   autoPull.checked = !!ai.settings.autoPull; setDlg.open() } }
         }
         ListView {
             id: view
@@ -360,8 +364,11 @@ FWindow {
     }
 
     // ------------------------------------------------------------ jóváhagyás
+    // A teljes ablak mindig kifér (a gombok is): az összefoglaló legfeljebb 3, az ok legfeljebb 2 sor, a részletek
+    // doboza legfeljebb win.height - 320 magas, a többi benne görgethető (a teljes parancs ott olvasható).
     FDialog {
         id: permDlg
+        objectName: "permDlg"
         title: !win.perm ? "" : win.perm.level === "danger" ? "Kiemelt jóváhagyás: " + win.perm.why : "Jóváhagyás: " + win.perm.why
         buttons: [["Elutasítás", ""], ["Engedélyezés", win.perm && win.perm.level === "danger" ? "danger" : "primary"]]
         defaultButton: (!!win.perm && win.perm.level === "danger") ? 0 : 1
@@ -377,12 +384,14 @@ FWindow {
                 FLabel { anchors.fill: parent; anchors.leftMargin: 10
                          text: "Ez a projekten kívülre, a rendszerre vagy a Git-történetre hat. Csak akkor engedélyezd, ha érted." }
             }
-            FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; bold: true
+            FLabel { objectName: "permSummary"; width: parent.width; wrapMode: Text.Wrap; maximumLineCount: 3
+                     elide: Text.ElideRight; bold: true
                      text: win.perm ? win.perm.summary : "" }
-            FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true
+            FLabel { width: parent.width; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight; dim: true
                      visible: text !== ""; text: win.perm ? win.perm.reason : "" }
             Rectangle {
-                width: parent.width; height: Math.min(320, detail.implicitHeight + 16)
+                objectName: "permDetail"
+                width: parent.width; height: Math.max(60, Math.min(320, win.height - 320, detail.implicitHeight + 16))
                 color: Theme.base; border.color: Theme.border
                 ScrollView {
                     anchors.fill: parent; anchors.margins: 6; clip: true
@@ -412,7 +421,7 @@ FWindow {
         title: "Projekt-beállítások — " + ai.project.split("/").pop()
         buttons: [["Mégse", ""], ["Mentés", "primary"]]
         width: Math.min(win.width - 80, 640)
-        onButtonClicked: i => { if (i === 1) ai.saveSettings(testCmd.text, restartCmd.text); close() }
+        onButtonClicked: i => { if (i === 1) ai.saveSettings(testCmd.text, restartCmd.text, autoPull.checked); close() }
         Column {
             x: 20; y: 16; width: setDlg.width - 40; spacing: 6
             FLabel { text: "Tesztparancs (a projekt mappájában fut)"; bold: true }
@@ -422,6 +431,8 @@ FWindow {
             FLabel { text: "Újraindító parancs (a te programod újraindítása)"; bold: true }
             FTextField { id: restartCmd; width: parent.width; font.family: Theme.mono
                          placeholderText: "pl. pkill -f fusion-tasks; fusion-tasks" }
+            Item { width: 1; height: 6 }
+            FCheck { id: autoPull; text: "Projekt megnyitásakor és új munkamenetnél magától git pull (--ff-only)" }
             FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true; font.pixelSize: Theme.fsSmall
                      text: "Ezeket te indítod a gombokkal, ezért nem kérnek külön jóváhagyást (az újraindítás megerősítést kér). Ha a Claude akarja futtatni őket, az továbbra is jóváhagyással megy." }
         }

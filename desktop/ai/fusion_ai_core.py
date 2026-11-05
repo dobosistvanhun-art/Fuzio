@@ -197,6 +197,16 @@ DANGER_CMD = [
 ]
 
 
+# a projekten belüli titkos fájlok (Wrangler-titkok, környezeti változók, kulcsok): olvasni sem szabad őket
+SECRET_NAME = re.compile(r"^(\.dev\.vars|\.env.*|.*\.pem|.*\.key)$")
+SECRET_IN_CMD = re.compile(r"(^|[\s/:'\"=*?])(\.dev\.vars|\.env[\w.-]*|[\w.-]*\.(pem|key))(?=$|[\s'\"/:;|&)<>])")
+
+# kérdés nélkül futó, csak olvasó parancsok (0.0.76): egyszerű parancs vagy cső (|), amelynek minden tagja ilyen
+SAFE_CMDS = {"ls", "wc", "grep", "head", "cat"}
+SAFE_GIT = {"status", "log", "diff", "show", "for-each-ref"}
+SAFE_GIT_BAD = re.compile(r"^(--output|--ext-diff|--no-index)|^-[^-]*[coO]")   # fájlba írás, külső program, a repón kívül
+
+
 def _inside(path, root):
     try:
         rp = os.path.realpath(os.path.join(root, os.path.expanduser(path)))
@@ -206,8 +216,106 @@ def _inside(path, root):
         return False, str(path)
 
 
-def _secret(rp):
-    return any(rp == s or rp.startswith(s + os.sep) for s in SECRET_PATHS)
+def _secret(rp, names=True):
+    """titkos fájl: a személyes hitelesítők (SECRET_PATHS), és names=True esetén a .dev.vars, .env*, *.pem, *.key"""
+    return (any(rp == s or rp.startswith(s + os.sep) for s in SECRET_PATHS)
+            or (names and any(SECRET_NAME.match(p) for p in rp.split(os.sep) if p)))
+
+
+def _pipeline(cmd):
+    """a parancs tagjai (a | mentén) szavakra bontva: [[(szó, van-e benne nem idézett *?[), …], …]; None, ha bármi
+    más shell-szerkezet van benne (||, &&, ;, &, átirányítás, $( ), $VÁLTOZÓ, fordított aposztróf, zárójel, ~, #,
+    \\, új sor) — ezek jóváhagyósak maradnak"""
+    segs, words, cur, glob, inword, quote = [], [], "", False, False, ""
+
+    def end_word():
+        nonlocal cur, glob, inword
+        if inword:
+            words.append((cur, glob))
+        cur, glob, inword = "", False, False
+    for ch in cmd:
+        if quote == "'":
+            if ch == "'":
+                quote = ""
+            else:
+                cur += ch
+        elif quote == '"':
+            if ch in "$`\\":
+                return None
+            if ch == '"':
+                quote = ""
+            else:
+                cur += ch
+        elif ch in "'\"":
+            quote, inword = ch, True
+        elif ch in " \t":
+            end_word()
+        elif ch == "|":
+            end_word()
+            if not words:           # üres tag: ||, | az elején
+                return None
+            segs.append(words)
+            words = []
+        elif ch in ";&<>()`$\\{}~#\n\r":
+            return None
+        else:
+            cur += ch
+            inword = True
+            glob = glob or ch in "*?["
+    if quote:
+        return None
+    end_word()
+    if not words:
+        return None
+    segs.append(words)
+    return segs
+
+
+def _safe_glob(word):
+    """a nem idézett * és ? csak egyszerű kiterjesztés-mintában (pl. desktop/*/*.py): így nem illeszkedhet titkos
+    (.env, .dev.vars — rejtett —, *.pem, *.key) fájlra; [ ] soha"""
+    if "[" in word or ".." in word.split("/"):
+        return False
+    parts = word.split("/")
+    if any(p.startswith(".") and ("*" in p or "?" in p) for p in parts):
+        return False
+    m = re.search(r"\.([A-Za-z0-9]+)$", parts[-1])
+    return bool(m) and not any(c in parts[-1][m.start():] for c in "*?") and m.group(1).lower() not in ("pem", "key")
+
+
+def _safe_readonly(cmd, project):
+    """igaz, ha a parancs csak olvas a projektben: minden tagja a SAFE_CMDS / SAFE_GIT listán van, és minden fájl-
+    argumentum a projekten belül van"""
+    segs = _pipeline(cmd)
+    if not segs:
+        return False
+    for seg in segs:
+        if any(g and not _safe_glob(w) for w, g in seg):      # nem idézett minta: a shell kiterjesztené
+            return False
+        prog, args = seg[0][0], [w for w, _ in seg[1:]]
+        if prog == "git":
+            if not args or args[0] not in SAFE_GIT:       # a git saját kapcsolói (-c, -C, --no-pager …) sem
+                return False
+            if any(SAFE_GIT_BAD.match(a) for a in args[1:]):
+                return False
+            continue
+        if prog not in SAFE_CMDS:
+            return False
+        pattern_left = prog == "grep" and not any(a == "-e" or a.startswith(("-e", "--regexp")) for a in args)
+        for a in args:
+            if a.startswith("-") and a != "-":
+                if prog == "grep" and (a in ("--recursive", "--dereference-recursive") or a.startswith(("--file", "--directories", "--devices"))
+                                       or (not a.startswith("--") and re.search(r"[rRdDf]", a))):
+                    return False            # könyvtárbejárás (titkos fájlok is), mintafájl, eszközfájl
+                if "=" in a and not _inside(a.split("=", 1)[1], project)[0]:
+                    return False
+                continue
+            if pattern_left:                # a grep első szabad argumentuma a minta, nem fájl
+                pattern_left = False
+                continue
+            if a != "-" and not _inside(a, project)[0]:
+                return False
+    return True
 
 
 def classify(tool, inp, project):
@@ -220,10 +328,12 @@ def classify(tool, inp, project):
     path = inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or ""
     if tool in READ_TOOLS or tool in EDIT_TOOLS:
         summary = tool
+        if tool == "Grep" and SECRET_NAME.match(os.path.basename(str(inp.get("glob") or ""))):
+            return {"level": "deny", "why": "titkos fájl (.dev.vars, .env, *.pem, *.key)", "summary": f"Grep: {inp.get('glob')}"}
         if path:
             inside, rp = _inside(path, project)
             summary = f"{tool}: {os.path.relpath(rp, os.path.realpath(project)) if inside else rp}"
-            if _secret(rp):
+            if _secret(rp, names=tool in READ_TOOLS):
                 return {"level": "deny", "why": "titkos / személyes hitelesítő fájl", "summary": summary}
             if not inside:
                 sysf = rp.startswith(SYSTEM_PREFIXES)
@@ -247,9 +357,13 @@ def classify(tool, inp, project):
                         "summary": cmd}
         if any(s in one for s in (".ssh/", ".gnupg", ".credentials.json", ".git-credentials")):
             return {"level": "deny", "why": "titkos / személyes hitelesítő fájl", "summary": cmd}
+        if SECRET_IN_CMD.search(cmd):
+            return {"level": "deny", "why": "titkos fájl (.dev.vars, .env, *.pem, *.key)", "summary": cmd}
         for pat, name in DANGER_CMD:
             if re.search(pat, one):
                 return {"level": "danger", "why": name, "summary": cmd}
+        if _safe_readonly(cmd, project):
+            return {"level": "auto", "why": "csak olvasó parancs a projektben", "summary": cmd}
         return {"level": "ask", "why": "parancs futtatása", "summary": cmd}
     if tool in ("WebFetch", "WebSearch"):
         return {"level": "ask", "why": "internet", "summary": f"{tool}: {inp.get('url') or inp.get('query') or ''}"}
@@ -392,19 +506,38 @@ def restore(repo, sha):
     return {"ok": True, "error": "", "before": before["ref"], "extra": extra}
 
 
+def is_fusion_repo(path):
+    """a Fúzió saját forrása-e (a FusionAI is ebben van)"""
+    return all(os.path.exists(os.path.join(path, f)) for f in ("desktop/ai/fusion_ai_app.py", "rootfs/customize.sh"))
+
+
 def system_prompt(project):
-    """a FusionAI kiegészítése a Claude Code saját rendszerpromptjához"""
-    return (
-        "A FusionAI-ban futsz: a felhasználó FusionOS-t (saját Linux-rendszer, QML-felület) használ egy HP ZBook 15 G2 "
-        f"laptopon. A kijelölt projekt: {project}. Válaszolj magyarul.\n"
-        "- Fordításhoz és buildhez a Fejlesztődoboz eszközeit használd: `fusion-dev box run <parancs>` (Ubuntu 24.04, "
-        "a saját mappa közös); a rendszerkép csak olvasható.\n"
-        "- Ne commitolj és ne pusholj, csak ha a felhasználó kifejezetten kéri; ezeket a FusionAI külön jóváhagyatja.\n"
-        "- Soha ne dobd el a nem commitolt változtatásokat (git reset --hard, checkout --, clean, stash drop: tiltva).\n"
-        "- A munkamenet elején a FusionAI pillanatképet készít (refs/fusion-ai/*); a változtatásaid visszaállíthatók.\n"
-        "- A projekten kívüli fájlokhoz és a rendszerhez csak indokkal, jóváhagyással nyúlj.\n"
-        "- A végén röviden: mit változtattál (fájlonként), milyen teszt futott, mi maradt ellenőrizetlen."
-    )
+    """a FusionAI kiegészítése a Claude Code saját rendszerpromptjához. A gépre és a felhasználóra vonatkozó sorok
+    minden projektben; a Fúzió-forrásra (és a gépre, amelyre épül) vonatkozók csak a Fúzió repójában."""
+    lines = [
+        "A FusionAI-ban futsz, a Fúzió rendszeren (saját Linux-rendszer Ubuntu 24.04 alapon, Qt/QML-felület). "
+        f"A kijelölt projekt: {project}. Válaszolj magyarul.",
+        "- A rendszerkép (/usr) csak olvasható, apt nincs: fordításhoz és buildhez a Fejlesztődobozt használd: "
+        "`fusion-dev box run <parancs>` (Ubuntu 24.04, apt-tal, a saját mappa közös).",
+        "- A felhasználó billentyűzetén a Tab nem működik: ne javasolj Tabra épülő megoldást (kiegészítés, fókuszváltás, "
+        "gyorsbillentyű).",
+        "- Kérdés nélkül csak az egyszerű, olvasó parancsok futnak (git status/log/diff/show/for-each-ref, ls, cat, head, "
+        "wc, grep, csővel összefűzve is); &&, ;, átirányítás, $( ) esetén jóváhagyás kell, ezért inkább külön, rövid "
+        "parancsokat futtass. A titkos fájlokat (.dev.vars, .env*, *.pem, *.key) nem olvashatod.",
+        "- Ne commitolj és ne pusholj, csak ha a felhasználó kifejezetten kéri; ezeket a FusionAI külön jóváhagyatja.",
+        "- Soha ne dobd el a nem commitolt változtatásokat (git reset --hard, checkout --, clean, stash drop: tiltva).",
+        "- A munkamenet elején a FusionAI pillanatképet készít (refs/fusion-ai/*); a változtatásaid visszaállíthatók.",
+        "- A projekten kívüli fájlokhoz és a rendszerhez csak indokkal, jóváhagyással nyúlj.",
+        "- A végén röviden: mit változtattál (fájlonként), milyen teszt futott, mi maradt ellenőrizetlen.",
+    ]
+    if is_fusion_repo(project):
+        lines.insert(1, "- Ez a Fúzió saját forrása: a futó rendszer ebből épül (HP ZBook 15 G2, Quadro K1100M, NVIDIA 470, "
+                        "X11 + JWM). A változás a gépen csak build és telepítés után él (Beállítások → Rendszerfrissítés, "
+                        "vagy `fusion-dev rebuild`); a programok forrásból is futtathatók, öntesztjük: `<program> --selftest`.")
+    else:
+        lines.insert(1, "- Ez nem a Fúzió forrása, hanem a felhasználó egy másik projektje: a Fúzió saját szabályait "
+                        "(VERSION, customize.sh, a Fúzió-programok) itt ne alkalmazd; a projekt saját CLAUDE.md-je az irányadó.")
+    return "\n".join(lines)
 
 
 def shell_quote(args):
@@ -439,7 +572,7 @@ def detect_commands(repo):
         test = "python3 -m pytest -q"
     elif os.path.exists(os.path.join(repo, "Makefile")):
         test = "make test"
-    return {"test": test, "restart": ""}
+    return {"test": test, "restart": "", "autoPull": False}
 
 
 def project_settings(repo):
@@ -447,13 +580,14 @@ def project_settings(repo):
     base = detect_commands(repo)
     if isinstance(d, dict):
         base.update({k: str(v) for k, v in d.items() if k in ("test", "restart")})
+        base["autoPull"] = d.get("autoPull") is True
     return base
 
 
-def save_project_settings(repo, test, restart):
+def save_project_settings(repo, test, restart, auto_pull=False):
     d = load_config()
     s = d.get("settings") if isinstance(d.get("settings"), dict) else {}
-    s[repo] = {"test": test.strip(), "restart": restart.strip()}
+    s[repo] = {"test": test.strip(), "restart": restart.strip(), "autoPull": bool(auto_pull)}
     d["settings"] = s
     save_config(d)
 
@@ -527,6 +661,75 @@ def push(repo):
     rc, out, err = git(repo, *args, timeout=600)
     text = (out + err).strip()
     return {"ok": rc == 0, "error": "" if rc == 0 else text[-1500:], "output": text[-1500:]}
+
+
+PULL_WATCH = ("CLAUDE.md", "docs/ATADAS.md")      # ezek változását külön kiírjuk (a webes Claude-dal készült átadás)
+
+
+def pull(repo):
+    """git pull --ff-only a projekten (0.0.76) — csak ha biztonságos: nincs nem commitolt munka (új fájl sem), az ág
+    követi a távoli tároló alapértelmezett ágát, és a helyi ág nem tért el. Különben nem húz, csak megmondja, miért.
+    Visszaad: {"ok", "pulled", "error", "text", "commits": [sorok], "files": [utak], "watched": [a PULL_WATCH-ból]}"""
+    res = {"ok": False, "pulled": False, "error": "", "text": "", "commits": [], "files": [], "watched": []}
+    st = git_state(repo)
+    if not st["ok"]:
+        res["error"] = st["error"] or "nem Git-repó"
+        return res
+    if st["files"]:
+        names = ", ".join(f["path"] for f in st["files"][:6]) + (" …" if len(st["files"]) > 6 else "")
+        res["error"] = f"nem húzok: nem commitolt munka van ({len(st['files'])} fájl: {names}) — előbb commitold vagy mentsd"
+        return res
+    rc, br, _ = git(repo, "symbolic-ref", "-q", "--short", "HEAD")
+    br = br.strip()
+    if rc != 0 or not br:
+        res["error"] = "nem húzok: nincs kijelölt ág (detached HEAD)"
+        return res
+    rc, up, _ = git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    up = up.strip()
+    if rc != 0 or "/" not in up:
+        res["error"] = f"nem húzok: a(z) {br} ágnak nincs távoli párja (upstream)"
+        return res
+    remote = up.split("/", 1)[0]
+    rc, out, err = git(repo, "fetch", "--quiet", remote, timeout=180)
+    if rc != 0:
+        res["error"] = "a letöltés (git fetch) nem sikerült: " + (err or out).strip()[-400:]
+        return res
+    rc, dflt, _ = git(repo, "symbolic-ref", "-q", "--short", f"refs/remotes/{remote}/HEAD")
+    dflt = dflt.strip()
+    if rc != 0 or not dflt:     # a klón nem jegyezte fel: main vagy master, ami létezik
+        dflt = next((f"{remote}/{b}" for b in ("main", "master")
+                     if git(repo, "rev-parse", "-q", "--verify", f"refs/remotes/{remote}/{b}")[0] == 0), "")
+    if up != dflt:
+        res["error"] = f"nem húzok: más ágon vagy ({br} → {up}; a fő ág: {dflt or '?'}) — válts a fő ágra, vagy húzd kézzel"
+        return res
+    _, counts, _ = git(repo, "rev-list", "--left-right", "--count", f"HEAD...{up}")
+    try:
+        ahead, behind = (int(x) for x in counts.split())
+    except ValueError:
+        ahead, behind = 0, 0
+    if behind and ahead:
+        res["error"] = (f"nem húzok: a helyi ág eltért a távolitól ({ahead} helyi, {behind} távoli új commit) — "
+                        "ezt kézzel kell összefésülni")
+        return res
+    if not behind:
+        res["ok"] = True
+        res["text"] = "Nincs új a GitHubon — a projekt naprakész" + (f" ({ahead} helyi commit még nincs feltöltve)." if ahead else ".")
+        return res
+    _, old, _ = git(repo, "rev-parse", "HEAD")
+    rc, out, err = git(repo, "pull", "--ff-only", "--no-rebase", timeout=300)
+    if rc != 0:
+        res["error"] = "a git pull nem sikerült: " + (err or out).strip()[-600:]
+        return res
+    old = old.strip()
+    _, log, _ = git(repo, "log", "--oneline", "--no-decorate", "-n", "30", f"{old}..HEAD")
+    _, files, _ = git(repo, "diff", "--name-only", old, "HEAD")
+    res.update(ok=True, pulled=True, commits=[ln for ln in log.splitlines() if ln.strip()],
+               files=[f for f in files.splitlines() if f.strip()])
+    res["watched"] = [f for f in PULL_WATCH if f in res["files"]]
+    res["text"] = (f"Pull kész: {len(res['commits'])} új commit, {len(res['files'])} fájl"
+                   + (" — megváltozott: " + ", ".join(res["watched"]) if res["watched"] else "") + "\n"
+                   + "\n".join(res["commits"][:10]))
+    return res
 
 
 def suggest_commit_message(repo):

@@ -166,6 +166,8 @@ class Backend(QObject):
         self.refreshSessions()
         self.refreshGit()
         self.item.emit({"kind": "info", "text": f"Projekt: {path}"})
+        if self._settings.get("autoPull"):
+            self.pullProject(True)
 
     @pyqtSlot()
     def refreshSessions(self):
@@ -193,6 +195,8 @@ class Backend(QObject):
         self._session, self._last_user_uuid, self._turn_snap = "", "", ""
         self.item.emit({"kind": "info", "text": "Új munkamenet"})
         self.changed.emit()
+        if self._project and self._settings.get("autoPull"):
+            self.pullProject(True)
 
     @pyqtSlot(str)
     def resumeSession(self, sid):
@@ -217,6 +221,9 @@ class Backend(QObject):
             return
         if not self._status.get("installed"):
             self.message.emit("a Claude Code nincs telepítve: fusion-dev install claude", True)
+            return
+        if self._task == "pull":
+            self.message.emit("a git pull még fut — várd meg, hogy a Claude a friss fájlokat lássa", True)
             return
         self._busy = True
         self.changed.emit()
@@ -355,10 +362,39 @@ class Backend(QObject):
                 self.taskDone.emit()
         threading.Thread(target=work, daemon=True).start()
 
-    @pyqtSlot(str, str)
-    def saveSettings(self, test, restart):
+    @pyqtSlot(bool)
+    def pullProject(self, auto=False):
+        """git pull --ff-only a projekten (a gombról, vagy auto=True: projektnyitáskor / új munkamenetnél, ha a
+        Projekt-beállításokban be van kapcsolva). Nem commitolt munka, más ág vagy eltérés esetén nem húz, csak szól."""
+        if not self._project:
+            return
+        if self._busy:
+            self.message.emit("Claude dolgozik — a pull utána mehet", True)
+            return
+        repo = self._project
+
+        def go():
+            r = core.pull(repo)
+            pre = "Magától (Projekt-beállítások): " if auto else ""
+            if not r["ok"]:
+                self.item.emit({"kind": "error", "text": pre + r["error"]})
+            elif r["pulled"]:
+                self.item.emit({"kind": "result", "text": pre + r["text"]})
+                self._log("── git pull\n" + r["text"] + "\n" + "\n".join(r["files"]))
+                # a Claude tudjon róla: a már beolvasott CLAUDE.md / ATADAS elavult lehet
+                self._note = ((self._note + "; ") if self._note else "") + (
+                    f"a felhasználó git pull-t futtatott: {len(r['commits'])} új commit, megváltozott fájlok: "
+                    + ", ".join(r["files"][:20]) + (" …" if len(r["files"]) > 20 else "")
+                    + (" — olvasd újra: " + ", ".join(r["watched"]) if r["watched"] else ""))
+            elif not auto:
+                self.item.emit({"kind": "info", "text": r["text"]})
+            self.refreshGitLater.emit()
+        self._run_task("pull", go)
+
+    @pyqtSlot(str, str, bool)
+    def saveSettings(self, test, restart, auto_pull=False):
         if self._project:
-            core.save_project_settings(self._project, test, restart)
+            core.save_project_settings(self._project, test, restart, auto_pull)
             self._settings = core.project_settings(self._project)
             self.changed.emit()
             self.message.emit("a projekt parancsai mentve", False)
@@ -867,21 +903,74 @@ def selftest():
     check("PUSH-REMOTE", "próba commit" in rlog)
     check("PUSH-NOTHING-LEFT", be.pushInfo().get("commits") == [])
 
-    # osztályozás: néhány kézi eset
-    cases = [("Bash", {"command": "git checkout -- ."}, "deny"), ("Bash", {"command": "git restore src/a.rs"}, "deny"),
-             ("Bash", {"command": "git restore --staged a.rs"}, "ask"), ("Bash", {"command": "sudo apt install x"}, "danger"),
-             ("Bash", {"command": "cargo test"}, "ask"), ("Bash", {"command": "git push origin main"}, "danger"),
-             ("Bash", {"command": "git push -f origin x"}, "deny"), ("Read", {"file_path": "/etc/passwd"}, "ask"),
-             ("Edit", {"file_path": "/etc/fstab"}, "danger"), ("Read", {"file_path": os.path.join(core.HOME, ".ssh", "id_ed25519")}, "deny"),
-             ("Read", {"file_path": "calc.py"}, "auto"), ("Write", {"file_path": "uj.py"}, "ask"),
-             ("Bash", {"command": "cat ~/.ssh/id_rsa"}, "deny"), ("Bash", {"command": "rm -rf build"}, "danger"),
-             ("Bash", {"command": "npm run deploy"}, "danger"), ("Bash", {"command": "npx wrangler deploy"}, "danger"),
-             ("Bash", {"command": "npx wrangler d1 migrations apply motoros-tura-db --remote"}, "danger"),
-             ("Bash", {"command": "npx wrangler d1 migrations apply motoros-tura-db --local"}, "ask"),
-             ("Bash", {"command": "npm test"}, "ask")]
-    for tool, inp, want in cases:
-        got = core.classify(tool, inp, repo)["level"]
-        check(f"CLASSIFY {tool} {list(inp.values())[0]}", got == want, f"{got} (várt: {want})")
+    # 0.0.76: git pull --ff-only (gomb és magától); nem commitolt munka, más ág, eltérés esetén nem húz
+    other = os.path.join(tmp, "masik")
+    subprocess.run(["git", "clone", "-q", remote, other], check=True)
+    og = ["git", "-C", other, "-c", "user.name=web", "-c", "user.email=w@w"]
+
+    def remote_commit(name, text):
+        open(os.path.join(other, name), "w").write(text)
+        subprocess.run(og + ["add", "-A"], check=True)
+        subprocess.run(og + ["commit", "-qm", f"web: {name}"], check=True)
+        subprocess.run(og + ["push", "-q"], check=True)
+
+    def head():
+        return core.git(repo, "rev-parse", "HEAD")[1].strip()
+    remote_commit("CLAUDE.md", "# útmutató a webes Claude-tól\n")
+    items.clear()
+    be.pullProject(False)
+    check("PULL", wait_task() and os.path.exists(os.path.join(repo, "CLAUDE.md"))
+          and any(i["kind"] == "result" and "Pull kész" in i["text"] and "CLAUDE.md" in i["text"] for i in items), str(items[-1:])[:160])
+    check("PULL-NOTE", "olvasd újra: CLAUDE.md" in be._note, be._note[:120])
+    be._note = ""
+    items.clear()
+    be.pullProject(False)
+    check("PULL-UPTODATE", wait_task() and any(i["kind"] == "info" and "naprakész" in i["text"] for i in items))
+    remote_commit("docs-uj.txt", "új\n")
+    open(os.path.join(repo, "piszkozat.txt"), "w").write("nem commitolt\n")
+    h0, items[:] = head(), []
+    be.pullProject(False)
+    check("PULL-DIRTY", wait_task() and head() == h0 and os.path.exists(os.path.join(repo, "piszkozat.txt"))
+          and any(i["kind"] == "error" and "nem commitolt" in i["text"] for i in items), str(items[-1:])[:160])
+    os.unlink(os.path.join(repo, "piszkozat.txt"))
+    be.saveSettings(be.settings.get("test", ""), "true", True)
+    check("PULL-AUTO-SAVED", core.project_settings(repo).get("autoPull") is True)
+    be.newSession()                                     # magától: új munkamenetnél
+    check("PULL-AUTO", wait_task() and os.path.exists(os.path.join(repo, "docs-uj.txt")))
+    be.saveSettings(be.settings.get("test", ""), "true", False)
+    main_br = core.git(repo, "rev-parse", "--abbrev-ref", "HEAD")[1].strip()
+    subprocess.run(g + ["checkout", "-qb", "mellek"], check=True)
+    subprocess.run(g + ["push", "-qu", "origin", "mellek"], check=True)
+    remote_commit("harmadik.txt", "3\n")
+    items.clear()
+    be.pullProject(False)
+    check("PULL-BRANCH", wait_task() and any(i["kind"] == "error" and "más ágon" in i["text"] for i in items), str(items[-1:])[:160])
+    subprocess.run(g + ["checkout", "-q", main_br], check=True)
+    open(os.path.join(repo, "helyi.txt"), "w").write("helyi\n")
+    subprocess.run(g + ["add", "helyi.txt"], check=True)
+    subprocess.run(g + ["commit", "-qm", "helyi"], check=True)
+    h0, items[:] = head(), []
+    be.pullProject(False)
+    check("PULL-DIVERGED", wait_task() and head() == h0 and any(i["kind"] == "error" and "eltért" in i["text"] for i in items),
+          str(items[-1:])[:160])
+
+    # az induló utasítás: Fúzió-név, Tab; a ZBook / Fúzió-forrás sorai csak a Fúzió repójában
+    p_fusion, p_other = core.system_prompt(os.path.realpath(os.path.join(HERE, "..", ".."))), core.system_prompt(repo)
+    check("PROMPT", "FusionOS" not in p_fusion + p_other and "Tab" in p_fusion and "Tab" in p_other
+          and "ZBook" in p_fusion and "ZBook" not in p_other and "nem a Fúzió forrása" in p_other)
+
+    # osztályozás: az esetek a tests/classify_cases.py-ban (0.0.76: csak olvasó parancsok, titkos fájlok, trükkök)
+    sys.path.insert(0, os.path.join(HERE, "tests"))
+    import classify_cases
+    classify_cases.run(core, repo, check)
+
+    # a felület: a jóváhagyó ablak hosszú paranccsal is kifér (külön folyamat: a QML-hez QGuiApplication kell)
+    r = subprocess.run([sys.executable, os.path.join(HERE, "tests", "ui_check.py")], capture_output=True, text=True,
+                       timeout=120, env=dict(os.environ, FUSION_AI_SDK_DIR=core.SDK_DIR))
+    for ln in r.stdout.splitlines():
+        if ln.startswith("FUSION-AI: "):
+            print(ln, flush=True)
+    check("UI", r.returncode == 0, (r.stderr or "").strip().splitlines()[-1][:200] if r.returncode and r.stderr else "")
 
     be.shutdown()
     shutil.rmtree(tmp, ignore_errors=True)

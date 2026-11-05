@@ -9,6 +9,29 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-05 — 0.0.76: FusionAI — Pull gomb, csak olvasó parancsok kérdés nélkül, kiférő jóváhagyó ablak
+- István kérése (FusionAI-ban, helyben): az 1–3. pont a „mit módosítanál magadon” listából, kiegészítésekkel.
+  (a) A gitből csak a status/log/diff/show/for-each-ref menjen kérdés nélkül, `-c`, `--output`, `-o`, `--ext-diff`
+  kapcsolóval ezek is kérdezzenek. (b) A projekten belüli `.dev.vars`, `.env*`, `*.pem`, `*.key`: a Read és a Bash
+  is deny. (c) Csőnél minden tag engedélyezett legyen; `&&`, `;`, `>`, `$( )`, fordított aposztróf, `find -exec`
+  jóváhagyós marad. (d) Az önteszt próbálja végig a trükköket.
+  Menet közben: a jóváhagyó ablak kétszer kilógott a képernyőből (hosszú próbaparancs, a gombok nem látszottak) →
+  javítás ugyanebben a változatban. István utasítása: a próbák a `desktop/ai/tests/` alá, fájlba kerüljenek, és rövid
+  paranccsal fussanak, ne hosszú, beágyazott Bash-sal.
+- Fájlok: `desktop/ai/fusion_ai_core.py` (`pull`, `_safe_readonly`, `_pipeline`, `_safe_glob`, titkos nevek,
+  `is_fusion_repo`, új `system_prompt`, `autoPull` beállítás); `desktop/ai/fusion_ai_app.py` (`pullProject`,
+  magától projektnyitáskor / új munkamenetnél, megjegyzés Claude-nak, `saveSettings(…, autoPull)`, önteszt);
+  `desktop/ai/qml/AI.qml` (Pull gomb, beállítás-kapcsoló, a jóváhagyó ablak korlátai); új: `desktop/ai/tests/classify_cases.py`
+  (106 eset, önállóan is fut), `desktop/ai/tests/ui_check.py` (offscreen ablakmérés); `docs/W3-fusionai.md` 6b.;
+  `VERSION`, `README.md`; a `CLAUDE.md`-ből törölve a „git pull gombnyomásra” teendő.
+- Próba (ZBook, forrásból, próba-Claude-dal): `python3 desktop/ai/fusion_ai_app.py --selftest` → 167 ellenőrzés, mind
+  ok (RESULT ok). Ebből PULL ×7 (bare remote + második klón), PROMPT, 106 CLASSIFY, UI: 1180×760 és 860×520 ablaknál
+  a jóváhagyó ablak kifér, az összefoglaló 3 sor.
+  **Nem próbált:** a build és a telepített 0.0.76; a Pull gomb a valódi GitHub-repón; a valódi Claude Code-dal a
+  kérdés nélküli olvasó parancsok és az ablak. Ismert korlát: a teljes projektre futó Grep a titkos fájlok tartalmát
+  nem zárja ki (részletek: `docs/W3-fusionai.md` 6b.).
+- Visszavonás: a fenti fájlok visszaállítása a 0.0.75-ös commitra (`779842e`); a beállításban az `autoPull` kulcs
+  magától figyelmen kívül marad.
 ## 2026-11-05 — 0.0.75: kijelző ki gombbal és tétlenség után, videó alatt nem
 - István: nem találta, hol a fedél-beállítás → Beállítások → Rendszer → ENERGIA (most a Start menü keresője is
   megtalálja: „fedél”, „kijelző”, „energia”). Kérés: kijelző ki gombbal, időzítő x perc tétlenség után, videó alatt ne.

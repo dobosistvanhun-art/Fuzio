@@ -54,7 +54,9 @@ Sorrend: előbb a Claude Code saját engedélykezelése (amit magától nem enge
 | olvasás a projekten kívül | jóváhagyás |
 | fájlmódosítás a projektben | jóváhagyás (a régi → új szöveggel); „Fájlmódosítás kérdés nélkül” = a Claude Code hivatalos `acceptEdits` módja, csak az adott munkamenetre |
 | fájlmódosítás a projekten kívül / rendszerfájl | **kiemelt** jóváhagyás |
+| csak olvasó parancs a projektben (0.0.76): `git status/log/diff/show/for-each-ref`, `ls`, `cat`, `head`, `wc`, `grep`, csővel (`\|`) összefűzve is | magától (részletek: 6b.) |
 | parancs (Bash) | jóváhagyás, a teljes parancssorral |
+| titkos fájl a projektben (0.0.76): `.dev.vars`, `.env*`, `*.pem`, `*.key` — Read, Grep, Bash | **tiltva** |
 | `sudo`, `fusion-admin`, telepítés (apt, pip, npm -g, `fusion-dev install`), `git commit`, `git push`, merge/rebase, `rm -r`, `systemctl`, `kill` … | **kiemelt** jóváhagyás (piros; Enter = Elutasítás) |
 | `git reset --hard`, `checkout -- …`, `restore` (munkafa), `clean`, `stash drop/clear`, `push --force`, `branch -D` | **tiltva**, kérdés nélkül (a nem commitolt munka védelme) — ha tényleg kell, kézzel |
 | `~/.ssh`, `~/.gnupg`, `~/.claude/.credentials.json`, `~/.git-credentials`, rclone | **tiltva** |
@@ -120,6 +122,52 @@ Biztonság (0.0.61): a FusionAI szabályai a Claude Code **PreToolUse-horgaként
 akkor is tilos, a kiemelt (commit, push, sudo, élesítés) akkor is kérdez, ha egy Claude Code-szabály (pl. a projekt
 `.claude/settings.json`-ja) magától engedné. ZBookon igazolva (2026-10-29): commit-kérésre piros ablak, Elutasításra
 nincs commit.
+
+## 6b. 0.0.76 — git pull, csak olvasó parancsok, titkos fájlok, kiférő jóváhagyó ablak
+
+**Pull gomb** (`fusion_ai_core.pull`): `git fetch`, majd `git pull --ff-only`, de csak ha
+- nincs nem commitolt munka (új, nem követett fájl sem);
+- van kijelölt ág, van távoli párja, és ez a távoli tároló fő ága (`origin/HEAD`, ha nincs: `main` / `master`);
+- a helyi ág nem tért el (csak a távolin van új commit).
+
+Különben nem húz, és kiírja, miért. Sikeres pull után a beszélgetésben: az új commitok, a fájlok száma, és ha a
+`CLAUDE.md` / `docs/ATADAS.md` változott, az külön; a Claude a következő kéréssel megjegyzést kap („olvasd újra: …”).
+Projekt-beállítások → „Projekt megnyitásakor és új munkamenetnél magától git pull” (alapból ki; `~/.config/fusion/ai.json`,
+`settings.<repo>.autoPull`). Pull közben a Küldés vár.
+
+**Csak olvasó parancsok kérdés nélkül** (`_safe_readonly`). Egy parancs akkor fut magától, ha:
+- egyszerű szavakból áll, legfeljebb `|`-vel összefűzve, és minden tagja engedélyezett. Más shell-szerkezetnél
+  (`&&`, `||`, `;`, `&`, `<`, `>`, `$( )`, `$VÁLTOZÓ`, fordított aposztróf, `{ }`, `~`, `#`, `\`, új sor) jóváhagyás kell;
+- a git-tagok közvetlenül `status`, `log`, `diff`, `show` vagy `for-each-ref` alparanccsal kezdődnek: a git saját
+  kapcsolói (`-c`, `-C`, `--no-pager`) is jóváhagyósak. Jóváhagyás kell `--output`, `-o`, `--ext-diff`, `--no-index`,
+  valamint `c`, `o` vagy `O` betűt tartalmazó rövid kapcsoló esetén is (pl. `-c`, `-pc`);
+- a többi tag csak `ls`, `cat`, `head`, `wc` vagy `grep`: minden fájl-argumentum (a `--kapcsoló=érték` értéke is) a
+  projekten belül van. A `grep` bejárós (`-r`, `-R`, `--recursive`), mintafájlos (`-f`) és eszközös (`-d`, `-D`) kapcsolója
+  jóváhagyós. A nem idézett `*` / `?` csak egyszerű kiterjesztés-mintában mehet (pl. `src/*/*.py`), a `.`-tal kezdődő
+  minta, a `[ ]` és a `..` jóváhagyós (pl. `cat *`, `ls .*`). A `find` (`-exec`), `sort`, `tee`, `sh`, `echo` stb.
+  továbbra is kérdez.
+
+**Titkos fájlok a projektben**: a `.dev.vars`, `.env*`, `*.pem`, `*.key` olvasása tiltva: a Read (út), a Grep (`path`
+vagy `glob`) és minden Bash-parancs, amely ilyen nevet tartalmaz (pl. `cat .dev.vars`, `git show HEAD:.env`,
+`cp .env /tmp`). Szerkesztésük (Edit/Write) a régi módon jóváhagyással megy.
+**Korlát:** egy út nélküli, a teljes projektre futó Grep-keresés ezek tartalmát nem zárja ki. A rejtett fájlokat
+(`.env`, `.dev.vars`) a ripgrep alapból kihagyja, ezt a Claude Code Grep-jére nem ellenőriztem. A `*.pem` / `*.key`
+nem rejtett, ezért az ilyen keresés tartalmukat elérheti.
+**Téves találat** (tiltás ott, ahol nem kellene): egy `grep 'obj.key'` mintában a `.key` végződés is tiltást vált ki.
+
+**Jóváhagyó ablak**: az összefoglaló legfeljebb 3, az ok legfeljebb 2 sor (a végén …). A részletek doboza legfeljebb
+`win.height - 320` (és legfeljebb 320) magas, görgethető, és ott a teljes parancs olvasható. Mérés (offscreen, 400 szavas
+parancs + 300 soros részletek, kiemelt jóváhagyás): 1180×760-nál az ablak y=76, magassága 609; 860×520-nál y=16,
+magassága 489. A gombok mindkét méretnél az ablakon belül vannak.
+
+**Induló utasítás**: „Fúzió” (nem FusionOS), a Tab-szabály, a csak olvasó parancsok és a titkos fájlok minden projektben.
+A gépre (ZBook, NVIDIA 470) és a Fúzió-forrásra vonatkozó sor csak a Fúzió repójában szerepel; más projektben az a
+sor, hogy a Fúzió saját szabályai ott nem érvényesek.
+
+| Mit | Hol | Eredmény |
+| --- | --- | --- |
+| `fusion-ai --selftest` (167 ellenőrzés): a korábbiak + PULL (siker, CLAUDE.md-jelzés, Claude-megjegyzés), naprakész, nem commitolt munka, magától (új munkamenet), más ág, eltérés; PROMPT; 106 besorolási eset (`tests/classify_cases.py`); UI (`tests/ui_check.py`, a jóváhagyó ablak két ablakméretnél) | ZBook, forrásból, próba-Claude-dal (2026-11-05) | ok |
+| a Pull gomb a valódi GitHub-repón, a kiférő ablak és a kérdés nélküli olvasó parancsok a valódi Claude Code-dal | ZBook, telepített 0.0.76 | **nincs ellenőrizve** |
 
 ## 7. Következő lépések
 
