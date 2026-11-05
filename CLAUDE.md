@@ -40,6 +40,12 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 - Commit és push **csak István kifejezett kérésére**. Commit-üzenet: magyarul, `0.0.N (mérföldkő): rövid összefoglaló`.
 - A nem commitolt munkát soha ne dobd el (reset --hard, checkout --, clean, stash drop).
 
+## Megbeszélt, következő teendő (István, 2026-11-05: „ne felejtsük el legközelebb, ha módosítunk valamit a Fúzióban”)
+- **FusionAI: git pull gombnyomásra.** A következő Fúzió-módosítás része legyen: a FusionAI-ban egy gomb (és
+  munkamenet-indításkor opcionálisan magától) `git pull --ff-only` a kiválasztott projekten, hogy a webes Claude-dal
+  készült változások (`CLAUDE.md`, `docs/ATADAS.md`) kézi parancs nélkül meglegyenek. Nem commitolt munka vagy eltérő
+  ág esetén ne húzzon, csak szóljon. Részletek: `docs/ATADAS.md`, 2026-11-01-es bejegyzés. Ha elkészült, töröld ezt a pontot.
+
 ## Átadás (ZBook ⇄ webes Claude)
 **A munkamenet elején olvasd el a `docs/ATADAS.md` legfelső bejegyzéseit** — ott van, amit a webes Claude-dal
 (claude.ai) végeztünk. A claude.ai-os beszélgetések a GitHubról látják a repót, a helyi munkameneteket nem. Ezért egy munka végén
