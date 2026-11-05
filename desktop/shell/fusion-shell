@@ -5,6 +5,7 @@
 #    fusion-shell                 állapot
 #    fusion-shell menu            Start menü nyitása/zárása (Super, Alt+F1)
 #    fusion-shell clip            vágólap-előzmények (Ctrl+Alt+V)
+#    fusion-shell screen-off      a kijelző ki (Ctrl+Alt+K); egérmozdításra / billentyűre visszajön
 #    fusion-shell run             (a munkamenet indítja) a Shell, összeomlás után újraindítással
 #    fusion-shell stop            leállítás (a run-ciklus is kilép)
 #    fusion-shell restart         újraindítás (pl. frissítés után)
@@ -34,6 +35,10 @@ case "${1:-status}" in
         p=$(pid) || true; [ -n "${p:-}" ] || fail "a Fúzió Shell nem fut"
         kill -USR2 "$p"
         ;;
+    screen-off)
+        # a billentyű felengedése után — különben a felengedés azonnal visszakapcsolná
+        sleep 0.8; xset +dpms 2>/dev/null; xset dpms force off || fail "a kijelző nem kapcsolható ki (xset)"
+        ;;
     stop)
         : > "$STOPF"; p=$(pid) || true; [ -n "${p:-}" ] && kill "$p"; true
         ;;
@@ -53,5 +58,5 @@ case "${1:-status}" in
         done
         rm -f "$PIDF" "$STOPF"
         ;;
-    *) fail "ismeretlen parancs: $1 (status, menu, clip, run, stop, restart)" ;;
+    *) fail "ismeretlen parancs: $1 (status, menu, clip, screen-off, run, stop, restart)" ;;
 esac

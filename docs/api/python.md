@@ -12,6 +12,7 @@
 | `fusion.camera` | `cameras()` (csak a képrögzítő V4L2-csomópontok: név, USB-azonosító, meghajtó), `summary()` — csak olvas |
 | `fusion.bluetooth` | `adapter()`, `devices()`, `power(be)`, `scan(mp)`, `pair(cím, esemény)`, `connect` / `disconnect` / `remove(cím)`, `rfkill()` — BlueZ |
 | `fusion.printers` | `printers()`, `discover()`, `drivers(modell)`, `add(uri, modell)`, `add_pdf()`, `remove` / `set_default` / `enable` / `test_page(név)`, `jobs()`, `cancel(feladat)` — CUPS |
+| `fusion.screen` | `off_minutes()`, `set_off_minutes(n)`, `off_now()`, `inhibitors()`, `query()` / `wanted()` / `commands()` / `apply()` — kijelző ki tétlenség után (DPMS), ébren tartás videó alatt |
 | `fusion.trash` | `state()`, `set_auto_days(n)`, `auto_purge()`, `empty()` — Lomtár (freedesktop-szabvány), automatikus ürítés |
 | `fusion.jobs` | `start()`, `state()`, `list_jobs()`, `parse_line()` — [feladatok.md](feladatok.md) |
 | `fusion.notify` | `send(cím, szöveg, ikon, program, sürgősség, ms)` — `org.freedesktop.Notifications` |

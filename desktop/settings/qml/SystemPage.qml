@@ -54,6 +54,30 @@ SettingsPage {
                        + "„Töltőn csak kijelző ki”: töltőn így, akkumulátoron altat. Ha lézer vagy 3D nyomtató csatlakozik, a gép mindig ébren marad." }
         FLabel { visible: !!p.s.lidError; width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
                  color: Theme.danger; text: p.s.lidError || "" }
+        Flow {
+            width: parent.width
+            spacing: 8
+            FLabel { width: 200; height: 30; text: "Kijelző ki tétlenség után"; dim: true }
+            Repeater {
+                model: p.s.screen ? p.s.screen.choices : []
+                FButton { text: modelData === 0 ? "Soha" : modelData + " perc"; flat: !checked
+                          checked: !!p.s.screen && p.s.screen.offMinutes === modelData
+                          onClicked: settings.screenOffSet(modelData) }
+            }
+        }
+        Flow {
+            width: parent.width
+            spacing: 8
+            FLabel { width: 200; height: 30; text: "Kijelző most"; dim: true }
+            FButton { text: "Kijelző ki"; icon: "display"; onClicked: settings.screenOffNow() }
+        }
+        FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true
+                 text: "A kijelző egérmozdításra vagy billentyűre visszajön; a gép közben tovább fut. Gyorsan: Start → kikapcsolás gomb → "
+                       + "„Kijelző ki”, vagy Ctrl+Alt+K. Videó alatt (a lejátszó ébren tartást kér) a tétlenségi idő nem kapcsolja ki." }
+        FLabel { visible: !!p.s.screen && p.s.screen.inhibit.length > 0; width: parent.width; wrapMode: Text.Wrap
+                 elide: Text.ElideNone; color: Theme.accent
+                 text: "Most ébren tartja: " + (p.s.screen ? p.s.screen.inhibit.map(function (i) {
+                           return i.app + (i.reason ? " (" + i.reason + ")" : "") }).join(", ") : "") }
         }
     }
     Section {

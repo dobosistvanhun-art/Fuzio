@@ -198,7 +198,8 @@ Rectangle {
             x: parent.width - width - 8; y: 8; width: 230
             spacing: 2
             Repeater {
-                model: [["logout", "Kijelentkezés", "logout"], ["reboot", "Újraindítás", "restart"], ["poweroff", "Leállítás", "power"]]
+                model: [["screen", "Kijelző ki  (Ctrl+Alt+K)", "display"], ["logout", "Kijelentkezés", "logout"],
+                        ["reboot", "Újraindítás", "restart"], ["poweroff", "Leállítás", "power"]]
                 Rectangle {
                     width: pcol.width; height: 34; radius: Theme.radius
                     color: menu.confirm === modelData[0] ? "#3b1d1f" : (pma.containsMouse ? Theme.hover : "transparent")
@@ -207,7 +208,8 @@ Rectangle {
                            text: menu.confirm === modelData[0] ? (modelData[1] + "? Kattintson újra") : modelData[1]
                            color: menu.confirm === modelData[0] ? Theme.danger : Theme.text; font.family: Theme.font; font.pixelSize: 13 }
                     MouseArea { id: pma; anchors.fill: parent; hoverEnabled: true
-                        onClicked: menu.confirm === modelData[0] ? shell.power(modelData[0]) : menu.confirm = modelData[0] }
+                        onClicked: modelData[0] === "screen" ? shell.screenOff()
+                                   : (menu.confirm === modelData[0] ? shell.power(modelData[0]) : menu.confirm = modelData[0]) }
                 }
             }
         }

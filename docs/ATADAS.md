@@ -9,6 +9,19 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-05 — 0.0.75: kijelző ki gombbal és tétlenség után, videó alatt nem
+- István: nem találta, hol a fedél-beállítás → Beállítások → Rendszer → ENERGIA (most a Start menü keresője is
+  megtalálja: „fedél”, „kijelző”, „energia”). Kérés: kijelző ki gombbal, időzítő x perc tétlenség után, videó alatt ne.
+- Új: `desktop/lib/fusion/screen.py` (Fúzió API), `desktop/shell/screensaver.py` (`org.freedesktop.ScreenSaver`
+  Inhibit/UnInhibit a Shellben; a kérő kilépésekor magától megszűnik); `fusion_shell.py`: `tick_screen` (5 mp),
+  `screenOff`, a fedél felnyitásakor a beállítás áll vissza (eddig `-dpms`); Start menü → kikapcsolás → „Kijelző ki”;
+  jwmrc: Ctrl+Alt+K és XF86ScreenSaver → `fusion-shell screen-off`; Beállítások → Rendszer → Energia: „Kijelző ki
+  tétlenség után” (Soha/5/10/15/30/60 perc, a `~/.config/fusion/screen-off` fájlban, root nélkül), „Kijelző ki”,
+  „Most ébren tartja: …”. Alapérték: Soha. Leírás: `docs/W2-kijelzo-ki.md`.
+- Próba (fejlesztőgépen): utánzott `xset` + valódi D-Bus-munkamenet — Inhibit → `-dpms`, UnInhibit / a kérő kilépése →
+  vissza az időzítő, kikapcsolt kijelzőhöz nem nyúl, „Soha” → `-dpms`, a `/ScreenSaver` út gdbus-szal (uint) is jó;
+  `fusion-settings --selftest`: SCREEN logic=ok, QML ok, SLOTS ok; a StartMenu.qml betölt; jwmrc XML jó.
+  **Nem próbált:** a valódi DPMS a ZBookon (NVIDIA 470), a Flatpak Firefox ébren tartási kérése, a build.
 ## 2026-11-04 — 0.0.74: a Firefox „Megnyitás mappában” a Fájlkezelőt nyitja
 - István (képernyőkép): a Firefox Letöltések ablakában a mappa ikonra „Open With… / No Apps available” jön. Ok: a
   képben nem volt `.desktop`-bejegyzés `inode/directory`-ra, így a portál (xdg-desktop-portal-gtk) nem talált mappakezelőt.

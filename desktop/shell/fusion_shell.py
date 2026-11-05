@@ -39,6 +39,8 @@ from fusion import devices as fdev  # noqa: E402
 from fusion import filesearch  # noqa: E402
 from dashboard import Dashboard  # noqa: E402
 from snap import Snapper  # noqa: E402
+from screensaver import ScreenGuard  # noqa: E402
+from fusion import screen as fscreen  # noqa: E402
 
 from PyQt6.QtCore import (QObject, Qt, QTimer, QUrl, pyqtClassInfo, pyqtProperty,  # noqa: E402
                           pyqtSignal, pyqtSlot)
@@ -607,6 +609,27 @@ class Shell(QObject):
         self.hideMenu()
         self._hide_popups()
 
+    @pyqtSlot()
+    def screenOff(self):
+        """a kijelző ki (Start menü → Kijelző ki; Ctrl+Alt+K): egérmozdításra / billentyűre visszajön"""
+        self.hideMenu()
+        self._hide_popups()
+        # a menü bezárása és a kattintás felengedése után — különben az egérmozdulat azonnal visszakapcsolná
+        QTimer.singleShot(800, lambda: fscreen.off_now(0))
+
+    def tick_screen(self):
+        """kijelző kikapcsolása tétlenség után: a beállított idő az X-kiszolgálón, ébren tartás alatt (videó) nem"""
+        g = getattr(self, "screen", None)
+        if g is None:
+            return
+        cmds = g.tick()
+        st = g.state()
+        if cmds or st != getattr(self, "_screen_st", None):
+            self._screen_st = st
+            if cmds:
+                print("fusion-shell: kijelző — xset " + "; xset ".join(" ".join(c) for c in cmds), flush=True)
+            self.write_state()
+
     @pyqtSlot(str)
     def power(self, action):
         self.hideMenu()
@@ -910,7 +933,7 @@ class Shell(QObject):
                                 "Fedél lecsukva — a gép ébren marad", ", ".join(names) + " csatlakoztatva; a kijelző kikapcsolt")
         elif prev == "closed":
             ui.run(["xset", "dpms", "force", "on"], timeout=3)
-            ui.run(["xset", "s", "off", "-dpms"], timeout=3)
+            self.tick_screen()      # a tétlenségi idő (Beállítások → Rendszer → Energia) újra érvényes
 
     def tick_devices(self):
         devs = fdev.present()      # Fúzió API: minden .role szerep (egy új szerep kódváltozás nélkül megjelenik)
@@ -971,6 +994,8 @@ class Shell(QObject):
               "media": [m["path"] for m in self._media],
               "sound": {"ok": self._sound.get("ok", False), "volume": self._sound.get("volume", 0), "mute": self._sound.get("mute", False),
                         "sinks": len(self._sound.get("sinks", [])), "server": self._sound.get("server", "")}}
+        if getattr(self, "screen", None) is not None:
+            st["screen"] = self.screen.state()
         if last is not None:
             st["last"] = {"app": last["app"], "summary": last["summary"], "body": last["body"]}
         else:
@@ -995,6 +1020,10 @@ def main():
         print("fusion-shell: az értesítés-objektum nem regisztrálható", file=sys.stderr)
     elif not bus.registerService("org.freedesktop.Notifications"):
         print("fusion-shell: az org.freedesktop.Notifications már foglalt", file=sys.stderr)
+    shell.screen = ScreenGuard(app, bus)      # kijelző: tétlenség után ki, videó alatt nem (0.0.75)
+    err = shell.screen.register()
+    if err:
+        print("fusion-shell: kijelző-ébren tartás: " + err, file=sys.stderr)
 
     shell.build_windows()
     shell.snapper = Snapper(QML, app)       # ablakok igazítása a képernyő széléhez (0.0.55)
@@ -1008,12 +1037,12 @@ def main():
     except OSError:
         pass
 
-    shell.tick_clock(); shell.poll_windows(); shell.tick_devices(); shell.tick_wifi(); shell.start_sound()
+    shell.tick_clock(); shell.poll_windows(); shell.tick_devices(); shell.tick_screen(); shell.tick_wifi(); shell.start_sound()
     shell.startup_notes()
     shell.write_state()
     timers = []
     for ms, fn in ((1000, shell.tick_clock), (500, shell.poll_windows), (2000, shell.tick_devices), (5000, shell.tick_wifi),
-                   (2000, shell.dash.tick_fast), (5000, shell.tick_dash), (3000, shell.tick_programs)):
+                   (2000, shell.dash.tick_fast), (5000, shell.tick_dash), (3000, shell.tick_programs), (5000, shell.tick_screen)):
         t = QTimer(app)
         t.timeout.connect(fn)
         t.start(ms)

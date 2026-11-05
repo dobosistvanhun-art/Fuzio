@@ -73,6 +73,8 @@
     <Key mask="CAS" key="Left">sendl</Key>
     <Key mask="CAS" key="Right">sendr</Key>
     <Key mask="CA" key="v">exec:fusion-shell clip</Key>
+    <Key mask="CA" key="k">exec:fusion-shell screen-off</Key>
+    <Key key="XF86ScreenSaver">exec:fusion-shell screen-off</Key>
     <Key key="Print">exec:fusion-screenshot</Key>
     <Key mask="S" key="Print">exec:fusion-screenshot terulet</Key>
     <Key mask="A" key="Print">exec:fusion-screenshot ablak</Key>

@@ -26,5 +26,5 @@
   {"id": "s-sound", "name": "Hang", "desc": "Beállítások — hangerő, kimenet, mikrofon", "icon": "volume", "exec": "fusion-settings sound", "search_only": true, "keywords": "hang hangerő hangszóró fejhallgató mikrofon audio sound", "group": "rendszer"},
   {"id": "s-update", "name": "Rendszerfrissítés", "desc": "Beállítások — Fúzió frissítése fájlból", "icon": "update", "exec": "fusion-settings update", "search_only": true, "keywords": "frissítés update verzió fupd rendszer", "group": "rendszer"},
   {"id": "s-report", "name": "Hibajelentés", "desc": "Beállítások — hibajelentés készítése (fájl, nem küld sehova)", "icon": "report", "exec": "fusion-settings report", "search_only": true, "keywords": "hiba hibajelentés napló log diagnosztika report bug", "group": "rendszer"},
-  {"id": "s-system", "name": "Rendszer", "desc": "Beállítások — névjegy, hardver, lemezek", "icon": "chip", "exec": "fusion-settings system", "search_only": true, "keywords": "névjegy verzió hardver lemez memória", "group": "rendszer"}
+  {"id": "s-system", "name": "Rendszer", "desc": "Beállítások — névjegy, hardver, energia (fedél, kijelző ki), lemezek", "icon": "chip", "exec": "fusion-settings system", "search_only": true, "keywords": "névjegy verzió hardver lemez memória energia fedél lecsukás kijelző képernyő kikapcsolás tétlenség alvás", "group": "rendszer"}
 ]

@@ -53,6 +53,16 @@ def selftest():
     s = sb.system()
     print(f"FUSION-SETTINGS: SYSTEM version={s['version']} slot={s['slot']} bootdisk={s['bootdisk']} mem={s['memUsed']}/{s['memTotal']} "
           f"disks={','.join(x['name'] + ':' + str(x['pct']) + '%' for x in s['disks'])}", flush=True)
+    # 0.0.75: kijelző ki tétlenség után — az xset-állapot értelmezése és a szükséges parancsok
+    from fusion import screen as fscr
+    q_on = fscr.query("timeout:  600    cycle:  600\n  Standby: 600    Suspend: 600    Off: 600\n  DPMS is Disabled\n")
+    q_off = fscr.query("timeout:  0    cycle:  600\n  Standby: 0    Suspend: 0    Off: 600\n  DPMS is Enabled\n  Monitor is Off\n")
+    logic = (fscr.commands(q_on, fscr.wanted(10, False)) == [["s", "off"], ["dpms", "0", "0", "600"], ["+dpms"]]
+             and fscr.commands(q_off, fscr.wanted(10, True)) == []
+             and fscr.commands(dict(q_off, monitor="On"), fscr.wanted(10, True)) == [["-dpms"]]
+             and fscr.commands(dict(q_off, monitor="On"), fscr.wanted(0, False)) == [["-dpms"]])
+    print(f"FUSION-SETTINGS: SCREEN offMinutes={s['screen']['offMinutes']} inhibit={len(s['screen']['inhibit'])} "
+          f"logic={'ok' if logic else 'HIBA'}", flush=True)
     u = sb.update_state()
     print(f"FUSION-SETTINGS: UPDATE version={u['version']} slot={u['slot']} entries="
           + (",".join(f"{e['slot']}:{e['state']}{'*' if e['running'] else ''}" for e in u["entries"]) or "-")

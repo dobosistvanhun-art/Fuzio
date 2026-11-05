@@ -9,6 +9,7 @@ import re
 import time
 from PyQt6.QtCore import pyqtSlot
 import fusion_ui as ui
+from fusion import screen as fscreen
 from fusion import trash as ftrash
 from fusion import users as fusers
 from fusion_settings_parts.base import _read
@@ -82,7 +83,8 @@ def system():
             "memPct": round(100.0 * (mem.get("MemTotal", 1) - mem.get("MemAvailable", 0)) / max(1, mem.get("MemTotal", 1)), 1),
             "uptime": f"{int(up // 86400)} nap {int(up % 86400 // 3600)} óra {int(up % 3600 // 60)} perc" if up >= 86400 else f"{int(up // 3600)} óra {int(up % 3600 // 60)} perc",
             "disks": disks, "blk": [l for l in lsb.splitlines() if l.strip() and not l.startswith(("loop", "zram"))],
-            "gpu": gpu, "trash": trash_state(), "lid": lid_mode()}
+            "gpu": gpu, "trash": trash_state(), "lid": lid_mode(),
+            "screen": screen_state()}
 
 
 LID_MODES = ("suspend", "screen-off-ac", "screen-off")
@@ -94,6 +96,11 @@ def lid_mode():
         if line.startswith("lid=") and line[4:].strip() in LID_MODES:
             return line[4:].strip()
     return "suspend"
+
+
+def screen_state():
+    """kijelző kikapcsolása tétlenség után (a Fúzió Shell alkalmazza) és ami most ébren tartja"""
+    return {"offMinutes": fscreen.off_minutes(), "choices": list(fscreen.CHOICES), "inhibit": fscreen.inhibitors()}
 
 
 def trash_state():
@@ -204,6 +211,19 @@ class SystemMixin:
                 r["lidError"] = (out.strip().splitlines() or ["ismeretlen hiba"])[-1].replace("fusion-admin: ", "")
             return r
         self._async("system", f)
+
+    @pyqtSlot(int, result=str)
+    def screenOffSet(self, minutes):
+        try:
+            fscreen.set_off_minutes(minutes)
+        except (ValueError, OSError) as e:
+            return str(e)
+        self._async("system", system)
+        return ""
+
+    @pyqtSlot()
+    def screenOffNow(self):
+        self._async("screen-off", lambda: {"ok": fscreen.off_now()})
 
     @pyqtSlot()
     def trashEmpty(self):

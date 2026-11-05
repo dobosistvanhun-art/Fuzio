@@ -176,7 +176,7 @@ chmod 0755 "$DK/shell/fusion-shell" "$DK/shell/fusion_shell.py" "$DK/files/fusio
 chown -R root:root "$DK"
 # Fúzió API (M8): a `fusion` Python-csomag minden Python-programnak (Fúzió-programok, szkriptek, root-segédek)
 ln -sfn /usr/lib/fusion/desktop/lib/fusion "$R/usr/lib/python3/dist-packages/fusion"
-in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, fusion.notify, fusion.permissions, fusion.schema, fusion.jobs, fusion.cli, fusion.power, fusion.programs, fusion.bluetooth, fusion.printers, fusion.camera; assert fusion.API_VERSION == 1" \
+in_root python3 -c "import fusion, fusion.kv, fusion.hardware, fusion.devices, fusion.notify, fusion.permissions, fusion.schema, fusion.jobs, fusion.cli, fusion.power, fusion.programs, fusion.bluetooth, fusion.printers, fusion.camera, fusion.screen; assert fusion.API_VERSION == 1" \
     || { echo "  [customize] HIBA: a Fúzió API (python3 -c 'import fusion') nem tölthető be"; exit 1; }
 ln -sf /usr/lib/fusion/desktop/shell/fusion-shell "$R/usr/bin/fusion-shell"
 ln -sf /usr/lib/fusion/desktop/files/fusion_files.py "$R/usr/bin/fusion-files"
