@@ -21,7 +21,9 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 - Próba (fejlesztőgépen): utánzott `xset` + valódi D-Bus-munkamenet — Inhibit → `-dpms`, UnInhibit / a kérő kilépése →
   vissza az időzítő, kikapcsolt kijelzőhöz nem nyúl, „Soha” → `-dpms`, a `/ScreenSaver` út gdbus-szal (uint) is jó;
   `fusion-settings --selftest`: SCREEN logic=ok, QML ok, SLOTS ok; a StartMenu.qml betölt; jwmrc XML jó.
-  **Nem próbált:** a valódi DPMS a ZBookon (NVIDIA 470), a Flatpak Firefox ébren tartási kérése, a build.
+  ZBookon: István, 2026-11-05 17:31 — „Jó lett” (telepítve és kipróbálva).
+- Teendő a FusionAI-nak: a GitHub-repó új címe `https://github.com/dobosistvanhun-art/Fuzio.git` (a régi átirányít);
+  ha a ZBookon még a régi az `origin`: `git remote set-url origin https://github.com/dobosistvanhun-art/Fuzio.git`.
 ## 2026-11-04 — 0.0.74: a Firefox „Megnyitás mappában” a Fájlkezelőt nyitja
 - István (képernyőkép): a Firefox Letöltések ablakában a mappa ikonra „Open With… / No Apps available” jön. Ok: a
   képben nem volt `.desktop`-bejegyzés `inode/directory`-ra, így a portál (xdg-desktop-portal-gtk) nem talált mappakezelőt.
