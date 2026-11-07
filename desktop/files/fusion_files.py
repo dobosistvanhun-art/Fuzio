@@ -9,6 +9,7 @@ Shift+F6 átnevezés, Tab panelváltás, Insert / Szóköz jelölés, Ctrl+A min
 Ctrl+H rejtett fájlok, Alt+F7 keresés, Alt+F5 tömörítés, Alt+F9 kicsomagolás, Alt+F1 / F2 meghajtó.
 """
 import os
+import subprocess
 import time
 import shutil
 import sys
@@ -116,6 +117,23 @@ def selftest(work):
     res = []
     run(lambda j: fb.search(work, "", "FUSION-KERESES", j, res))
     check("GREP", len(res) >= 2, str(len(res)))
+    if fb.sevenzip():
+        sp = os.path.join(b, "csomag.7z")
+        subprocess.run([fb.sevenzip(), "a", "-bso0", "-bsp0", sp, os.path.join(a, "mappa"), os.path.join(a, "vágás.gcode")],
+                       check=False, stdin=subprocess.DEVNULL, env=dict(os.environ, LC_ALL="C.UTF-8"))
+        ex3 = os.path.join(b, "ki3")
+        os.makedirs(ex3)
+        j = run(lambda j: fb.FileOps(j).extract([sp], ex3))
+        same7 = os.path.exists(os.path.join(ex3, "mappa/al/nagy.bin")) and \
+            open(os.path.join(ex3, "mappa/al/nagy.bin"), "rb").read() == open(os.path.join(a, "mappa/al/nagy.bin"), "rb").read()
+        left = [n for n in os.listdir(ex3) if n.startswith(".fusion-7z-")]
+        check("7Z", fb.is_archive(sp) and same7 and os.path.exists(os.path.join(ex3, "vágás.gcode")) and not j.errors
+              and not left and j.files_done == j.files_total, f"{j.files_done}/{j.files_total} {j.errors}")
+        check("7ZLIST", "nagy.bin" in fb.archive_list(sp))
+        j = run(lambda j: fb.FileOps(j, "skip").extract([sp], ex3))
+        check("7ZSKIP", not j.errors and not [n for n in os.listdir(ex3) if n.startswith(".fusion-7z-")])
+    else:
+        print("  7Z: kihagyva (nincs 7z a gépen)", flush=True)
     ma, mb = fb.DirModel(), fb.DirModel()
     ma.load(a); mb.load(b)
     lm, rm = fb.compare_dirs(ma.entries(), mb.entries())

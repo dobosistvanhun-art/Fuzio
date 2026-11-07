@@ -40,14 +40,6 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 - Commit és push **csak István kifejezett kérésére**. Commit-üzenet: magyarul, `0.0.N (mérföldkő): rövid összefoglaló`.
 - A nem commitolt munkát soha ne dobd el (reset --hard, checkout --, clean, stash drop).
 
-## Megbeszélt, következő teendő (István, 2026-11-06: „következő fúzióba tegyük bele”)
-- **FusionAI: Pull és telepítés a SolidCrafthoz is.** A `Pull` gomb (0.0.76) most csak a fő ágon húz; a SolidCraft a
-  ZBookon a `fuzio` ágon van (`~/Projektek/solidcraft`, origin: `dobosistvanhun-art/solidcraft`). Legyen: (1) a Pull
-  akkor is húzzon, ha az ág a saját, azonos nevű távoli párját követi (pl. `fuzio` → `origin/fuzio`) — a többi
-  feltétel marad (nem commitolt munka / eltérés esetén nem húz, csak szól); (2) egy gomb, ami a SolidCraftot a
-  forrásból lefordítja a Fejlesztődobozban (`fusion-dev box run cargo build --release …`) és telepíti a felhasználó
-  programjai közé (a Start menü SolidCraft-bejegyzése az új változatot indítsa), a végén rákérdez. Ha elkészült, töröld ezt a pontot.
-
 ## Átadás (ZBook ⇄ webes Claude)
 **A munkamenet elején olvasd el a `docs/ATADAS.md` legfelső bejegyzéseit** — ott van, amit a webes Claude-dal
 (claude.ai) végeztünk. A claude.ai-os beszélgetések a GitHubról látják a repót, a helyi munkameneteket nem. Ezért egy munka végén

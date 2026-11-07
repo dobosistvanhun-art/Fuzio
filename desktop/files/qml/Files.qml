@@ -101,8 +101,8 @@ FWindow {
                 if (!v.toLowerCase().endsWith(".zip")) v += ".zip"
                 files.pack(sel, v) }); break
         case "extract":
-            var arcs = sel.filter(p => /\.(zip|tar|tgz|txz|tbz2|tar\.gz|tar\.xz|tar\.bz2)$/i.test(p))
-            if (!arcs.length) { say("nincs kijelölt archívum (zip, tar, tar.gz, tar.xz, tar.bz2)"); return }
+            var arcs = sel.filter(p => /\.(zip|7z|tar|tgz|txz|tbz2|tar\.gz|tar\.xz|tar\.bz2)$/i.test(p))
+            if (!arcs.length) { say("nincs kijelölt archívum (zip, 7z, tar, tar.gz, tar.xz, tar.bz2)"); return }
             ask("Kicsomagolás", arcs.length + " archívum kicsomagolása ide:", other.model.path, function (v) { files.extract(arcs, v, "all") }); break
         case "search": keep(searchComp.createObject(null, { root: act.model.path, panel: act })); break
         case "compare": say(files.compare()); break

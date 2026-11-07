@@ -44,6 +44,7 @@ FWindow {
         function onChanged() {
             if (!ai.busy && (win.perm || win.permQueue.length)) { win.perm = null; win.permQueue = []; permDlg.close() }
         }
+        function onBuildReady(cmd) { installDlg.cmd = cmd; installDlg.open() }
         function onLogLine(t) { logModel.append({ t: t }); if (logModel.count > 2000) logModel.remove(0, 200) }
     }
     Timer { id: msgTimer; interval: 8000; onTriggered: win.msg = "" }
@@ -267,6 +268,10 @@ FWindow {
                       tip: "Az utolsó teszt / napló kimenetét elküldi Claude-nak elemzésre"; onClicked: ai.sendOutputToClaude() }
             FButton { text: "Újraindítás…"; icon: "restart"; enabled: ai.settings.restart !== ""
                       tip: ai.settings.restart || "nincs újraindító parancs — Beállítások"; onClicked: restartDlg.open() }
+            FButton { text: ai.task === "fordítás" ? "Fordítás fut…" : (ai.task === "telepítés" ? "Telepítés fut…" : "Fordítás és telepítés")
+                      icon: "package"; visible: ai.settings.build !== ""; enabled: !ai.task && !ai.busy
+                      tip: (ai.settings.build || "") + " — utána rákérdez a telepítésre"
+                      onClicked: { win.tab = 2; ai.buildProject() } }
             FButton { text: "Commit…"; icon: "check"; enabled: !ai.task && !ai.busy && (ai.git.files || []).length > 0
                       onClicked: { commitDlg.info = ai.commitInfo(); commitMsg.text = commitDlg.info.message || ""; commitDlg.open(); commitMsg.forceActiveFocus() } }
             FButton { text: "Push…"; icon: "up"; enabled: !ai.task && !ai.busy
@@ -276,7 +281,8 @@ FWindow {
                       onClicked: ai.pullProject(false) }
             FButton { text: "Beállítások"; icon: "settings"; flat: true
                       onClicked: { testCmd.text = ai.settings.test || ""; restartCmd.text = ai.settings.restart || ""
-                                   autoPull.checked = !!ai.settings.autoPull; setDlg.open() } }
+                                   autoPull.checked = !!ai.settings.autoPull
+                                   buildCmd.text = ai.settings.build || ""; installCmd.text = ai.settings.install || ""; setDlg.open() } }
         }
         ListView {
             id: view
@@ -421,7 +427,7 @@ FWindow {
         title: "Projekt-beállítások — " + ai.project.split("/").pop()
         buttons: [["Mégse", ""], ["Mentés", "primary"]]
         width: Math.min(win.width - 80, 640)
-        onButtonClicked: i => { if (i === 1) ai.saveSettings(testCmd.text, restartCmd.text, autoPull.checked); close() }
+        onButtonClicked: i => { if (i === 1) ai.saveSettings(testCmd.text, restartCmd.text, autoPull.checked, buildCmd.text, installCmd.text); close() }
         Column {
             x: 20; y: 16; width: setDlg.width - 40; spacing: 6
             FLabel { text: "Tesztparancs (a projekt mappájában fut)"; bold: true }
@@ -432,10 +438,28 @@ FWindow {
             FTextField { id: restartCmd; width: parent.width; font.family: Theme.mono
                          placeholderText: "pl. pkill -f fusion-tasks; fusion-tasks" }
             Item { width: 1; height: 6 }
+            FLabel { text: "Fordító parancs (a „Fordítás és telepítés” gomb)"; bold: true }
+            FTextField { id: buildCmd; width: parent.width; font.family: Theme.mono
+                         placeholderText: "pl. bash scripts/fuzio-build.sh --no-install · fusion-dev box run cargo build --release" }
+            Item { width: 1; height: 6 }
+            FLabel { text: "Telepítő parancs (a fordítás után, rákérdezéssel)"; bold: true }
+            FTextField { id: installCmd; width: parent.width; font.family: Theme.mono
+                         placeholderText: "pl. bash scripts/fuzio-build.sh --install" }
+            Item { width: 1; height: 6 }
             FCheck { id: autoPull; text: "Projekt megnyitásakor és új munkamenetnél magától git pull (--ff-only)" }
             FLabel { width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone; dim: true; font.pixelSize: Theme.fsSmall
                      text: "Ezeket te indítod a gombokkal, ezért nem kérnek külön jóváhagyást (az újraindítás megerősítést kér). Ha a Claude akarja futtatni őket, az továbbra is jóváhagyással megy." }
         }
+    }
+
+    FDialog {
+        id: installDlg
+        property string cmd: ""
+        title: "Telepítés"
+        buttons: [["Nem most", ""], ["Telepítés", "primary"]]
+        onButtonClicked: i => { if (i === 1) { win.tab = 2; ai.installBuilt() } close() }
+        FLabel { x: 20; y: 16; width: 460; wrapMode: Text.Wrap; elide: Text.ElideNone
+                 text: "A fordítás kész. Telepítsem a programjaid közé? (A Start menü bejegyzése ezután az új változatot indítja; egy futó példányt előbb zárj be.)\n\nLefut:\n" + installDlg.cmd }
     }
 
     FDialog {

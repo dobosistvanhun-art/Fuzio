@@ -169,6 +169,25 @@ sor, hogy a Fúzió saját szabályai ott nem érvényesek.
 | `fusion-ai --selftest` (167 ellenőrzés): a korábbiak + PULL (siker, CLAUDE.md-jelzés, Claude-megjegyzés), naprakész, nem commitolt munka, magától (új munkamenet), más ág, eltérés; PROMPT; 106 besorolási eset (`tests/classify_cases.py`); UI (`tests/ui_check.py`, a jóváhagyó ablak két ablakméretnél) | ZBook, forrásból, próba-Claude-dal (2026-11-05) | ok |
 | a Pull gomb a valódi GitHub-repón, a kiférő ablak és a kérdés nélküli olvasó parancsok a valódi Claude Code-dal | ZBook, telepített 0.0.76 | **nincs ellenőrizve** |
 
+## 6c. 0.0.77 — Pull a saját távoli ágról, Fordítás és telepítés
+
+**Pull**: a fő ágon kívül az az ág is húzható, amely a saját, azonos nevű távoli párját követi (pl. a SolidCraft
+`fuzio` → `origin/fuzio`). Más nevű távoli ágat követő ágon (`masnevu` → `origin/mellek`) nem húz, csak szól. A többi
+feltétel (nem commitolt munka, eltérés) változatlan.
+
+**Fordítás és telepítés** gomb (csak ha van fordító parancs): a Projekt-beállítások két új mezője, „Fordító parancs” és
+„Telepítő parancs” (`settings.<repo>.build` / `.install`). Ha a projektben van `scripts/fuzio-build.sh`, a javaslat:
+`bash scripts/fuzio-build.sh --no-install` és `bash scripts/fuzio-build.sh --install` (a SolidCraftnál: fordítás a
+Fejlesztődobozban, majd `fusion-programs install … --name SolidCraft`; ugyanazzal a névvel a meglévő program frissül,
+a Start menü bejegyzése az új változatot indítja). A gomb a fordítást a Napló fülre írja (legfeljebb 4 óra), sikeres
+fordítás után megkérdezi: „Telepítsem?”; hibás fordítás után nem kérdez. A Claude futása közben nem indul.
+
+| Mit | Hol | Eredmény |
+| --- | --- | --- |
+| `fusion-ai --selftest`: PULL-OWN-BRANCH, PULL-BRANCH (más nevű távoli ág), PULL-DIVERGED; DETECT-BUILD, BUILD-SAVED, BUILD-KEPT, BUILD (kérdez), INSTALL, BUILD-FAIL (nem kérdez); UI | felhőben, forrásból, próba-Claude-dal (2026-11-07) | ok |
+| a SolidCraft `--no-install` / `--install` módja helyettesítő `fusion-dev` / `fusion-programs` paranccsal | felhőben | ok |
+| a valódi SolidCraft-fordítás a Fejlesztődobozban a gombról, a telepítés és a Start menü | ZBook, telepített 0.0.77 | **nincs ellenőrizve** |
+
 ## 7. Következő lépések
 
 1. ZBook: telepítés, bejelentkezés, egy valódi hibakeresési feladat egy repón; a munkamenet folytatása; egy elutasított

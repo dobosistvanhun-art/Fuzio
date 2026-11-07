@@ -9,6 +9,23 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-07 — 0.0.77: 7z kicsomagolás; FusionAI: Pull a saját távoli ágról, Fordítás és telepítés
+- István kérése: a .7z kicsomagolása a Fájlkezelőben, plusz a megbeszélt teendő (2026-11-06): a FusionAI Pull a
+  SolidCraft `fuzio` ágán is húzzon, és egy gomb fordítsa le és telepítse a SolidCraftot.
+- Fájlok: `rootfs/packages.list` (`7zip`); `desktop/files/fusion_files_backend.py` (`sevenzip`, `is_7z`,
+  `sevenzip_entries`, `FileOps._extract_7z`, `_place`), `desktop/files/fusion_files.py` (önteszt), `desktop/files/qml/Files.qml`
+  (a .7z a kicsomagolható listán); `desktop/ai/fusion_ai_core.py` (`pull`: azonos nevű távoli ág; `build` / `install`
+  beállítás, `scripts/fuzio-build.sh` felismerése), `desktop/ai/fusion_ai_app.py` (`buildProject`, `installBuilt`,
+  `buildReady`, önteszt), `desktop/ai/qml/AI.qml` (gomb, két beállítás-mező, „Telepítsem?” ablak); `docs/W2-7z-kicsomagolas.md`,
+  `docs/W3-fusionai.md` 6c; `VERSION`, `README.md`; a `CLAUDE.md`-ből törölve a teendő. A SolidCraft repóban
+  (`fuzio` ág): `scripts/fuzio-build.sh` `--no-install` és `--install` módja.
+- Próba (felhőben, forrásból): `fusion-files --selftest` → RESULT ok (7Z, 7ZLIST, 7ZSKIP); jelszavas 7z → hibaüzenet;
+  `fusion-ai --selftest` → RESULT ok (PULL-OWN-BRANCH, PULL-BRANCH, BUILD, INSTALL, BUILD-FAIL, UI); a SolidCraft
+  szkript módjai helyettesítő parancsokkal.
+  **Nem próbált:** a build és a telepített 0.0.77 a ZBookon; a valódi SolidCraft-fordítás a gombról (30–60 perc) és
+  a telepítés; ha a Fejlesztődoboz épp nyitva van egy terminálban, a `fusion-dev box run` (egyszerre egy példány).
+- Döntés (Claude): a RAR nem került be (a `7zip-rar` multiverse, nem szabad licenc); jelszót a Fájlkezelő nem kér.
+
 ## 2026-11-05 — 0.0.76: FusionAI — Pull gomb, csak olvasó parancsok kérdés nélkül, kiférő jóváhagyó ablak
 - István kérése (FusionAI-ban, helyben): az 1–3. pont a „mit módosítanál magadon” listából, kiegészítésekkel.
   (a) A gitből csak a status/log/diff/show/for-each-ref menjen kérdés nélkül, `-c`, `--output`, `-o`, `--ext-diff`

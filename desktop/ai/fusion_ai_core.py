@@ -572,22 +572,37 @@ def detect_commands(repo):
         test = "python3 -m pytest -q"
     elif os.path.exists(os.path.join(repo, "Makefile")):
         test = "make test"
-    return {"test": test, "restart": "", "autoPull": False}
+    build, install = "", ""
+    # 0.0.77: a projekt saját Fúziós build-szkriptje (a SolidCraftnál scripts/fuzio-build.sh): fordítás a
+    # Fejlesztődobozban, utána — rákérdezés után — telepítés a felhasználó programjai közé
+    if os.path.exists(os.path.join(repo, "scripts", "fuzio-build.sh")):
+        build = "bash scripts/fuzio-build.sh --no-install"
+        install = "bash scripts/fuzio-build.sh --install"
+    return {"test": test, "restart": "", "build": build, "install": install, "autoPull": False}
+
+
+SETTING_KEYS = ("test", "restart", "build", "install")
 
 
 def project_settings(repo):
     d = load_config().get("settings", {}).get(repo)
     base = detect_commands(repo)
     if isinstance(d, dict):
-        base.update({k: str(v) for k, v in d.items() if k in ("test", "restart")})
+        base.update({k: str(v) for k, v in d.items() if k in SETTING_KEYS})
         base["autoPull"] = d.get("autoPull") is True
     return base
 
 
-def save_project_settings(repo, test, restart, auto_pull=False):
+def save_project_settings(repo, test, restart, auto_pull=False, build=None, install=None):
     d = load_config()
     s = d.get("settings") if isinstance(d.get("settings"), dict) else {}
+    old = s.get(repo) if isinstance(s.get(repo), dict) else {}
     s[repo] = {"test": test.strip(), "restart": restart.strip(), "autoPull": bool(auto_pull)}
+    for k, v in (("build", build), ("install", install)):
+        if v is not None:
+            s[repo][k] = v.strip()
+        elif k in old:
+            s[repo][k] = str(old[k])
     d["settings"] = s
     save_config(d)
 
@@ -668,7 +683,8 @@ PULL_WATCH = ("CLAUDE.md", "docs/ATADAS.md")      # ezek változását külön k
 
 def pull(repo):
     """git pull --ff-only a projekten (0.0.76) — csak ha biztonságos: nincs nem commitolt munka (új fájl sem), az ág
-    követi a távoli tároló alapértelmezett ágát, és a helyi ág nem tért el. Különben nem húz, csak megmondja, miért.
+    követi a távoli tároló alapértelmezett ágát vagy a saját, azonos nevű távoli ágát (0.0.77: fuzio → origin/fuzio),
+    és a helyi ág nem tért el. Különben nem húz, csak megmondja, miért.
     Visszaad: {"ok", "pulled", "error", "text", "commits": [sorok], "files": [utak], "watched": [a PULL_WATCH-ból]}"""
     res = {"ok": False, "pulled": False, "error": "", "text": "", "commits": [], "files": [], "watched": []}
     st = git_state(repo)
@@ -699,8 +715,10 @@ def pull(repo):
     if rc != 0 or not dflt:     # a klón nem jegyezte fel: main vagy master, ami létezik
         dflt = next((f"{remote}/{b}" for b in ("main", "master")
                      if git(repo, "rev-parse", "-q", "--verify", f"refs/remotes/{remote}/{b}")[0] == 0), "")
-    if up != dflt:
-        res["error"] = f"nem húzok: más ágon vagy ({br} → {up}; a fő ág: {dflt or '?'}) — válts a fő ágra, vagy húzd kézzel"
+    # 0.0.77: a saját, azonos nevű távoli ágát követő ág is húzható (pl. a SolidCraft fuzio → origin/fuzio)
+    if up != dflt and up != f"{remote}/{br}":
+        res["error"] = (f"nem húzok: az ág nem a saját távoli párját követi ({br} → {up}; a fő ág: {dflt or '?'}) — "
+                        "válts a fő ágra, vagy húzd kézzel")
         return res
     _, counts, _ = git(repo, "rev-list", "--left-right", "--count", f"HEAD...{up}")
     try:

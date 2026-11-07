@@ -101,6 +101,9 @@ ca-certificates
 # tömörített archívumok (tar.xz, tar.bz2) a parancssorban is
 xz-utils
 bzip2
+# 7z-archívumok kicsomagolása a Fájlkezelőben és a parancssorban (7z) — 0.0.77; a RAR-hoz a 7zip-rar kellene
+# (multiverse, nem szabad licenc), az nincs benne
+7zip
 # a nyomtató webes felületének ablaka (WebKitGTK) — fusion-web
 python3-gi
 gir1.2-gtk-3.0

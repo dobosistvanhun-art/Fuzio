@@ -58,7 +58,7 @@ class Backend(QObject):
         self._turn_snap = ""                      # a munkafa az utolsó kérés előtt (pillanatkép) — Visszavonás
         self._note = ""                           # a következő kéréshez fűzött megjegyzés Claude-nak (pl. visszavonás)
         self._pending = {}                        # jóváhagyás azonosító → asyncio.Future
-        self._settings = {"test": "", "restart": ""}
+        self._settings = {"test": "", "restart": "", "build": "", "install": ""}
         self._task = ""                           # futó helyi feladat (teszt, napló, commit, push)
         self._last_output = ("", [])              # (cím, az utolsó sorok) — „Claude-nak” gomb
         self._client = None
@@ -392,16 +392,17 @@ class Backend(QObject):
         self._run_task("pull", go)
 
     @pyqtSlot(str, str, bool)
-    def saveSettings(self, test, restart, auto_pull=False):
+    @pyqtSlot(str, str, bool, str, str)
+    def saveSettings(self, test, restart, auto_pull=False, build=None, install=None):
         if self._project:
-            core.save_project_settings(self._project, test, restart, auto_pull)
+            core.save_project_settings(self._project, test, restart, auto_pull, build, install)
             self._settings = core.project_settings(self._project)
             self.changed.emit()
             self.message.emit("a projekt parancsai mentve", False)
 
-    def _stream(self, title, cmd, shell):
+    def _stream(self, title, cmd, shell, timeout=3600):
         self._log(f"── {title}: {cmd if shell else core.shell_quote(cmd)}")
-        rc, tail = core.stream(cmd, self._project or core.HOME, self._log, shell=shell)
+        rc, tail = core.stream(cmd, self._project or core.HOME, self._log, timeout=timeout, shell=shell)
         self._last_output = (title, tail)
         return rc, tail
 
@@ -422,6 +423,51 @@ class Backend(QObject):
             else:
                 self.item.emit({"kind": "error", "text": f"Teszt HIBA (kód {rc}, {secs:.0f} mp): {cmd}\n{last}"})
         self._run_task("teszt", go)
+
+    # 0.0.77: fordítás és telepítés (a SolidCraftnál: a Fejlesztődobozban, az első 30–60 perc); a fordítás után a
+    # felület rákérdez a telepítésre (buildReady), az installBuilt telepít
+    buildReady = pyqtSignal(str)                    # a fordítás kész: a telepítő parancs (a kérdéshez)
+    BUILD_TIMEOUT = 4 * 3600
+
+    @pyqtSlot()
+    def buildProject(self):
+        cmd = self._settings.get("build", "").strip()
+        if not self._project or not cmd:
+            self.message.emit("nincs megadva fordító parancs (Projekt-beállítások)", True)
+            return
+        if self._busy:
+            self.message.emit("Claude dolgozik — a fordítás utána mehet", True)
+            return
+        install = self._settings.get("install", "").strip()
+
+        def go():
+            t0 = time.monotonic()
+            rc, tail = self._stream("Fordítás", cmd, True, timeout=self.BUILD_TIMEOUT)
+            mins = (time.monotonic() - t0) / 60
+            last = "\n".join(tail[-8:])
+            if rc != 0:
+                self.item.emit({"kind": "error", "text": f"Fordítás HIBA (kód {rc}, {mins:.0f} perc): {cmd}\n{last}"})
+                return
+            self.item.emit({"kind": "result", "text": f"Fordítás kész ({mins:.0f} perc): {cmd}\n{last}"})
+            if install:
+                self.buildReady.emit(install)
+        self._run_task("fordítás", go)
+
+    @pyqtSlot()
+    def installBuilt(self):
+        cmd = self._settings.get("install", "").strip()
+        if not self._project or not cmd:
+            self.message.emit("nincs megadva telepítő parancs (Projekt-beállítások)", True)
+            return
+
+        def go():
+            rc, tail = self._stream("Telepítés", cmd, True, timeout=1800)
+            last = "\n".join(tail[-6:])
+            if rc == 0:
+                self.item.emit({"kind": "result", "text": f"Telepítve: {cmd}\n{last}"})
+            else:
+                self.item.emit({"kind": "error", "text": f"Telepítés HIBA (kód {rc}): {cmd}\n{last}"})
+        self._run_task("telepítés", go)
 
     @pyqtSlot(str)
     def showLog(self, kind):
@@ -941,17 +987,57 @@ def selftest():
     main_br = core.git(repo, "rev-parse", "--abbrev-ref", "HEAD")[1].strip()
     subprocess.run(g + ["checkout", "-qb", "mellek"], check=True)
     subprocess.run(g + ["push", "-qu", "origin", "mellek"], check=True)
+    # 0.0.77: a saját, azonos nevű távoli ágát követő ág is húzható (a SolidCraft fuzio → origin/fuzio)
+    subprocess.run(og + ["fetch", "-q"], check=True)
+    subprocess.run(og + ["checkout", "-q", "mellek"], check=True)
     remote_commit("harmadik.txt", "3\n")
     items.clear()
     be.pullProject(False)
-    check("PULL-BRANCH", wait_task() and any(i["kind"] == "error" and "más ágon" in i["text"] for i in items), str(items[-1:])[:160])
+    check("PULL-OWN-BRANCH", wait_task() and os.path.exists(os.path.join(repo, "harmadik.txt"))
+          and any(i["kind"] == "result" and "Pull kész" in i["text"] for i in items), str(items[-1:])[:160])
+    subprocess.run(g + ["checkout", "-q", "-b", "masnevu", "--track", "origin/mellek"], check=True)
+    remote_commit("negyedik.txt", "4\n")
+    h0, items[:] = head(), []
+    be.pullProject(False)
+    check("PULL-BRANCH", wait_task() and head() == h0
+          and any(i["kind"] == "error" and "nem a saját távoli párját" in i["text"] for i in items), str(items[-1:])[:160])
+    subprocess.run(og + ["checkout", "-q", main_br], check=True)
     subprocess.run(g + ["checkout", "-q", main_br], check=True)
+    remote_commit("otodik.txt", "5\n")
     open(os.path.join(repo, "helyi.txt"), "w").write("helyi\n")
     subprocess.run(g + ["add", "helyi.txt"], check=True)
     subprocess.run(g + ["commit", "-qm", "helyi"], check=True)
     h0, items[:] = head(), []
     be.pullProject(False)
     check("PULL-DIVERGED", wait_task() and head() == h0 and any(i["kind"] == "error" and "eltért" in i["text"] for i in items),
+          str(items[-1:])[:160])
+
+    # 0.0.77: fordítás és telepítés — a fordítás után kérdez (buildReady), hibás fordítás után nem
+    sc = os.path.join(tmp, "sc-repo")
+    os.makedirs(os.path.join(sc, "scripts"))
+    open(os.path.join(sc, "scripts", "fuzio-build.sh"), "w").write("#!/bin/bash\n")
+    d = core.detect_commands(sc)
+    check("DETECT-BUILD", d["build"] == "bash scripts/fuzio-build.sh --no-install" and d["install"] == "bash scripts/fuzio-build.sh --install"
+          and core.detect_commands(repo)["build"] == "", str(d))
+    asked = []
+    be.buildReady.connect(asked.append)
+    built, inst = os.path.join(tmp, "lefordítva.txt"), os.path.join(tmp, "telepítve.txt")
+    be.saveSettings(be.settings.get("test", ""), "true", False, f"echo fordítás; echo ok > '{built}'", f"echo kész > '{inst}'")
+    check("BUILD-SAVED", core.project_settings(repo).get("build", "").startswith("echo fordítás")
+          and core.project_settings(repo).get("autoPull") is False)
+    be.saveSettings(be.settings.get("test", ""), "true", False)       # a régi (3 paraméteres) hívás megtartja őket
+    check("BUILD-KEPT", core.project_settings(repo).get("install", "").startswith("echo kész"))
+    items.clear()
+    be.buildProject()
+    check("BUILD", wait_task() and os.path.exists(built) and not os.path.exists(inst) and asked == [be.settings["install"]]
+          and any(i["kind"] == "result" and "Fordítás kész" in i["text"] for i in items), str(items[-1:])[:160])
+    be.installBuilt()
+    check("INSTALL", wait_task() and os.path.exists(inst) and any(i["kind"] == "result" and "Telepítve" in i["text"] for i in items))
+    be.saveSettings(be.settings.get("test", ""), "true", False, "exit 3", "echo nem > '" + inst + "2'")
+    asked.clear()
+    items.clear()
+    be.buildProject()
+    check("BUILD-FAIL", wait_task() and not asked and any(i["kind"] == "error" and "Fordítás HIBA (kód 3" in i["text"] for i in items),
           str(items[-1:])[:160])
 
     # az induló utasítás: Fúzió-név, Tab; a ZBook / Fúzió-forrás sorai csak a Fúzió repójában

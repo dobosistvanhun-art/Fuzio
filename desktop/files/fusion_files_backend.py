@@ -7,10 +7,13 @@ megszakíthatóan, folyamatjelzéssel. Ugyanez a kód fut az önteszten is (--se
 import fnmatch
 import json
 import os
+import re
+import select
 import shutil
 import stat
 import subprocess
 import tarfile
+import tempfile
 import threading
 import time
 import zipfile
@@ -33,7 +36,7 @@ TEXT_EXT = {"txt", "md", "log", "cfg", "conf", "ini", "json", "xml", "yaml", "ym
             "gcode", "gc", "g", "nc", "ngc", "svg", "lbrn", "lbrn2", "tsv", "sql", "bat", "cmd", "ps1", "reg"}
 CODE_EXT = {"gcode", "gc", "g", "nc", "ngc", "tap"}
 IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"}
-ARCHIVE_EXT = ("zip", "tar", "tar.gz", "tgz", "tar.xz", "txz", "tar.bz2", "tbz2")
+ARCHIVE_EXT = ("zip", "tar", "tar.gz", "tgz", "tar.xz", "txz", "tar.bz2", "tbz2", "7z")
 EXE_EXT = {"exe", "msi", "appimage", "flatpakref", "flatpak"}   # telepítők → Programkezelő
 FONT_EXT = {"ttf", "otf", "ttc", "fon", "fnt"}                   # betűtípusok → fusion-fonts
 CHUNK = 1024 * 1024
@@ -817,7 +820,7 @@ class FileOps:
             raise
 
     def extract(self, archives, dstdir):
-        """ZIP és TAR (gz, xz, bz2) kicsomagolása; a célon kívülre mutató útvonal nem kerülhet ki"""
+        """ZIP, TAR (gz, xz, bz2) és 7z kicsomagolása; a célon kívülre mutató útvonal nem kerülhet ki"""
         real = os.path.realpath(dstdir)
         for a in archives:
             if zipfile.is_zipfile(a):
@@ -859,8 +862,160 @@ class FileOps:
                             self.job.errors.append(f"{m.name}: {e}")
                         self.job.done += m.size
                         self.job.files_done += 1
+            elif is_7z(a):
+                self._extract_7z(a, dstdir, real)
             else:
                 self.job.errors.append(f"nem ismert archívum: {os.path.basename(a)}")
+
+    def _extract_7z(self, a, dstdir, real):
+        """7z: a 7-Zip egy rejtett ideiglenes mappába bont ki (a cél mappán belül, hogy a végén csak átnevezés
+        legyen), onnan kerül a helyére minden, ami a célon belül marad; a célon kívülre mutató hivatkozás kimarad"""
+        name = os.path.basename(a)
+        exe = sevenzip()
+        if not exe:
+            self.job.errors.append(f"{name}: a 7-Zip (7z) nincs telepítve — a Fúzió 0.0.77-es rendszerképe már tartalmazza")
+            return
+        try:
+            entries = sevenzip_entries(a)
+        except ValueError as e:
+            self.job.errors.append(str(e))
+            return
+        size = sum(e[1] for e in entries)
+        base_done = self.job.done
+        self.job.total += size
+        self.job.files_total += sum(1 for e in entries if not e[2])
+        self.job.current = name
+        tmp = tempfile.mkdtemp(prefix=".fusion-7z-", dir=dstdir)
+        try:
+            p = subprocess.Popen([exe, "x", "-y", "-bso0", "-bse1", "-bsp1", "-sccUTF-8", _NO_PASSWORD, "-o" + tmp, a],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 env=_7z_env())
+            out = b""
+            try:
+                while True:
+                    if self.job.cancel:
+                        p.kill()
+                        p.wait()
+                        raise Cancelled()
+                    r, _, _ = select.select([p.stdout], [], [], 0.2)
+                    if r:
+                        chunk = os.read(p.stdout.fileno(), 65536)
+                        if not chunk:
+                            break
+                        out = (out + chunk)[-65536:]
+                        pct = re.findall(rb"(\d{1,3})%", chunk)
+                        if pct:
+                            self.job.done = base_done + size * min(int(pct[-1]), 100) // 100
+                p.wait()
+            finally:
+                if p.stdout:
+                    p.stdout.close()
+            if p.returncode not in (0, 1):          # 1: figyelmeztetés (pl. zárolt fájl), a többi kibontva
+                self.job.errors.append(_7z_error(out.decode("utf-8", "replace").replace("\b", ""), name))
+                return
+            self._place(tmp, dstdir, real)
+            self.job.done = base_done + size
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _place(self, tmp, dstdir, real):
+        """a kibontott fájlok a helyükre (átnevezés); a meglévőkre a felülírás-beállítás érvényes"""
+        for root, dirs, files in os.walk(tmp):
+            rel = os.path.relpath(root, tmp)
+            tdir = dstdir if rel == "." else os.path.join(dstdir, rel)
+            for d in list(dirs):
+                src = os.path.join(root, d)
+                target = os.path.join(tdir, d)
+                if os.path.islink(src):
+                    files.append(d)
+                    dirs.remove(d)
+                    continue
+                if os.path.lexists(target) and not os.path.isdir(target):
+                    self.job.errors.append(f"kihagyva (ilyen nevű fájl már van): {os.path.relpath(target, dstdir)}")
+                    dirs.remove(d)
+                    continue
+                os.makedirs(target, exist_ok=True)
+            for f in files:
+                self._check()
+                src = os.path.join(root, f)
+                target = os.path.join(tdir, f)
+                shown = os.path.relpath(target, dstdir)
+                self.job.current = shown
+                if os.path.islink(src):
+                    dest = os.path.realpath(os.path.join(tdir, os.readlink(src)))
+                    if not (dest == real or dest.startswith(real + "/")):
+                        self.job.errors.append(f"kihagyva (a célon kívülre mutat): {shown}")
+                        continue
+                if os.path.lexists(target):
+                    if self.overwrite == "skip":
+                        self.job.files_done += 1
+                        continue
+                    if os.path.isdir(target) and not os.path.islink(target):
+                        self.job.errors.append(f"kihagyva (ilyen nevű mappa már van): {shown}")
+                        continue
+                os.replace(src, target)
+                self.job.files_done += 1
+
+
+SEVENZIP_MAGIC = b"7z\xbc\xaf\x27\x1c"
+# 7z: egy nem létező jelszó, hogy jelszavas archívumnál ne kérdezzen a (nem látható) terminálban
+_NO_PASSWORD = "-pfusion-nincs-jelszo"
+
+
+def sevenzip():
+    """a 7-Zip parancs (a rendszerkép `7zip` csomagja: 7z), vagy None"""
+    for n in ("7z", "7zz", "7za"):
+        w = shutil.which(n)
+        if w:
+            return w
+    return None
+
+
+def is_7z(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(6) == SEVENZIP_MAGIC
+    except OSError:
+        return False
+
+
+def _7z_env():
+    return dict(os.environ, LC_ALL="C.UTF-8", LANG="C.UTF-8")
+
+
+def _7z_error(text, name):
+    low = text.lower()
+    if "wrong password" in low or "encrypted" in low:
+        return (f"{name}: jelszavas archívum — a Fájlkezelő jelszót még nem kér; a Terminálban, az archívum "
+                f"mappájában: 7z x \"{name}\" (a jelszót ott kérdezi)")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith(("7-Zip", "Scanning", "p7zip"))]
+    return f"{name}: " + ("; ".join(lines[-3:]) if lines else "a 7-Zip hibát jelzett")
+
+
+def sevenzip_entries(path):
+    """[(név, méret, mappa-e)] — `7z l -slt`; hibánál ValueError (szöveggel)"""
+    exe = sevenzip()
+    if not exe:
+        raise ValueError("a 7-Zip (7z) nincs telepítve")
+    try:
+        p = subprocess.run([exe, "l", "-slt", "-ba", "-sccUTF-8", _NO_PASSWORD, path], capture_output=True,
+                           text=True, timeout=60, env=_7z_env(), stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ValueError(str(e))
+    if p.returncode != 0:
+        raise ValueError(_7z_error(p.stdout + "\n" + p.stderr, os.path.basename(path)))
+    out, cur = [], {}
+    for line in p.stdout.splitlines() + [""]:
+        if not line.strip():
+            if "Path" in cur:
+                size = int(cur.get("Size") or 0) if (cur.get("Size") or "").isdigit() else 0
+                out.append((cur["Path"], size, cur.get("Folder") == "+" or cur.get("Attributes", "").startswith("D")))
+            cur = {}
+            continue
+        k, sep, v = line.partition(" = ")
+        if sep:
+            cur[k.strip()] = v
+    return out
 
 
 def archive_list(path, limit=5000):
@@ -879,6 +1034,14 @@ def archive_list(path, limit=5000):
                 for m in ms[:limit]:
                     lines.append(f"{ui.human_size(m.size):>10}  {fmt_date(m.mtime)}  {m.name}{'/' if m.isdir() else ''}")
                 n = len(ms)
+        elif is_7z(path):
+            try:
+                es = sevenzip_entries(path)
+            except ValueError as e:
+                return f"az archívum nem olvasható: {e}"
+            for name, size, isdir in es[:limit]:
+                lines.append(f"{ui.human_size(size):>10}  {name}{'/' if isdir else ''}")
+            n = len(es)
         else:
             return "nem ismert archívum"
     except (OSError, zipfile.BadZipFile, tarfile.TarError) as e:
