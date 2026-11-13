@@ -188,3 +188,7 @@ debootstrap
 systemd-container
 ubuntu-keyring
 wget
+# 0.0.78: távoli elérés (Beállítások → Távoli elérés): SSH-szerver (csak kulccsal, csak a Tailscale-hálózat
+# felől) és a képernyő megosztása (x11vnc); a Tailscale a build.conf szerint, a hivatalos binárisokból
+openssh-server
+x11vnc

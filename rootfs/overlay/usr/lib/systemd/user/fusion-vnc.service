@@ -1,0 +1,18 @@
+# Fúzió — a képernyő megosztása (x11vnc, 0.0.78; Beállítások → Távoli elérés). A valódi asztalt (:0) mutatja,
+# jelszóval; csak a Tailscale-hálózat (100.x) és maga a gép felől fogad kapcsolatot. A forgalmat a Tailscale
+# titkosítja (WireGuard). A jelszó: ~/.config/fusion/vnc.pass (0600; a VNC csak az első 8 karaktert nézi).
+[Unit]
+Description=Fúzió — képernyő-megosztás (VNC)
+ConditionPathExists=%h/.config/fusion/vnc.pass
+StartLimitIntervalSec=0
+
+[Service]
+ExecStartPre=/bin/mkdir -p %h/.local/share/fusion
+ExecStart=/usr/bin/x11vnc -display :0 -passwdfile %h/.config/fusion/vnc.pass -forever -shared \
+    -allow 100.,127.0.0.1 -rfbport 5900 -noxdamage -quiet -o %h/.local/share/fusion/vnc.log
+# a munkamenet indulásakor az X még nem kész: újrapróbálkozás
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

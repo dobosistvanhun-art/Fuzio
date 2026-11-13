@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import fusion_ui as ui  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-PAGES = ["wifi", "bluetooth", "display", "devices", "printers", "printer", "drive", "sound", "programs", "store", "desktop", "users", "update", "backup", "boot", "report", "system"]
+PAGES = ["wifi", "bluetooth", "display", "devices", "printers", "printer", "drive", "sound", "programs", "store", "desktop", "users", "update", "backup", "boot", "remote", "report", "system"]
 
 
 def selftest():
@@ -107,6 +107,32 @@ def selftest():
     print(f"FUSION-SETTINGS: SLOTS used={len(used)} " + ("ok" if not missing else "HIÁNYZIK " + ",".join(missing)), flush=True)
     all_apps = fusion_apps.load()
     print("FUSION-SETTINGS: APPS " + ",".join(a["id"] for a in all_apps if not a["search_only"]), flush=True)
+    # 0.0.78 Távoli elérés: a kulcsok ellenőrzése, hozzáadás / törlés, a VNC-jelszó — egy ideiglenes saját mappában
+    import tempfile
+    from fusion_settings_parts import remote as frm
+    key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g proba@munkahely"
+    old_home = os.environ.get("HOME", "")
+    with tempfile.TemporaryDirectory() as h:
+        os.environ["HOME"] = h
+        try:
+            checks = {
+                "parse": isinstance(frm.parse_key(key), tuple),
+                "private": isinstance(frm.parse_key("-----BEGIN OPENSSH PRIVATE KEY-----"), str),
+                "junk": isinstance(frm.parse_key("ssh-ed25519 nemkulcs"), str),
+                "mismatch": isinstance(frm.parse_key(key.replace("ssh-ed25519", "ssh-rsa", 1)), str),
+                "add": frm.add_key(key) == "" and len(frm.list_keys()) == 1,
+                "dup": frm.add_key(key) != "",
+                "mode": oct(os.stat(frm.keys_path()).st_mode & 0o777) == "0o600"
+                        and oct(os.stat(os.path.dirname(frm.keys_path())).st_mode & 0o777) == "0o700",
+                "remove": frm.remove_key(0, frm.list_keys()[0]["fingerprint"]) == "" and frm.list_keys() == [],
+                "vncshort": frm.set_vnc_password("abc") != "",
+                "vnc": frm.set_vnc_password("titkos123") == "" and open(frm.vnc_pass_path()).read() == "titkos12\n"
+                       and oct(os.stat(frm.vnc_pass_path()).st_mode & 0o777) == "0o600",
+            }
+        finally:
+            os.environ["HOME"] = old_home
+    bad = [k for k, v in checks.items() if not v]
+    print("FUSION-SETTINGS: REMOTE " + ("ok " + ",".join(checks) if not bad else "HIBA " + ",".join(bad)), flush=True)
     return 0
 
 

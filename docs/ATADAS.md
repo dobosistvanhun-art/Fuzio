@@ -9,6 +9,22 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-13 — 0.0.78: Távoli elérés (Tailscale, SSH, képernyő)
+- István kérése (claude.ai): a Fúzió elérése a munkahelyi gépről (deploy, fájlok, képernyő). Döntése: Tailscale
+  (a saját WireGuard portnyitást, a Cloudflare Tunnel saját domaint kérne); a képernyő is kell.
+- Fájlok: `build/config/build.conf` (TAILSCALE_*), `build/steps/fetch.sh` (`fetch_tailscale`), `build/steps/rootfs.sh`
+  (`FUSION_TAILSCALE_TGZ`), `rootfs/packages.list` (`openssh-server`, `x11vnc`), `rootfs/customize.sh` (a Tailscale
+  binárisai, a gépkulcsok törlése, alapból minden ki), overlay: `etc/ssh/sshd_config.d/fusion.conf`,
+  `usr/lib/systemd/system/tailscaled.service`, `fusion-remote-awake.service`, `usr/lib/systemd/user/fusion-vnc.service`,
+  `usr/lib/fusion/bin/fusion-remote`, `fusion-admin` (`remote`), `fusion-selftest` (`FUSION-REMOTE:`); Beállítások:
+  `fusion_settings_parts/remote.py`, `qml/RemotePage.qml`, `Settings.qml`, `fusion_settings.py` (oldal, önteszt),
+  `desktop/icons/remote.svg`; `docs/W6-tavoli-eleres.md`; `VERSION`, `README.md`.
+- Próba (felhőben): `fusion-settings --selftest` → QML ok, SLOTS ok, REMOTE ok (10 eset); az oldal képernyőképe.
+  **Nem próbált:** a Tailscale letöltése a buildben (a felhőből a pkgs.tailscale.com nem érhető el), a QEMU-önteszt,
+  a ZBookon minden (bejelentkezés, SSH / WinSCP / VNC a munkahelyről, ébren tartás).
+- Biztonsági döntés (Claude): SSH csak kulccsal, csak `sudo` csoport, csak 100.64.0.0/10 / fd7a:115c:a1e0::/48 /
+  localhost; VNC csak 100.x / 127.0.0.1-ről; a Tailscale `--netfilter-mode=off`.
+
 ## 2026-11-07 — 0.0.77: 7z kicsomagolás; FusionAI: Pull a saját távoli ágról, Fordítás és telepítés
 - István kérése: a .7z kicsomagolása a Fájlkezelőben, plusz a megbeszélt teendő (2026-11-06): a FusionAI Pull a
   SolidCraft `fuzio` ágán is húzzon, és egy gomb fordítsa le és telepítse a SolidCraftot.

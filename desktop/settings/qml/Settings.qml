@@ -29,6 +29,7 @@ FWindow {
         { id: "update", title: "Rendszerfrissítés", icon: "update", qml: "UpdatePage.qml" },
         { id: "backup", title: "Mentés", icon: "archive-in", qml: "BackupPage.qml" },
         { id: "boot", title: "Indítás", icon: "power", qml: "BootPage.qml" },
+        { id: "remote", title: "Távoli elérés", icon: "remote", qml: "RemotePage.qml" },
         { id: "report", title: "Hibajelentés", icon: "report", qml: "ReportPage.qml" },
         { id: "system", title: "Rendszer", icon: "chip", qml: "SystemPage.qml" }
     ]

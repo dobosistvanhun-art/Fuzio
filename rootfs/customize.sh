@@ -345,6 +345,29 @@ in_root chown fusion:fusion /home/fusion /home/fusion/.sudo_as_admin_successful
 : > "$R/etc/machine-id"          # az első indításkor jön létre, a DATA-n marad meg
 rm -f "$R/var/lib/dbus/machine-id"
 
+echo "  [customize] távoli elérés (0.0.78): Tailscale, SSH, képernyő-megosztás — alapból mind ki"
+: "${FUSION_TAILSCALE_TGZ:?}"
+tsd=$(mktemp -d)
+tar -xzf "$FUSION_TAILSCALE_TGZ" -C "$tsd"
+tsrc=$(find "$tsd" -maxdepth 2 -type f -name tailscaled -printf '%h\n' | head -n 1)
+[ -n "$tsrc" ] && [ -x "$tsrc/tailscale" ] || { echo "  [customize] HIBA: a Tailscale-csomagban nincs tailscale / tailscaled"; exit 1; }
+install -m 0755 "$tsrc/tailscale" "$R/usr/bin/tailscale"
+install -m 0755 "$tsrc/tailscaled" "$R/usr/sbin/tailscaled"
+rm -rf "$tsd"
+echo "  [customize] $(in_root /usr/bin/tailscale version 2>/dev/null | head -n 1 | sed 's/^/Tailscale /')"
+# a tailscaled a TUN-eszközt kéri: a kernelben beépítve vagy modulként
+grep -qs '/tun\.ko' "$R/usr/lib/modules/$KERNEL_ABI/modules.builtin" \
+    || find "$R/usr/lib/modules/$KERNEL_ABI" -name 'tun.ko*' | grep -q . \
+    || echo "  [customize] FIGYELEM: a kernelben nincs TUN (tun.ko) — a Tailscale nem fog indulni"
+# SSH: a gépkulcsok a gép első bekapcsolásakor készülnek (fusion-remote ssh on), nem a rendszerképben —
+# így minden telepítésnek saját kulcsa van; alapból sem a socket, sem a szolgáltatás nem indul
+rm -f "$R"/etc/ssh/ssh_host_*
+in_root systemctl disable ssh.service ssh.socket >/dev/null 2>&1 || true
+in_root systemctl disable x11vnc.service >/dev/null 2>&1 || true
+[ -r "$R/etc/ssh/sshd_config.d/fusion.conf" ] || { echo "  [customize] HIBA: hiányzik a sshd_config.d/fusion.conf"; exit 1; }
+grep -q '^Include /etc/ssh/sshd_config.d/\*.conf' "$R/etc/ssh/sshd_config" \
+    || { echo "  [customize] HIBA: a sshd_config nem olvassa a sshd_config.d-t"; exit 1; }
+
 echo "  [customize] szolgáltatások"
 in_root systemctl enable systemd-networkd.service systemd-resolved.service iwd.service \
     fusion-hardware.service fusion-selftest.service fusion-boot-check.service \

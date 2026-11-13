@@ -1,0 +1,10 @@
+# Fúzió — amíg a távoli elérés „ébren tartás” kapcsolója be van kapcsolva, a gép nem alszik el, a fedél
+# lecsukására sem (a kijelzőt a Fúzió Shell kapcsolja ki). Beállítások → Távoli elérés.
+[Unit]
+Description=Fúzió — távoli elérés: a gép ébren marad
+
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:handle-lid-switch --who=Fúzió --why="Távoli elérés: a gép ébren marad" --mode=block /bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

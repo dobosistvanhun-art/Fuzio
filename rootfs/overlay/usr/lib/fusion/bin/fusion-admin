@@ -37,6 +37,9 @@
 #                                     Fejlesztődoboz (fusion-devbox): Ubuntu 24.04 a DATA-n, systemd-nspawn
 #    boot list | first <szám> | next <szám> | delete <szám> <megerősítés>
 #                                     UEFI indítási bejegyzések (fusion-bootentries)
+#    remote status [--json] | tailscale on|off|logout | ssh on|off | awake on|off
+#                                     távoli elérés (fusion-remote): Tailscale, SSH (csak kulccsal, csak a
+#                                     Tailscale-hálózat felől), a gép ébren tartása — csak rendszergazdának
 #
 #  Csatolás — általános szabályok, eszköztípustól függetlenül:
 #    - a Fúzió saját lemeze (amelyről indult) és a FUSION_* partíciók soha
@@ -332,8 +335,20 @@ case "$cmd" in
             *) fail "használat: devbox status|create|run|remove" ;;
         esac
         exec /usr/lib/fusion/bin/fusion-devbox "$@" ;;
+    remote)
+        # távoli elérés (0.0.78): csak rendszergazdának (a nem rendszergazda hívót fent elutasítja)
+        case "${1:-}" in
+            status) [ $# -le 2 ] || fail "használat: remote status [--json]"
+                    [ $# -eq 1 ] || [ "$2" = "--json" ] || fail "használat: remote status [--json]" ;;
+            tailscale) [ $# -eq 2 ] || fail "használat: remote tailscale on|off|logout"
+                       case "$2" in on|off|logout) ;; *) fail "használat: remote tailscale on|off|logout" ;; esac ;;
+            ssh|awake) [ $# -eq 2 ] || fail "használat: remote $1 on|off"
+                       case "$2" in on|off) ;; *) fail "használat: remote $1 on|off" ;; esac ;;
+            *) fail "használat: remote status | tailscale on|off|logout | ssh on|off | awake on|off" ;;
+        esac
+        exec /usr/lib/fusion/bin/fusion-remote "$@" ;;
     report)
         [ $# -eq 0 ] || fail "használat: report"
         exec /usr/lib/fusion/bin/fusion-report --system ;;
-    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install, installer-media, backup, devbox, boot" ;;
+    *) fail "ismeretlen parancs: ${cmd:-(üres)} — power, mount, unmount, eject, service-restart, devices-assign, devices-forget, update-status, update-apply, update-reboot, disk, report, install, installer-media, backup, devbox, boot, remote" ;;
 esac

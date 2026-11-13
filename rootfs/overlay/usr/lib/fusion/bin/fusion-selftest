@@ -799,6 +799,34 @@ pr=/home/fusion/Projektek/proba-fusionos/build/out/release
 runuser -u fusion -- sh -c "mkdir -p '$pr' /tmp/fupdx && printf 'FUSION_VERSION=9.9.9\nFUSION_MILESTONE=p\nBUILD_STAMP=20990101000000\n' > /tmp/fupdx/fusion-update.manifest && tar -C /tmp/fupdx -cf '$pr/fusionos-9.9.9-p.fupd' fusion-update.manifest"
 echo "FUSION-UPDFILES: BUILD $(urun python3 -c 'import sys; sys.path.insert(0, "/usr/lib/fusion/desktop/settings"); sys.path.insert(0, "/usr/lib/fusion/desktop/lib"); import fusion_settings_backend as b; print(" ".join(f["version"] + "@" + f["place"] for f in b.update_files() if f["version"] == "9.9.9"))' 2>&1 | tail -n 1)"
 rm -rf /home/fusion/Projektek/proba-fusionos /tmp/fupdx
+# --- Távoli elérés (0.0.78): alapból minden ki; az SSH helyben (127.0.0.1): jelszóval nem, kulccsal igen ---
+echo "FUSION-REMOTE: BIN tailscale=$(tailscale version 2>/dev/null | head -n 1) sshd=$(test -x /usr/sbin/sshd && echo ok || echo nincs) x11vnc=$(test -x /usr/bin/x11vnc && echo ok || echo nincs) tun=$(test -c /dev/net/tun && echo ok || echo nincs)"
+echo "FUSION-REMOTE: DEFAULT ssh=$(systemctl is-enabled ssh.service 2>/dev/null) socket=$(systemctl is-enabled ssh.socket 2>/dev/null) tailscaled=$(systemctl is-enabled tailscaled.service 2>/dev/null) awake=$(systemctl is-enabled fusion-remote-awake.service 2>/dev/null) vnc=$(urun systemctl --user is-enabled fusion-vnc.service 2>/dev/null)"
+echo "FUSION-REMOTE: NONADMIN $(runuser -u nobody -- sudo -n /usr/lib/fusion/bin/fusion-admin remote status 2>&1 | head -n 1)"
+r=$(adm remote ssh on 2>&1 | tail -n 1)
+echo "FUSION-REMOTE: SSH-ON $r active=$(systemctl is-active ssh.service) keys=$(ls /etc/ssh/ssh_host_*_key 2>/dev/null | wc -l)"
+echo "FUSION-REMOTE: SSHD $(sshd -T 2>/dev/null | grep -E '^(passwordauthentication|kbdinteractiveauthentication|permitrootlogin|allowgroups) ' | tr '\n' ' ')"
+pw=$(urun ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no fusion@127.0.0.1 true 2>&1 | tail -n 1)
+echo "FUSION-REMOTE: PASSWORD-LOGIN $(printf '%s' "$pw" | grep -q 'Permission denied' && echo elutasítva || echo "HIBA: $pw")"
+urun sh -c 'rm -f /tmp/fusion-remote-key /tmp/fusion-remote-key.pub; ssh-keygen -q -t ed25519 -N "" -C selftest -f /tmp/fusion-remote-key'
+cp -p /home/fusion/.ssh/authorized_keys /tmp/fusion-remote-ak.bak 2>/dev/null; had=$?
+urun sh -c 'mkdir -p -m 700 ~/.ssh && cat /tmp/fusion-remote-key.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+kl=$(urun ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/fusion-remote-key fusion@127.0.0.1 'echo belépve:$(id -un)' 2>&1 | tail -n 1)
+echo "FUSION-REMOTE: KEY-LOGIN $kl"
+if [ "$had" = 0 ]; then cp -p /tmp/fusion-remote-ak.bak /home/fusion/.ssh/authorized_keys; else rm -f /home/fusion/.ssh/authorized_keys; fi
+rm -f /tmp/fusion-remote-key /tmp/fusion-remote-key.pub /tmp/fusion-remote-ak.bak
+echo "FUSION-REMOTE: SSH-OFF $(adm remote ssh off 2>&1 | tail -n 1) active=$(systemctl is-active ssh.service)"
+# Tailscale: indul-e (internet nélkül a bejelentkező cím nem jön meg — ez csak tájékoztató), utána ki
+ts=$(adm remote tailscale on 2>&1 | tail -n 1)
+echo "FUSION-REMOTE: TAILSCALE-ON active=$(systemctl is-active tailscaled.service) $(printf '%s' "$ts" | python3 -c 'import json,sys
+try: d=json.loads(sys.stdin.read()); print("state=%s authurl=%s" % (d.get("state"), "van" if d.get("authUrl") else "nincs"))
+except Exception as e: print("HIBA", e)')"
+echo "FUSION-REMOTE: TAILSCALE-OFF $(adm remote tailscale off 2>&1 | tail -n 1) active=$(systemctl is-active tailscaled.service) enabled=$(systemctl is-enabled tailscaled.service 2>/dev/null)"
+# a képernyő-megosztás (a munkamenet X-én): jelszó, indítás, a port figyel, leállítás
+urun sh -c 'mkdir -p ~/.config/fusion && umask 077 && printf "teszt123\n" > ~/.config/fusion/vnc.pass'
+urun systemctl --user start fusion-vnc.service; sleep 4
+echo "FUSION-REMOTE: VNC active=$(urun systemctl --user is-active fusion-vnc.service) port=$(ss -ltnH 'sport = :5900' 2>/dev/null | wc -l)"
+urun systemctl --user stop fusion-vnc.service; urun rm -f /home/fusion/.config/fusion/vnc.pass
 # --- Hibajelentés: a felhasználóként (a rendszeroldali rész sudo-val), maszkolás ---
 t0=$(date +%s)
 rout=$(urun fusion-report -d "Teszt: a lézer nem látszik. jelszó=Titok123 kapcsolat: teszt.elek@pelda.hu" -o /tmp/fusion-report 2>&1); rrc=$?
