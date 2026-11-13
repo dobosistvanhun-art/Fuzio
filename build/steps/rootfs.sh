@@ -89,13 +89,10 @@ step_rootfs() {
     FUSION_MAINSAIL_CONFIG=$(printer_src_dir mainsail-config "$MAINSAIL_CONFIG_COMMIT")
     FUSION_FLUIDD_CONFIG=$(printer_src_dir fluidd-config "$FLUIDD_CONFIG_COMMIT")
     FUSION_EXTRA_ROOT="$CACHE_DIR/root"
-    FUSION_TAILSCALE_TGZ=$(tailscale_tgz) || FUSION_TAILSCALE_TGZ=""
-    [ -r "$FUSION_TAILSCALE_TGZ" ] || die "hiányzik a Tailscale — előbb: build/fusion-build fetch"
     [ -d "$FUSION_EXTRA_ROOT/lib/modules/$KERNEL_ABI" ] || die "hiányzik a kicsomagolt kernel — előbb: build/fusion-build fetch"
     export FUSION_ROOT FUSION_VERSION FUSION_MILESTONE KERNEL_ABI FUSION_NVIDIA_KO NVIDIA_MODULES \
            FUSION_EXTRA_ROOT EXTRA_MODULES FIRMWARE_FILES FUSION_WINE_BUILD FUSION_WINE_ID FUSION_ICU_BUILD \
-           FUSION_PRINTER_BUILD FUSION_PRINTER_ID FUSION_WEBUI_DIR WEBUI_ZIPS FUSION_MAINSAIL_CONFIG FUSION_FLUIDD_CONFIG \
-           FUSION_TAILSCALE_TGZ
+           FUSION_PRINTER_BUILD FUSION_PRINTER_ID FUSION_WEBUI_DIR WEBUI_ZIPS FUSION_MAINSAIL_CONFIG FUSION_FLUIDD_CONFIG
     mmdebstrap --mode=root --variant=minbase --arch=amd64 \
         --components=main,universe \
         --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \

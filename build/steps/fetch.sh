@@ -57,45 +57,6 @@ _fetch_nvidia() {
     done
 }
 
-# tailscale_dir: a letöltött Tailscale-csomag helye
-tailscale_dir() { printf '%s/tailscale' "$CACHE_DIR"; }
-# tailscale_tgz: a letöltött csomag (a fetch írja a nevét a current fájlba)
-tailscale_tgz() { local f; f=$(cat "$(tailscale_dir)/current" 2>/dev/null) && printf '%s/%s' "$(tailscale_dir)" "$f"; }
-
-# fetch_tailscale: a Tailscale statikus binárisai (0.0.78, távoli elérés) — a verzió a build.conf-ból vagy a
-# legfrissebb stabil; ellenőrzés: a rögzített SHA256, ennek hiányában a hivatalos .sha256 fájl
-fetch_tailscale() {
-    need curl
-    step "Tailscale (távoli elérés)"
-    local dir ver name file sum
-    dir=$(tailscale_dir); mkdir -p "$dir"
-    ver="$TAILSCALE_VERSION"
-    if [ -z "$ver" ]; then
-        ver=$(curl -fsSL --retry 3 "$TAILSCALE_BASE/?mode=json" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("TarballsVersion",""))' 2>/dev/null) || ver=""
-        [ -n "$ver" ] || die "a Tailscale legfrissebb verziója nem kérdezhető le ($TAILSCALE_BASE/?mode=json) — írd a build.conf TAILSCALE_VERSION-jébe"
-    fi
-    case "$ver" in *[!0-9.]*|"") die "érvénytelen Tailscale-verzió: $ver" ;; esac
-    name="tailscale_${ver}_amd64.tgz"; file="$dir/$name"
-    sum="$TAILSCALE_SHA256"
-    if [ -z "$sum" ]; then
-        sum=$(curl -fsSL --retry 3 "$TAILSCALE_BASE/$name.sha256" | tr -d ' \n' | cut -c1-64) || sum=""
-        case "$sum" in [0-9a-f]*) [ ${#sum} -eq 64 ] || sum="" ;; *) sum="" ;; esac
-        [ -n "$sum" ] || die "a Tailscale ellenőrzőösszege nem kérdezhető le: $TAILSCALE_BASE/$name.sha256"
-    fi
-    if [ -r "$file" ] && [ "$(sha256sum "$file" | cut -d' ' -f1)" = "$sum" ]; then
-        info "megvan: Tailscale $ver"
-    else
-        _download "$TAILSCALE_BASE/$name" "$file" "$sum" || die "nem sikerült letölteni: $TAILSCALE_BASE/$name"
-        ok "Tailscale $ver ellenőrizve (SHA256)"
-    fi
-    printf '%s\n' "$name" > "$dir/current"
-    [ -n "$TAILSCALE_SHA256" ] || info "rögzítéshez a build.conf-ba: TAILSCALE_VERSION=\"$ver\" TAILSCALE_SHA256=\"$sum\""
-    # a régi verziók törlése
-    local f
-    for f in "$dir"/tailscale_*_amd64.tgz; do [ "$f" = "$file" ] || rm -f "$f"; done
-}
-
 step_fetch() {
     not_root
     need apt-get dpkg-deb sha256sum
@@ -141,5 +102,4 @@ step_fetch() {
     fetch_wine_source
     fetch_icu_source
     fetch_printer_sources
-    fetch_tailscale
 }
