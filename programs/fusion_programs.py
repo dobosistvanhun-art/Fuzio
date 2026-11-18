@@ -792,8 +792,10 @@ def install_appimage(path, log=None, name=None):
     return manifest(pid)
 
 
-def install_native(path, log=None, name=None, exec_rel=None):
-    """archívum (tar.*, zip) vagy önálló Linux-bináris a program mappájába"""
+def install_native(path, log=None, name=None, exec_rel=None, origin=None):
+    """archívum (tar.*, zip) vagy önálló Linux-bináris a program mappájába. `origin`: ha a program a saját
+    forrásából épült (`{"dir": mappa, "cmd": parancs, "version": változat}`), a Programkezelő onnan frissíti
+    (lásd `update`); újratelepítéskor a korábbi forrás megmarad, ha most nincs megadva."""
     base = re.sub(r"(?i)(\.tar)?\.(gz|xz|bz2|zst|zip|tgz|txz)$", "", os.path.basename(path))
     pid, old = target_id(name or re.sub(r"[-_.]v?\d.*$", "", base) or base, "native")
     d = os.path.join(PROGRAMS, pid, "app.new")
@@ -852,6 +854,14 @@ def install_native(path, log=None, name=None, exec_rel=None):
          "source": "file:" + os.path.basename(path), "installed": time.strftime("%Y-%m-%d")}
     if dd.get("X-Fusion-Open"):
         m["open"] = dd["X-Fusion-Open"]
+    prev = manifest(pid) if old else {}
+    origin = origin or {}
+    for k in ("dir", "cmd"):
+        v = origin.get(k) or prev.get("build." + k, "")
+        if v:
+            m["build." + k] = v
+    if origin.get("version"):
+        m["version"] = origin["version"]
     pngs = [p for p in glob.glob(os.path.join(d, "**", "*.png"), recursive=True) + glob.glob(os.path.join(d, "**", "*.svg"), recursive=True)]
     ic = dd.get("Icon", "")
     pref = [p for p in pngs if ic and os.path.splitext(os.path.basename(p))[0] == os.path.basename(ic)] or \
@@ -953,8 +963,13 @@ def install_windows_archive(path, log=None, name=None, exec_rel=None):
         raise ProgramError(str(e)) if not isinstance(e, ProgramError) else e
 
 
-def install(src, log=None, name=None, exec_rel=None, portable=False):
-    """telepítés bármiből: fájl (típus felismerve) vagy flathub:<azonosító>"""
+def install(src, log=None, name=None, exec_rel=None, portable=False, origin=None):
+    """telepítés bármiből: fájl (típus felismerve) vagy flathub:<azonosító>. `origin`: a forrás, amiből a
+    (Linux-archívumként telepített) program épült — a Programkezelő onnan frissíti"""
+    if origin:
+        if not os.path.isdir(origin.get("dir", "")) or not origin.get("cmd"):
+            raise ProgramError("a forrás mappája és fordító parancsa kell (--from-source MAPPA --build PARANCS)")
+        origin = dict(origin, dir=os.path.realpath(origin["dir"]))
     if src.startswith("flathub:"):
         m = install_flatpak(src[8:], log)
     else:
@@ -971,7 +986,7 @@ def install(src, log=None, name=None, exec_rel=None, portable=False):
         elif kind == "archive" and archive_windows_exes(src):
             m = install_windows_archive(src, log, name, exec_rel)
         elif kind in ("archive", "elf"):
-            m = install_native(src, log, name, exec_rel)
+            m = install_native(src, log, name, exec_rel, origin)
         else:
             raise ProgramError("ismeretlen fájltípus: " + os.path.basename(src))
     sync_desktop()
@@ -1007,10 +1022,68 @@ def remove(pid, data=False, log=None):
     _log(log, f"Eltávolítva: {m.get('name', pid)}")
 
 
+def _git(args, cwd, log=None, timeout=600):
+    try:
+        r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ProgramError(f"git: {e}")
+    out = (r.stdout + r.stderr).strip()
+    for line in out.splitlines():
+        _log(log, line)
+    return r.returncode, out
+
+
+def update_from_source(m, log=None):
+    """a saját forrásából épült program frissítése: git pull (csak előre, a helyi munkát nem dobja el),
+    a fordító parancs (az a Programkezelővel újratelepíti), és a változat a végén"""
+    d, cmd = m.get("build.dir", ""), m.get("build.cmd", "")
+    if not os.path.isdir(os.path.join(d, ".git")):
+        raise ProgramError("a forrás mappája nem git-tároló: " + d)
+    rc, out = _git(["status", "--porcelain", "--untracked-files=no"], d)
+    if rc != 0:
+        raise ProgramError("a forrás állapota nem kérdezhető le: " + (out.splitlines() or ["?"])[-1])
+    if out.strip():
+        raise ProgramError("a forrásban nem mentett (commitolatlan) módosítás van — nem frissítek, hogy ne vesszen el: " + d)
+    _log(log, f"Forrás: {d}")
+    rc, out = _git(["pull", "--ff-only"], d, log, 900)
+    if rc != 0:
+        raise ProgramError("a git pull nem sikerült: " + (out.splitlines() or ["?"])[-1])
+    _log(log, f"Fordítás és telepítés: {cmd}")
+    try:
+        pr = subprocess.Popen(["bash", "-lc", cmd], cwd=d, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                              stdin=subprocess.DEVNULL)
+    except OSError as e:
+        raise ProgramError(f"a fordítás nem indult: {e}")
+    tail = []
+    for line in pr.stdout:
+        line = line.rstrip()
+        tail = (tail + [line])[-5:]
+        _log(log, line)
+    if pr.wait() != 0:
+        raise ProgramError("a fordítás nem sikerült: " + (tail[-1] if tail else "?"))
+    ver = (manifest(m["id"]) or m).get("version", "")
+    return "kész" + (f" ({ver})" if ver else "")
+
+
+def source_status(pid, fetch=True):
+    """forrásból épült program: hány új commit van a távoli ágon (a felületnek; `fetch`: előbb letölti)"""
+    m = manifest(pid)
+    d = m.get("build.dir", "") if m else ""
+    if not d or not os.path.isdir(os.path.join(d, ".git")):
+        return {"source": False}
+    if fetch:
+        _git(["fetch", "--quiet"], d, None, 120)
+    rc, out = _git(["rev-list", "--count", "HEAD..@{u}"], d)
+    behind = int(out) if rc == 0 and out.strip().isdigit() else -1
+    return {"source": True, "dir": d, "behind": behind}
+
+
 def update(pid, log=None):
     m = manifest(pid)
     if not m:
         raise ProgramError("nincs ilyen program: " + pid)
+    if m.get("build.dir") and m.get("build.cmd"):
+        return update_from_source(m, log)
     if m.get("type") == "flatpak":
         rc, out = _flatpak(["update", _flatpak_scope(m), "-y", "--noninteractive", m["appid"]], log, 3600)
         if rc != 0:
@@ -1316,7 +1389,8 @@ def info(m):
             "exe": m.get("exe", ""), "prefix": m.get("prefix", ""), "open": m.get("open", ""),
             "devices": {k[5:]: v for k, v in m.items() if k.startswith("port.")},
             "folders": {k[6:].upper(): v for k, v in m.items() if k.startswith("drive.")},
-            "canUpdate": m.get("type") == "flatpak",
+            "canUpdate": m.get("type") == "flatpak" or bool(m.get("build.dir") and m.get("build.cmd")),
+            "buildDir": m.get("build.dir", ""),
             "protection": _fperm.of(m)["protection"], "sandbox": m.get("sandbox", "no") == "yes",
             "net": m.get("allow.net", "yes") != "no", "allowFiles": m.get("allow.files", "")}
 

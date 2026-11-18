@@ -327,6 +327,24 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     a=$(prun fusion-programs assoc /tmp/x.fprb | cut -f1)
     [ -n "$a" ] && prun fusion-run "$a" /tmp/x.fprb; sleep 2
     echo "FUSION-PROG: NATIVE assoc=$a out=$(cat /tmp/fusion-prog-native.txt 2>/dev/null)"
+    # 0.0.78: a saját forrásából épült program (Vas & Króm, SolidCraft): a Programkezelő onnan frissíti
+    # (git pull, a fordító parancs, újratelepítés); commitolatlan módosításnál nem frissít
+    prun sh -c '
+        S=$(mktemp -d); cd "$S" && git init -q --bare up.git && git clone -q up.git src 2>/dev/null && cd src &&
+        git config user.email t@t && git config user.name t &&
+        printf "%s\n" "#!/bin/bash" "set -e" "V=\$(cat VERSION); T=\$(mktemp -d); mkdir \$T/fsrcproba" \
+          "printf \"#!/bin/sh\\necho %s\\n\" \$V > \$T/fsrcproba/fsrcproba; chmod +x \$T/fsrcproba/fsrcproba" \
+          "tar -C \$T -czf \$T/fsrcproba.tar.gz fsrcproba" \
+          "fusion-programs install \$T/fsrcproba.tar.gz --name fsrcproba --from-source \"\$PWD\" --build \"bash build.sh\" --version \$V" > build.sh &&
+        echo 1.0 > VERSION && git add -A && git commit -qm 1 && git push -q origin HEAD 2>/dev/null && bash build.sh >/dev/null &&
+        cd "$S" && git clone -q up.git o 2>/dev/null && cd o && git config user.email t@t && git config user.name t &&
+        echo 1.1 > VERSION && git commit -qam 2 && git push -q 2>/dev/null &&
+        b=$(fusion-programs source fsrcproba | python3 -c "import json,sys; print(json.load(sys.stdin)[\"behind\"])") &&
+        u=$(fusion-programs update fsrcproba 2>&1 | tail -n 1) &&
+        echo x >> "$S/src/build.sh"; d=$(fusion-programs update fsrcproba 2>&1 | grep -c commitolatlan)
+        echo "FUSION-PROG: SOURCE behind=$b update=[$u] dirty-refused=$d run=$(${FUSION_PROGRAMS_DIR:-/data/programs}/fsrcproba/app/fsrcproba/fsrcproba 2>/dev/null)"
+        fusion-programs remove fsrcproba >/dev/null 2>&1; rm -rf "$S"'
+
     # 0.0.39: URL-séma (mint a Printables → PrusaSlicer): a böngésző linkje a program receptjéből bejegyzett
     # x-scheme-handler-en át a programhoz jut, a kapcsolóival (url_args)
     install -d -o fusion -g fusion $P/urlproba

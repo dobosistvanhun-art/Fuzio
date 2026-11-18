@@ -9,6 +9,18 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-18 — 0.0.78: Frissítés a forrásból a Programkezelőben
+- István kérése: a két játék (és a SolidCraft) frissüljön a Programkezelőből, mint a többi program.
+- Fájlok: `programs/fusion_programs.py` (`install_native` / `install` `origin`, `update_from_source`, `source_status`,
+  `info`: `canUpdate`, `buildDir`), `programs/fusion-programs` (`--from-source`, `--build`, `--version`, `source`),
+  `desktop/settings/qml/ProgramsPage.qml` („Frissítés a forrásból”, „forrásból: …”), `rootfs/overlay/usr/lib/fusion/bin/fusion-selftest`
+  (SOURCE), `docs/W2-forrasbol-frissites.md`, `VERSION`, `README.md`. A projektekben: SolidCraft és Ördögös
+  `scripts/fuzio-build.sh`, Vas & Króm `tools/fusion-install.sh` (`--build`) — csak az új Programkezelőnek adják át a forrást.
+- Próba (felhőben): hamis projekttel végig (telepítés, 1 új commit, frissítés → kész (1.1), commitolatlan → nem frissít);
+  a szkriptek hamis régi/új Programkezelővel; `fusion-settings --selftest` QML/SLOTS ok. **Nem próbált:** a ZBookon
+  (build, a valódi fordítás a gombról, a Fejlesztődoboz a Programkezelőből indítva).
+- A 0.0.78 szám korábban a visszavont távoli elérésé volt (nem épült, nem futott); most ez kapja.
+
 ## 2026-11-13 — a 0.0.78 (Távoli elérés: Tailscale, SSH, VNC) visszavonva
 - István döntése: túl körülményes (külön app a telefonon, kulcs), „vegyük ki az egészet”. A 0.0.78 commitja
   (`50db831`) visszavonva (`git revert`); a változat marad 0.0.77. Nem volt buildelve, a ZBookon nem futott.

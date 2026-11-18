@@ -102,14 +102,17 @@ SettingsPage {
                             spacing: 8
                             Rectangle { width: tb.implicitWidth + 10; height: 16; radius: 3; color: p.typeColor(row.m.type)
                                 Text { id: tb; anchors.centerIn: parent; text: row.m.typeName; color: "white"; font.family: Theme.font; font.pixelSize: 10 } }
-                            Text { text: [row.m.version, p.sizes[row.m.id] || "", row.m.open ? "megnyitja: " + row.m.open : ""].filter(x => x).join("  ·  ")
+                            Text { text: [row.m.version, p.sizes[row.m.id] || "", row.m.open ? "megnyitja: " + row.m.open : "",
+                                          row.m.buildDir ? "forrásból: " + row.m.buildDir.split("/").pop() : ""].filter(x => x).join("  ·  ")
                                    color: Theme.dim; font.family: Theme.font; font.pixelSize: 11 }
                         }
                     }
                     Row {
                         id: btns; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                         FButton { text: "Indítás"; primary: true; onClicked: settings.programLaunch(row.m.id) }
-                        FButton { visible: row.m.canUpdate; text: "Frissítés"; enabled: !p.job.running; onClicked: p.startJob(settings.programUpdate(row.m.id)) }
+                        // a saját forrásából épült program: git pull, fordítás a Fejlesztődobozban, újratelepítés
+                        FButton { visible: row.m.canUpdate; text: row.m.buildDir ? "Frissítés a forrásból" : "Frissítés"; enabled: !p.job.running
+                                  onClicked: p.startJob(settings.programUpdate(row.m.id)) }
                         FButton { text: "Eltávolítás"; enabled: !p.job.running; onClicked: { p.confirm = row.m.id; p.openId = row.m.id } }
                     }
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#232c38" }

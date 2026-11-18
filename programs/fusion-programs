@@ -7,7 +7,9 @@
     fusion-programs detect <fájl>         a fájl típusa (win64, appimage, archive, …)
     fusion-programs install <fájl | flathub:<azonosító>> [--name NÉV] [--exec ÚT] [--portable]
     fusion-programs remove <id> [--data]  eltávolítás (--data: a program adatai is)
-    fusion-programs update <id>
+    fusion-programs update <id>       Flatpak: a Flathubról; a saját forrásából épült program: git pull + fordítás
+    (telepítéskor: --from-source MAPPA --build PARANCS [--version V] — a Programkezelő onnan frissíti)
+    fusion-programs source <id>       forrásból épült program: hány új commit van a távoli ágon
     fusion-programs sync                  a már telepített Flatpakok és régi Windows-programok felvétele
     fusion-programs run <id> [fájl…]      indítás (ugyanaz, mint: fusion-run)
     fusion-programs assoc <fájl>          melyik program nyitja meg
@@ -65,15 +67,22 @@ def main(argv):
         name = opt(args, "--name")
         exe = opt(args, "--exec")
         portable = opt(args, "--portable", True)
+        source = opt(args, "--from-source")
+        build = opt(args, "--build")
+        version = opt(args, "--version")
         if len(args) != 1:
             raise fp.ProgramError("használat: fusion-programs install <fájl | flathub:<azonosító>>")
         src = args[0] if args[0].startswith("flathub:") else os.path.abspath(args[0])
-        m = fp.install(src, out, name, exe, portable)
+        origin = {"dir": os.path.abspath(source), "cmd": build or "", "version": version or ""} if source else None
+        m = fp.install(src, out, name, exe, portable, origin)
         out(f"OK {m['id']}")
         return 0
     if cmd == "remove" and args:
         data = opt(args, "--data", True)
         fp.remove(args[0], data, out)
+        return 0
+    if cmd == "source" and len(args) == 1:
+        out(json.dumps(fp.source_status(args[0], "--no-fetch" not in args), ensure_ascii=False))
         return 0
     if cmd == "update" and len(args) == 1:
         out(fp.update(args[0], out))
