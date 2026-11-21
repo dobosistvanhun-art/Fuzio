@@ -9,6 +9,18 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-21 — 0.0.79: az ElegooSlicer AppImage indul (libGLU, WebKit-rajzoló)
+- István kérése: a hétfőn érkező Elegoo Centauri Carbon 2-höz az ElegooSlicer (GitHub, elegooofficial, v1.5.3.5 AppImage).
+- A ZBookon a Programkezelő telepítette, de nem indult: `libGLU.so.1` hiányzott (kód 127); a `libGLU` és a `libmspack`
+  kézi pótlása után elindult, de a beállító varázsló (WebKitGTK) üres volt: `DRM_IOCTL_MODE_CREATE_DUMB … Permission
+  denied`, `Failed to create GBM buffer` (a 470-es NVIDIA). `WEBKIT_DISABLE_DMABUF_RENDERER=1`-gyel jó (István próbálta).
+- Fájlok: `rootfs/packages.list` (`libglu1-mesa`, `libmspack0t64`), `rootfs/overlay/usr/lib/fusion/session/xinitrc`
+  (`WEBKIT_DISABLE_DMABUF_RENDERER=1` a munkamenetben, felülírható), `VERSION`, `README.md`.
+- Próba: a két csomag megvan a noble main-ben (apt-cache); `sh -n` az xinitrc-re. **Nem próbált:** a rendszerkép
+  építése, a 0.0.79 a ZBookon. Átmenetileg a ZBookon a két könyvtár az ElegooSlicer `bin/` mappájában, és az `AppRun`-ba
+  kézzel beírva a WEBKIT-sor — egy újratelepítés ezt eltünteti, a 0.0.79-cel már nem kell.
+- Nyitva: a nyomtató hozzáadása és egy próbanyomtatás a CC2-vel (hétfőtől).
+
 ## 2026-11-18 — 0.0.78: Frissítés a forrásból a Programkezelőben
 - István kérése: a két játék (és a SolidCraft) frissüljön a Programkezelőből, mint a többi program.
 - Fájlok: `programs/fusion_programs.py` (`install_native` / `install` `origin`, `update_from_source`, `source_status`,

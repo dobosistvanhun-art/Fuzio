@@ -108,6 +108,9 @@ bzip2
 python3-gi
 gir1.2-gtk-3.0
 gir1.2-webkit2-4.1
+# a Linuxos AppImage-ek (ElegooSlicer és a többi Orca-alapú slicer) a rendszertől várják — 0.0.79
+libglu1-mesa
+libmspack0t64
 
 # M6 — Fúzió Desktop (Qt 6 / Qt Quick, a mérés alapján): Fúzió Shell (panel, Start menü,
 # értesítések), Fájlkezelő, Beállítások — Python + QML, közös FusionUI modul

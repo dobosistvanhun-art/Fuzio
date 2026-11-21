@@ -30,6 +30,10 @@ case "$dl" in /*) mkdir -p "$dl" ;; esac
 export PATH="/data/dev/node/bin:$HOME/.local/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
 # a munkamenet-busz szolgáltatásai (portálok, értesítések) lássák a kijelzőt
 export XDG_CURRENT_DESKTOP=FusionOS XDG_SESSION_TYPE=x11
+# WebKitGTK (pl. az ElegooSlicer beállító varázslója, a Fluidd a fusion-webben): a DMABUF-rajzoló GBM-puffert kér
+# a DRM-eszköztől; ahol a meghajtó ezt nem adja (NVIDIA 470), a beágyazott weboldal üres marad. Kikapcsolva a
+# WebKit a megosztott memóriás rajzolóra vált, ami mindenhol működik (0.0.79; a programok felülírhatják)
+export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null
 [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] && touch "$XDG_RUNTIME_DIR/fusion-desktop.ready"
 # telepítő pendrive (fusion.installer): a Fúzió Telepítő a Fúzió Shell helyett
