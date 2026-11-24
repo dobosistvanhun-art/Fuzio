@@ -373,7 +373,9 @@ if [ -x /usr/bin/fusion-programs ] && [ -e /dev/fusion/laser ] && [ -x /usr/lib/
     echo "FUSION-PROG: REMOVED left=$(ls $P | tr '\n' ' ')desktop=$(ls /home/fusion/.local/share/applications/ 2>/dev/null | grep -c '^fusion-') fwr-lightburn=$([ -d /data/fwr/lightburn ] && echo van || echo nincs)"
 fi
 # --- M5: Klipper + Moonraker + webes felület (Fluidd, Mainsail) ---
-if [ -x /usr/lib/fusion/printer/klippy-env/bin/python ]; then
+if [ -e /data/printer/disabled ]; then
+    echo "FUSION-M5: DISABLED (Beállítások → 3D nyomtató: kikapcsolva)"
+elif [ -x /usr/lib/fusion/printer/klippy-env/bin/python ]; then
     api()  { curl -fsS --max-time 5 "http://127.0.0.1:7125$1" 2>/dev/null; }
     jval() { python3 -c "import sys, json
 try:

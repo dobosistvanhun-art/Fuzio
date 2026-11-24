@@ -69,6 +69,7 @@ Rectangle {
         // --- 3D nyomtató (Klipper) ---
         Card {
             id: pc
+            visible: pc.p.disabled !== true     // Beállítások → 3D nyomtató → Kikapcsolás
             title: "3D nyomtató"; icon: "printer"
             property var p: dash.printer
             property var d: shell.devices.find(x => x.role === "printer") || ({})

@@ -9,6 +9,21 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-24 — 0.0.80: a 3D nyomtató kikapcsolható; avrdude a képben
+- István döntése: a Klipper mostanában nem kell (a 4MAX lapjára egy saját ágyfűtés-vezérlő firmware kerül,
+  `agyfutes_4max`, PlatformIO/Arduino); a Klipper-csomag maga nem módosul, csak kikapcsolható.
+- Fájlok: `printer/systemd/fusion-klipper.service`, `fusion-moonraker.service` (`ConditionPathExists=!/data/printer/disabled`),
+  új `rootfs/overlay/etc/systemd/system/nginx.service.d/fusion-printer.conf` (ugyanez), `fusion-admin printer status|on|off`,
+  Beállítások → Nyomtató (Klipper): Kikapcsolás / Bekapcsolás (`printerEnable` slot, `devices.py`, `PrinterPage.qml`),
+  az Asztal nyomtató-kártyája kikapcsolva rejtve (`dashboard.py`, `Desktop.qml`), az önteszt M5 része kihagyva
+  (`FUSION-M5: DISABLED`), `avrdude` a `rootfs/packages.list`-ben, `VERSION`, `README.md`, `CLAUDE.md`.
+- Próba: `sh -n` a fusion-admin-ra és az önteszre; `fusion-settings --selftest` (QML ok, SLOTS ok); a két QML lefordul.
+  **Nem próbált:** a rendszerkép építése, a kikapcsolás valódi systemd alatt, a Shell önteszte (itt nincs X), az avrdude
+  a ZBookon.
+- Az ágyfűtés-firmware feltöltése a ZBookon (Klipper kikapcsolva): mentés `avrdude … -U flash:r:klipper_backup.hex:i`,
+  feltöltés `-U flash:w:agyfutes_4max.hex:i`, soros terminál: `/usr/lib/fusion/printer/klippy-env/bin/python -m serial.tools.miniterm /dev/ttyUSB0 115200`.
+  Vissza: a mentés visszaírása, majd Bekapcsolás.
+
 ## 2026-11-21 — 0.0.79: az ElegooSlicer AppImage indul (libGLU, WebKit-rajzoló)
 - István kérése: a hétfőn érkező Elegoo Centauri Carbon 2-höz az ElegooSlicer (GitHub, elegooofficial, v1.5.3.5 AppImage).
 - A ZBookon a Programkezelő telepítette, de nem indult: `libGLU.so.1` hiányzott (kód 127); a `libGLU` és a `libmspack`

@@ -16,6 +16,7 @@
 #    automount <kernelnév>            (udev/systemd) cserélhető kötet csatolása bedugáskor
 #    autounmount <kernelnév>          (systemd) kihúzáskor
 #    service-restart klipper|moonraker|nginx|bluetooth|cups
+#    printer status|on|off           a 3D nyomtató (Klipper, Moonraker, nginx) be- / kikapcsolása (jelző: /data/printer/disabled)
 #    rfkill-unblock bluetooth|wlan    a rádió szoftveres tiltásának feloldása
 #    users list|add|passwd|delete|admin|autologin …   felhasználókezelés (fusion-users)
 #    devices-assign <szerep> <eszköz> | devices-forget <szerep>
@@ -235,6 +236,15 @@ case "$cmd" in
     automount)   [ $# -eq 1 ] || fail "használat: automount <kernelnév>"; do_automount "$1" ;;
     autounmount) [ $# -eq 1 ] || fail "használat: autounmount <kernelnév>"
                  for mp in $(awk -v d="/dev/$1" '$1 == d {print $2}' /proc/self/mounts | grep "^$MEDIA/"); do LAZY=1 do_unmount "$mp"; done ;;
+    printer)
+        # a 3D nyomtató szolgáltatásai; a kikapcsolás a DATA-n marad (a rendszerfrissítés után is)
+        flag=/data/printer/disabled
+        case "${1:-}" in
+            status) [ -e "$flag" ] && echo off || echo on ;;
+            off) install -d /data/printer && : > "$flag" && systemctl stop fusion-klipper fusion-moonraker nginx && echo off ;;
+            on) rm -f "$flag" && systemctl start fusion-klipper fusion-moonraker nginx && echo on ;;
+            *) fail "használat: printer status|on|off" ;;
+        esac ;;
     service-restart)
         case "${1:-}" in
             klipper|moonraker) exec systemctl restart "fusion-$1" ;;

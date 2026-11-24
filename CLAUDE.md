@@ -28,6 +28,7 @@ projektdokumentumok ide nem látnak be: ami tartósan fontos, az ide vagy a `doc
 
 ## Nem módosítható / óvatosan
 - **A Klipper-csomag (Klipper, Moonraker, Fluidd/Mainsail, nginx) és a LightBurn nem módosul** (István döntése).
+  A nyomtató szolgáltatásai 0.0.80 óta kikapcsolhatók (Beállítások → Nyomtató; István 2026-11-24: mostanában nem kell).
 - A Firefoxot (Flatpak) nem piszkáljuk.
 - A Hardware Layer általános marad (nincs „ha ZBook / ha VirtualBox, akkor…” logika).
 

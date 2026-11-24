@@ -191,3 +191,5 @@ debootstrap
 systemd-container
 ubuntu-keyring
 wget
+# AVR-lapok (pl. a 3D nyomtató ATmega2560-as lapja) firmware-ének mentése és feltöltése — 0.0.80
+avrdude

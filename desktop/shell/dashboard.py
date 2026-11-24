@@ -33,6 +33,8 @@ def _read(path, default=""):
 
 
 def printer_status():
+    if os.path.exists("/data/printer/disabled"):
+        return {"online": False, "disabled": True, "state": "kikapcsolva", "message": "", "printing": False}
     try:
         with urllib.request.urlopen(MOONRAKER + QUERY, timeout=1.5) as r:
             st = json.load(r)["result"]["status"]

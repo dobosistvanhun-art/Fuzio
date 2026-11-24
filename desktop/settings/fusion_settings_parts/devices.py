@@ -51,7 +51,13 @@ def devices():
 
 
 # --- Nyomtató (Klipper) ---
+PRINTER_OFF = "/data/printer/disabled"
+
+
 def printer():
+    if os.path.exists(PRINTER_OFF):
+        return {"enabled": False, "services": {}, "klipper": {}, "config": "", "serial": "",
+                "printerPresent": os.path.exists("/dev/fusion/printer")}
     svc = {}
     for s, unit in (("klipper", "fusion-klipper"), ("moonraker", "fusion-moonraker"), ("nginx", "nginx")):
         rc, out = ui.run(["systemctl", "is-active", unit], timeout=3)
@@ -70,7 +76,7 @@ def printer():
         if line.strip().startswith("serial"):
             serial = line.split(":", 1)[-1].strip()
             break
-    return {"services": svc, "klipper": info, "config": cfg if os.path.exists(cfg) else "", "serial": serial,
+    return {"enabled": True, "services": svc, "klipper": info, "config": cfg if os.path.exists(cfg) else "", "serial": serial,
             "printerPresent": os.path.exists("/dev/fusion/printer")}
 
 
@@ -192,6 +198,10 @@ class DevicesMixin:
     @pyqtSlot(str)
     def printerService(self, name):
         self._async("printer-action", lambda: dict(zip(("rc", "msg"), ui.admin("service-restart", name, timeout=90))))
+
+    @pyqtSlot(bool)
+    def printerEnable(self, on):
+        self._async("printer-action", lambda: dict(zip(("rc", "msg"), ui.admin("printer", "on" if on else "off", timeout=90))))
 
     @pyqtSlot()
     def printerFirmwareRestart(self):

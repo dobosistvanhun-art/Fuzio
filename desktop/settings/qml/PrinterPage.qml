@@ -22,7 +22,17 @@ SettingsPage {
         }
     }
     function col(s) { return s === "active" ? Theme.ok : (s === "activating" ? Theme.warn : Theme.danger) }
+    property bool on: p.d.enabled !== false
     Section {
+        title: "3D NYOMTATÓ"
+        InfoRow { icon: "printer"; label: "Klipper, Moonraker, webes felület"
+                  value: p.on ? "bekapcsolva" : "kikapcsolva — nem indulnak el, a soros port szabad (pl. a nyomtató lapjának más firmware-éhez)"
+                  valueColor: p.on ? Theme.ok : Theme.dim
+                  FButton { text: p.on ? "Kikapcsolás" : "Bekapcsolás"; primary: !p.on; enabled: !p.working
+                            onClicked: { p.working = true; p.msg = ""; settings.printerEnable(!p.on) } } }
+    }
+    Section {
+        visible: p.on
         title: "ÁLLAPOT"
         InfoRow { icon: "printer"; label: "Klipper"; value: (p.d.klipper.state || "?") + (p.d.klipper.message ? "\n" + p.d.klipper.message : "")
                   valueColor: p.d.klipper.state === "ready" ? Theme.ok : Theme.warn
@@ -33,6 +43,7 @@ SettingsPage {
         InfoRow { label: "Verzió"; value: p.d.klipper.version || "—"; mono: true }
     }
     Section {
+        visible: p.on
         title: "SZOLGÁLTATÁSOK"
         Repeater {
             model: [["klipper", "Klipper"], ["moonraker", "Moonraker (API)"], ["nginx", "Webszerver (Fluidd :80, Mainsail :81)"]]
@@ -42,6 +53,7 @@ SettingsPage {
     }
     Text { visible: p.msg !== ""; text: p.msg; color: p.msg.indexOf("hiba") === 0 ? Theme.danger : Theme.ok; font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap }
     Flow {
+        visible: p.on
         width: parent.width; spacing: 8
         FButton { text: "Fluidd megnyitása"; icon: "web"; primary: true; onClicked: settings.spawn("fusion-printer ui") }
         FButton { text: "Mainsail megnyitása"; icon: "web"; onClicked: settings.spawn("fusion-printer ui mainsail") }

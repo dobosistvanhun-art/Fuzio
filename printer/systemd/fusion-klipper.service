@@ -3,6 +3,8 @@ Description=FusionOS nyomtató — Klipper
 Documentation=https://www.klipper3d.org/
 After=network.target
 RequiresMountsFor=/data
+# Beállítások → 3D nyomtató → Kikapcsolás: a jelzőfájl a DATA-n (a frissítések után is marad)
+ConditionPathExists=!/data/printer/disabled
 Before=fusion-moonraker.service
 
 [Service]
