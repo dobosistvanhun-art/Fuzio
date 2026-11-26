@@ -248,6 +248,12 @@ cmd_prepare() {
         echo
         echo "[HKEY_CURRENT_USER\\Software\\Wine]"
         echo "\"Version\"=\"$(prof_get "$pf" windows)\""
+        # a Microsoft WebView2 (Edge/Chromium; pl. az ElegooSlicer felülete) Windows 10-ként a Wine-ban üres
+        # marad: a GPU-folyamata újra és újra összeomlik, a 4. után a WebView2 kilép. Windows 7-ként stabil
+        # (mérve, 0.0.81: WebView2 158, kapcsolók nélkül is). Csak erre a .exe-re hat, a program verziója marad.
+        echo
+        echo "[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\msedgewebview2.exe]"
+        echo "\"Version\"=\"win7\""
         # a Wine saját tálcaikon-ablaka (a Fusion Desktopban nincs rendszertálca, ezért a Wine
         # egy külön felugró ablakba tenné a program tálcaikonjait) — kikapcsolva
         echo
@@ -394,6 +400,8 @@ cmd_install() {
     [ -r "$inst" ] || fail "nem található: $inst"
     cmd_prepare "$id"
     wine_env "$id" "$pf"
+    # a telepítő a végén gyakran el is indítja a programot: az is a profil környezetével fusson
+    env_apply "$id" "$pf"
     # a telepítő a környezeten belülre kerül (a Linux-fájlrendszer nem látszik)
     tmp="$WINEPREFIX/drive_c/fusion-install"
     rm -rf "$tmp"; mkdir -p "$tmp"

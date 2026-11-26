@@ -1,0 +1,11 @@
+# ElegooSlicer (Windows x64) — az Elegoo Centauri Carbon 2 szeletelője (Orca-alapú)
+# A Linuxos AppImage (0.0.79) a javasolt; ez a Windows-telepítőhöz (ElegooSlicer_Windows_Installer_*.exe) való.
+# A felület nagy része (kezdőlap, eszközök, beállító varázsló) Microsoft WebView2 — a Wine-ban Windows 7-ként
+# fut, ezt az fwr minden programnak beállítja (AppDefaults\msedgewebview2.exe).
+id = elegooslicer-windows
+name = ElegooSlicer (Windows)
+exe = C:\Program Files\ElegooSlicer\elegoo-slicer.exe
+windows = win10
+match = ElegooSlicer*Windows*.exe
+categories = Graphics; Engineering
+drive.P = Projektek
