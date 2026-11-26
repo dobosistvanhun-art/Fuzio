@@ -9,6 +9,16 @@ legfelső bejegyzéseket olvassa el. Szabály: `CLAUDE.md` → „Átadás”.
 
 
 
+## 2026-11-26 — 0.0.81: Windows-programok WebView2-je; ElegooSlicer (Windows) kamerával
+- István commitolta a ZBookon (`165295e`): az fwr minden programnak Windows 7-et jelent a `msedgewebview2.exe`-re
+  (`Wine\AppDefaults`) — Windows 10-ként a WebView2 GPU-folyamata újra és újra összeomlott, a felület üres maradt;
+  az `fwr install` a profil környezeti változóival fut; recept: `fwr/profiles/elegooslicer-windows.fwr`.
+- Kipróbálva (István): a Windowsos ElegooSlicer a Fúzióban fut, a CC2 kameraképe látszik.
+- Miért nem a Linuxos: az AppImage-ben csak az Agora üzenetküldő könyvtára van (`libagora_rtm_sdk.so`), a videós nincs,
+  így felhőn át nincs kép; a nyomtató helyi kamerája (`http://<IP>:8080/?action=stream`, MJPEG) a gyári firmware-en
+  (02.01.01.13) nem válaszolt — ki-be kapcsolás után sem (ismert hiba, a Neme77 közösségi firmware javítja).
+- Nyitva: a Linuxos ElegooSlicer maradjon-e a gépen (István 2026-11-25-én mindenestül törölni akarta, utána újra fent volt).
+
 ## 2026-11-24 — 0.0.80: a 3D nyomtató kikapcsolható; avrdude a képben
 - István döntése: a Klipper mostanában nem kell (a 4MAX lapjára egy saját ágyfűtés-vezérlő firmware kerül,
   `agyfutes_4max`, PlatformIO/Arduino); a Klipper-csomag maga nem módosul, csak kikapcsolható.

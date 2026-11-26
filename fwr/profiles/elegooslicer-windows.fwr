@@ -1,5 +1,7 @@
 # ElegooSlicer (Windows x64) — az Elegoo Centauri Carbon 2 szeletelője (Orca-alapú)
-# A Linuxos AppImage (0.0.79) a javasolt; ez a Windows-telepítőhöz (ElegooSlicer_Windows_Installer_*.exe) való.
+# A CC2 kameraképéhez ez kell: a Linuxos AppImage-ből hiányzik az Agora videós könyvtára (csak a libagora_rtm_sdk
+# van benne), felhőn át ott nincs kép, és a gyári firmware helyi kamerája (:8080) nem válaszolt (2026-11-26).
+# Ez a Windows-telepítőhöz (ElegooSlicer_Windows_Installer_*.exe) való.
 # A felület nagy része (kezdőlap, eszközök, beállító varázsló) Microsoft WebView2 — a Wine-ban Windows 7-ként
 # fut, ezt az fwr minden programnak beállítja (AppDefaults\msedgewebview2.exe).
 id = elegooslicer-windows
